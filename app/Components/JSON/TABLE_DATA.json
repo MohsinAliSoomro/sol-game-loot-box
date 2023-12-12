@@ -1,0 +1,73 @@
+[
+    {
+      "Event": "Game Win",
+      "User": "Player1",
+      "Points": 100,
+      "Clan": "Alpha Clan",
+      "Date": "2023-01-15"
+    },
+    {
+      "Event": "Tournament Participation",
+      "User": "Player2",
+      "Points": 50,
+      "Clan": "Beta Clan",
+      "Date": "2023-02-08"
+    },
+    {
+      "Event": "Level Up",
+      "User": "Player3",
+      "Points": 20,
+      "Clan": "Gamma Clan",
+      "Date": "2023-03-22"
+    },
+    {
+      "Event": "Defeat",
+      "User": "Player4",
+      "Points": -30,
+      "Clan": "Delta Clan",
+      "Date": "2023-04-10"
+    },
+    {
+      "Event": "Quest Completion",
+      "User": "Player5",
+      "Points": 75,
+      "Clan": "Epsilon Clan",
+      "Date": "2023-05-05"
+    },
+    {
+      "Event": "New Member Join",
+      "User": "Player6",
+      "Points": 10,
+      "Clan": "Zeta Clan",
+      "Date": "2023-06-18"
+    },
+    {
+      "Event": "Challenge Win",
+      "User": "Player7",
+      "Points": 120,
+      "Clan": "Eta Clan",
+      "Date": "2023-07-03"
+    },
+    {
+      "Event": "Game Loss",
+      "User": "Player8",
+      "Points": -50,
+      "Clan": "Theta Clan",
+      "Date": "2023-08-14"
+    },
+    {
+      "Event": "Tournament Victory",
+      "User": "Player9",
+      "Points": 200,
+      "Clan": "Iota Clan",
+      "Date": "2023-09-27"
+    },
+    {
+      "Event": "Level Down",
+      "User": "Player10",
+      "Points": -15,
+      "Clan": "Kappa Clan",
+      "Date": "2023-10-11"
+    }
+  ]
+  

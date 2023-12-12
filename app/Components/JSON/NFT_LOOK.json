@@ -1,0 +1,55 @@
+{
+    "nfts": [
+      {
+        "name": "Digital Artwork 001",
+        "image": "https://example.com/nft001.jpg",
+        "price": "0.05"
+      },
+      {
+        "name": "Crypto Cats Collection",
+        "image": "https://example.com/nft002.jpg",
+        "price": "0.02"
+      },
+      {
+        "name": "Virtual Reality Experience",
+        "image": "https://example.com/nft003.jpg",
+        "price": "0.1"
+      },
+      {
+        "name": "Blockchain Revolution",
+        "image": "https://example.com/nft004.jpg",
+        "price": "0.03"
+      },
+      {
+        "name": "Space Exploration Series",
+        "image": "https://example.com/nft005.jpg",
+        "price": "0.08"
+      },
+      {
+        "name": "CryptoPunk 2023",
+        "image": "https://example.com/nft006.jpg",
+        "price": "0.5"
+      },
+      {
+        "name": "Decentralized Dreams",
+        "image": "https://example.com/nft007.jpg",
+        "price": "0.04"
+      },
+      {
+        "name": "Abstract Code Patterns",
+        "image": "https://example.com/nft008.jpg",
+        "price": "0.02"
+      },
+      {
+        "name": "Future Technology Sculpture",
+        "image": "https://example.com/nft009.jpg",
+        "price": "0.07"
+      },
+      {
+        "name": "NFT Universe Exploration",
+        "image": "https://example.com/nft010.jpg",
+        "price": "0.1"
+      }
+    ]
+  }
+  
