@@ -28,7 +28,9 @@ export default function Sidebar() {
                     </li>
                     {SIDEBAR_DATA.map((link) => {
                         return (
-                            <li className="bg-foreground text-background rounded-2xl text-xl font-bold px-8 hover:bg-foreground group">
+                            <li
+                                key={link.name}
+                                className="bg-foreground text-background rounded-2xl text-xl font-bold px-8 hover:bg-foreground group">
                                 <Link
                                     href={link.href}
                                     key={link.name}

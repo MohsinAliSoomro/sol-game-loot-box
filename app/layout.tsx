@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { Albert_Sans as FontSans } from "next/font/google";
+import { Roboto as FontSans } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "./Components/ThemeProvider";
 import Sidebar from "./Components/Sidebar";
 
-export const fontSans = FontSans({
+const fontSans = FontSans({
     subsets: ["latin"],
     variable: "--font-sans",
     weight: ["400"],

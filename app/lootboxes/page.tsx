@@ -1,5 +1,5 @@
 import TopNav from "../Components/TopNav";
-import { nfts } from "../Components/JSON/NFT_LOOK.json";
+import data from "../Components/JSON/NFT_LOOK.json";
 import { Bitcoin } from "lucide-react";
 import Image from "next/image";
 export default function LookBox() {
@@ -14,7 +14,7 @@ export default function LookBox() {
                         Clan Of Thor
                     </h1>
                 </div>
-                {nfts.map((item) => (
+                {data.nfts.map((item) => (
                     <div
                         className="nft"
                         key={item.name}>
