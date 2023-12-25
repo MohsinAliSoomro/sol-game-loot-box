@@ -4,8 +4,8 @@
  
 @layer base {
   :root {
-    --background: 270, 9%, 9%;
-    --foreground: 0, 0%, 93%;
+    --background: 82, 56%, 9%;
+    --foreground: 120, 15%, 95%;
 
     --card: 0 0% 100%;
     --card-foreground: 0 0% 3.9%;

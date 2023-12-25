@@ -2,6 +2,7 @@ import TopNav from "../Components/TopNav";
 import data from "../Components/JSON/NFT_LOOK.json";
 import { Bitcoin } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 export default function LookBox() {
     return (
         <div className="p-4 sm:ml-64">
@@ -15,7 +16,8 @@ export default function LookBox() {
                     </h1>
                 </div>
                 {data.nfts.map((item) => (
-                    <div
+                    <Link
+                        href={"/lootboxes/" + item.name}
                         className="nft"
                         key={item.name}>
                         <div className="main">
@@ -36,7 +38,7 @@ export default function LookBox() {
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </Link>
                 ))}
             </div>
         </div>
