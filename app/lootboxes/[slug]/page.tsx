@@ -1,20 +1,21 @@
 "use client";
 import TopNav from "@/app/Components/TopNav";
 import Image from "next/image";
-import { useState } from "react";
-import { motion } from "framer-motion";
+import { useRef, useState } from "react";
 import SpinAndWin from "react-spin-game";
 import "react-spin-game/dist/index.css";
 const freeSpinGifts = [
-    ["test1", "#561C24"],
-    ["test2", "#6D2932"],
-    ["test3", "#808080"],
-    ["test4", "#C7B7A3"],
-    ["test5", "#E8D8C4"],
+    ["test1", "#706233"],
+    ["test2", "#A2C579"],
+    ["test3", "#99B080"],
+    ["test4", "#748E63"],
+    ["test5", "#A7D397"],
     ["test6", "#43766C"],
 ];
 export default function Details() {
     const [isActive, setIsActive] = useState(false);
+    const ref = useRef(null);
+    console.log({ ref });
     const data = [
         {
             id: 1,
@@ -49,7 +50,7 @@ export default function Details() {
     ];
 
     return (
-        <div className="p-4 sm:ml-64">
+        <div className="p-4 sm:ml-64 overflow-hidden">
             <TopNav />
             <div className="flex items-center flex-col justify-center flex-wrap gap-4 pt-2 relative">
                 <Image
@@ -59,13 +60,21 @@ export default function Details() {
                     height={720}
                     className="w-full h-[89vh]"
                 />
-                <div className="absolute top-0 left-0 w-full h-screen flex items-center justify-between mx-5">
+                <div className="absolute top-0 left-0 w-full h-[80vh] flex items-center justify-center mx-5">
                     <div>
                         <SpinAndWin
+                            ref={ref}
                             data={freeSpinGifts}
                             result="test2"
                             horizantalText
+                            hideButton
                         />
+                        <button
+                            //@ts-ignore
+                            onClick={() => ref.current.handleSpin()}
+                            className="mx-auto flex mt-5 bg-[#1A240A]  px-10 py-4 rounded-lg">
+                            SPIN
+                        </button>
                     </div>
                 </div>
             </div>

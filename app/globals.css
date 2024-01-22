@@ -78,13 +78,12 @@
 .nft {
   user-select: none;
   max-width: 300px;
-  /* margin: 2rem auto; */
   border: 1px solid #ffffff22;
   background-color: #282c34;
   background: linear-gradient(
     0deg,
-    rgba(40, 44, 52, 1) 0%,
-    rgba(17, 0, 32, 0.5) 100%
+    #1A240A,
+    #27360e
   );
   box-shadow: 0 7px 20px 5px #00000088;
   border-radius: 0.7rem;
@@ -220,4 +219,21 @@
 .bg h1 {
   font-size: 20rem;
   filter: opacity(0.5);
+}
+
+._28Wol{
+  background-color: rgba(26, 36, 10,0.6)  !important;
+}
+._1sp4O{
+  background-color: rgba(26, 36, 10,0.8)  !important;
+  font-size: 15px  !important;
+  
+}
+
+._1E7u3{
+  border: 10px solid rgb(49, 63, 26)  !important;
+
+}
+._35l6Q path {
+  fill:  rgb(174, 225, 92)  !important;
 }
