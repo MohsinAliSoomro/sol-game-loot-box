@@ -3,6 +3,16 @@ import TopNav from "@/app/Components/TopNav";
 import Image from "next/image";
 import { useState } from "react";
 import { motion } from "framer-motion";
+import SpinAndWin from "react-spin-game";
+import "react-spin-game/dist/index.css";
+const freeSpinGifts = [
+    ["test1", "#561C24"],
+    ["test2", "#6D2932"],
+    ["test3", "#808080"],
+    ["test4", "#C7B7A3"],
+    ["test5", "#E8D8C4"],
+    ["test6", "#43766C"],
+];
 export default function Details() {
     const [isActive, setIsActive] = useState(false);
     const data = [
@@ -50,44 +60,13 @@ export default function Details() {
                     className="w-full h-[89vh]"
                 />
                 <div className="absolute top-0 left-0 w-full h-screen flex items-center justify-between mx-5">
-                    {data.map((item) => (
-                        <div
-                            key={item.id}
-                            className="relative w-full">
-                            <Image
-                                src="/frame.png"
-                                alt="frame"
-                                width={400}
-                                height={300}
-                            />
-                            {item.id === 3 ? (
-                                <motion.img
-                                    src="/coin.png"
-                                    onClick={() => setIsActive(!isActive)}
-                                    animate={{
-                                        scale: isActive ? 2 : 1,
-                                        rotate: isActive
-                                            ? [90, -90, 180, -180, 0]
-                                            : 0,
-                                        transition: {
-                                            duration: 1.5,
-                                        },
-                                    }}
-                                    width={100}
-                                    height={100}
-                                    className="absolute left-28 top-32"
-                                />
-                            ) : (
-                                <Image
-                                    src={"/coin.png"}
-                                    alt="coin"
-                                    width={100}
-                                    height={100}
-                                    className="absolute left-28 top-32"
-                                />
-                            )}
-                        </div>
-                    ))}
+                    <div>
+                        <SpinAndWin
+                            data={freeSpinGifts}
+                            result="test2"
+                            horizantalText
+                        />
+                    </div>
                 </div>
             </div>
         </div>
