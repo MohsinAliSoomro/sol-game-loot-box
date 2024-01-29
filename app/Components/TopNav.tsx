@@ -1,11 +1,4 @@
-import {
-    FileLock,
-    Flame,
-    Layers3,
-    PanelTop,
-    Users,
-    Wallet2,
-} from "lucide-react";
+import { FileLock, Flame, Layers3, PanelTop, Users, Wallet2 } from "lucide-react";
 
 export default function TopNav() {
     let DATA = [
@@ -48,7 +41,7 @@ export default function TopNav() {
     return (
         <div className="flex justify-between items-center flex-wrap mt-3 border-b  border-foreground pb-5">
             <div className="flex items-center gap-4 flex-wrap">
-                {DATA.map((item) => (
+                {/* {DATA.map((item) => (
                     <div
                         key={item.name}
                         className="flex items-start gap-3">
@@ -58,11 +51,9 @@ export default function TopNav() {
                             <span>{item.value}</span>
                         </div>
                     </div>
-                ))}
+                ))} */}
             </div>
-            <button className="bg-foreground text-background px-8 py-2 rounded-full">
-                Login
-            </button>
+            <button className="bg-foreground text-background px-8 py-2 rounded-full">Login</button>
         </div>
     );
 }
