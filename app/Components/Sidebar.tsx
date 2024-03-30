@@ -1,4 +1,5 @@
 import { Gauge, Gift } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 
 export default function Sidebar() {
@@ -23,8 +24,14 @@ export default function Sidebar() {
                 <ul className="space-y-2 font-medium">
                     <li
                         key={1}
-                        className="text-center mb-20">
-                        Icon
+                        className="text-center mb-20 flex items-center justify-center">
+                        <Image
+                            src={"/logo.png"}
+                            alt="logo"
+                            width={100}
+                            height={100}
+                            className="w-20 h-20 "
+                        />
                     </li>
                     {SIDEBAR_DATA.map((link) => {
                         return (
