@@ -5,6 +5,7 @@ import Image from "next/image";
 import "react-spin-game/dist/index.css";
 import { useRef, useState } from "react";
 import { Wheel } from "react-custom-roulette";
+import LootModal from "../Components/LootModal";
 
 const data = [
     {
@@ -16,11 +17,11 @@ const data = [
         // },
     },
     {
-        option: "1",
+        option: "Rip",
         image: {
             uri: "/coin.png",
             offsetX: 0,
-            offsetY: 200,
+            offsetY: 330,
         },
     },
     {
@@ -36,7 +37,7 @@ const data = [
         image: {
             uri: "/coin.png",
             offsetX: 0,
-            offsetY: 200,
+            offsetY: 330,
         },
     },
     {
@@ -52,7 +53,7 @@ const data = [
         image: {
             uri: "/coin.png",
             offsetX: 0,
-            offsetY: 200,
+            offsetY: 330,
         },
     },
     {
@@ -68,7 +69,7 @@ const data = [
         image: {
             uri: "/coin.png",
             offsetX: 0,
-            offsetY: 200,
+            offsetY: 330,
         },
     },
     {
@@ -84,7 +85,7 @@ const data = [
         image: {
             uri: "/coin.png",
             offsetX: 0,
-            offsetY: 200,
+            offsetY: 330,
         },
     },
 ];
@@ -92,6 +93,7 @@ const data = [
 export default function LookBox() {
     const [mustSpin, setMustSpin] = useState(false);
     const [prizeNumber, setPrizeNumber] = useState(0);
+    const [openModal, setOpenModal] = useState(false);
 
     const handleSpinClick = () => {
         if (!mustSpin) {
@@ -99,6 +101,9 @@ export default function LookBox() {
             setPrizeNumber(newPrizeNumber);
             setMustSpin(true);
         }
+    };
+    const handleModal = () => {
+        setOpenModal(!openModal);
     };
 
     return (
@@ -113,16 +118,21 @@ export default function LookBox() {
                             prizeNumber={prizeNumber}
                             data={data}
                             onStopSpinning={() => {
+                                handleModal();
+                                console.log("STOP SPINNER");
                                 setMustSpin(false);
                             }}
-                            outerBorderWidth={2}
+                            outerBorderWidth={0}
                             outerBorderColor="white"
                             backgroundColors={["#D35D6E", "#F39189", "#D35D6E", "#F39189", "#D35D6E", "#F39189"]}
                             innerBorderColor="white"
                             innerBorderWidth={2}
-                            radiusLineWidth={2}
+                            radiusLineWidth={1}
                             spinDuration={1}
-                            fontSize={20}
+                            fontSize={16}
+                            // pointerProps={{
+                            //     src: "/frame.png",
+                            // }}
                         />
                         <button
                             onClick={handleSpinClick}
@@ -132,6 +142,7 @@ export default function LookBox() {
                     </div>
                 </div>
             </div>
+            {openModal && <LootModal close={handleModal} />}
         </div>
     );
 }
