@@ -4,9 +4,11 @@ import Image from "next/image";
 // import SpinAndWin from "react-spin-game";
 import "react-spin-game/dist/index.css";
 import { useRef, useState } from "react";
-import { Wheel } from "react-custom-roulette";
+import dynamic from "next/dynamic";
 import LootModal from "../Components/LootModal";
-
+const Wheel = dynamic(() => import("react-custom-roulette").then((r) => r.Wheel), {
+    ssr: false,
+});
 const data = [
     {
         option: "Rip",
