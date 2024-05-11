@@ -1,7 +1,5 @@
 "use client";
 import TopNav from "../Components/TopNav";
-import Image from "next/image";
-// import SpinAndWin from "react-spin-game";
 import "react-spin-game/dist/index.css";
 import { useRef, useState } from "react";
 import dynamic from "next/dynamic";
@@ -109,7 +107,7 @@ export default function LookBox() {
     };
 
     return (
-        <div className="p-4 sm:ml-64 overflow-hidden">
+        <div className="sm:ml-64 overflow-hidden">
             <TopNav />
 
             <div className="flex items-center flex-col justify-center flex-wrap gap-4 relative">

@@ -1,4 +1,5 @@
 import { FileLock, Flame, Layers3, PanelTop, Users, Wallet2 } from "lucide-react";
+import Image from "next/image";
 
 export default function TopNav() {
     let DATA = [
@@ -39,8 +40,15 @@ export default function TopNav() {
         },
     ];
     return (
-        <div className="flex justify-between items-center flex-wrap mt-3 border-b  border-foreground pb-5">
+        <div className="flex justify-between items-center flex-wrap border-white px-4 border-foreground backdrop-blur-sm">
             <div className="flex items-center gap-4 flex-wrap">
+                <Image
+                    src={"/logo.png"}
+                    alt="logo"
+                    width={100}
+                    height={100}
+                    className="w-20 h-20 "
+                />
                 {/* {DATA.map((item) => (
                     <div
                         key={item.name}
