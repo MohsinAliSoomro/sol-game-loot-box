@@ -3,6 +3,7 @@ import { Quicksand } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "./Components/ThemeProvider";
+import Footer from "./Components/Footer";
 
 const fontSans = Quicksand({
     subsets: ["latin"],
@@ -25,6 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     enableSystem
                     disableTransitionOnChange>
                     {children}
+                    <Footer />
                 </ThemeProvider>
             </body>
         </html>
