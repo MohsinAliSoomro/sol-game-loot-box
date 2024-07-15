@@ -1,14 +1,9 @@
 "use client";
 import TopNav from "./Components/TopNav";
-import dynamic from "next/dynamic";
-import { useState } from "react";
-import LootModal from "./Components/LootModal";
 import Image from "next/image";
 import Link from "next/link";
-import Footer from "./Components/Footer";
-const Wheel = dynamic(() => import("react-custom-roulette").then((r) => r.Wheel), {
-    ssr: false,
-});
+import Model from "./Components/Model";
+
 const data = [
     {
         option: "Rip",
@@ -151,6 +146,7 @@ export default function Home() {
                     </div>
                 ))}
             </div>
+            <Model />
         </div>
     );
 }

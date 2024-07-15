@@ -118,7 +118,7 @@ export default function Details() {
 
             <div className="flex items-center flex-col justify-center flex-wrap gap-4 relative">
                 <div className="w-full h-[80vh] flex items-center justify-center">
-                    <div className="w-full h-full flex flex-col items-center justify-center relative mt-20">
+                    <div className="w-full h-full flex flex-col items-center justify-center relative mt-20 relative">
                         <Wheel
                             mustStartSpinning={mustSpin}
                             prizeNumber={prizeNumber}
@@ -141,6 +141,9 @@ export default function Details() {
                             //     src: "/frame.png",
                             // }}
                         />
+                        <div className="absolute top-0 left-0 w-full h-full flex justify-center items-center z-50">
+                            <span className=" w-40 h-40 md:h-96 md:w-96 rounded-full bg-background border-2 border-white/40"></span>
+                        </div>
                         <div className="absolute top-1/2 left-0 right-0 z-50 -mb-20 bg-background w-full h-full">
                             <div className="flex justify-center items-center gap-6">
                                 <p className="bg-white backdrop-blur-sm p-2 rounded-lg text-background mt-2">
