@@ -1,9 +1,10 @@
 "use client";
 import TopNav from "./Components/TopNav";
 import Image from "next/image";
-import Link from "next/link";
 import Model from "./Components/Model";
-
+import { useRouter } from "next/navigation";
+import { useUserState } from "@/state/useUserState";
+import { options } from "./data/data";
 const data = [
     {
         option: "Rip",
@@ -92,17 +93,10 @@ const data = [
     },
 ];
 export default function Home() {
-    let buttons = ["Deposite", "PVP Battles", "Leaderboard", "Lootboxes"];
-    let options = [
-        { name: "Thread", image: "/1.png" },
-        { name: "Rug", image: "/2.png" },
-        { name: "Rug", image: "/3.png" },
-        { name: "Rug", image: "/3.png" },
-        { name: "Carpet Tape", image: "/3.png" },
-        { name: "Rug", image: "/3.png" },
-        { name: "Thread", image: "/3.png" },
-        { name: "Carpet Tape", image: "/3.png" },
-    ];
+    const navigate = useRouter();
+    const [user] = useUserState();
+    // let buttons = ["Deposite", "PVP Battles", "Leaderboard", "Lootboxes"];
+
     return (
         <div className="overflow-hidden md:container mx-auto">
             <TopNav />
@@ -114,7 +108,7 @@ export default function Home() {
                 className="w-full h-full object-cover"
             />
 
-            <div className="flex justify-between flex-wrap md:flex-nowrap gap-4 mt-4">
+            {/* <div className="flex justify-between flex-wrap md:flex-nowrap gap-4 mt-4">
                 {buttons.map((button) => (
                     <button
                         className="bg-gradient-to-l from-foreground to-orange-300 shadow-lg rounded-full w-full p-2 text-background"
@@ -122,7 +116,7 @@ export default function Home() {
                         {button}
                     </button>
                 ))}
-            </div>
+            </div> */}
             <p className="text-xl font-bold my-4">Live Opens</p>
             <div className="grid grid-cols-3 md:grid-cols-6 lg:grid-cols-8 m-2 gap-y-6 gap-2 mb-40">
                 {options.map((loot) => (
@@ -137,12 +131,14 @@ export default function Home() {
                             className=""
                         />
                         <span className="font-bold text-center mx-auto"> {loot.name}</span>
-                        <span className="font-bold text-center flex mx-auto text-xl mb-4"> $29</span>
-                        <Link
-                            className="text-primary rounded-full px-2 lg:px-5 py-1 lg:py-2 absolute -bottom-4 left-4 right-4 shadow-lg backdrop-blur-md bg-transparent border border-white/40 text-white text-center"
-                            href="/lootboxes/123">
+                        <span className="font-bold text-center flex mx-auto text-xl mb-4">Sol {loot.price}</span>
+                        <button
+                            onClick={() => {
+                                navigate.push("/lootboxes/" + loot.id);
+                            }}
+                            className="text-primary rounded-full px-2 lg:px-5 py-1 lg:py-2 absolute -bottom-4 left-4 right-4 shadow-lg backdrop-blur-md bg-transparent border border-white/40 text-white text-center">
                             Open
-                        </Link>
+                        </button>
                     </div>
                 ))}
             </div>
