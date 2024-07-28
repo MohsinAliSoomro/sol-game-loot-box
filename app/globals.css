@@ -252,8 +252,15 @@
 
 
 .bhdLno{
-  min-width: 400px !important;
-  min-height: 400px  !important;
-  max-width: 800px !important;
-  max-height: 800px !important;
+  min-width: 600px !important;
+  min-height: 600px  !important;
+  max-width: 1200px !important;
+  max-height: 1200px !important;
+}
+.gTLZXx {
+  position: absolute;
+  z-index: 5;
+  width: 10% !important;
+  right: 90px !important;
+  top: 80px !important;
 }

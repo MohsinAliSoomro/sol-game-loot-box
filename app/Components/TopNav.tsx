@@ -71,7 +71,7 @@ export default function TopNav() {
     });
 
     return (
-        <div className="flex justify-between items-center flex-wrap border-white px-2 md:px-4 border-foreground backdrop-blur-sm">
+        <div className="flex justify-between items-center flex-wrap border-white py-8 px-2 md:px-4 border-foreground backdrop-blur-sm">
             <div className="flex items-center justify-center gap-4 flex-wrap">
                 <Link
                     href={"/"}
@@ -81,19 +81,21 @@ export default function TopNav() {
                         alt="logo"
                         width={100}
                         height={100}
-                        className="w-20 h-20"
+                        className="w-32 h-32"
                     />
-                    <span className="font-bold text-xl">Apes Army</span>
+                    <span className="font-bold text-xl">Spin 2 win</span>
                 </Link>
+            </div>
+            <div className="flex gap-x-8">
                 <Link
                     href="/lootboxes.123"
                     className="text-sm font-bold">
-                    Lootboxes
+                    Apes Loot
                 </Link>
                 <Link
                     href="/lootboxes/123"
                     className="text-sm font-bold">
-                    Battle
+                    Live Draw
                 </Link>
                 <Link
                     href="/lootboxes/123"

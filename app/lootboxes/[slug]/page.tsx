@@ -1,5 +1,5 @@
 "use client";
-import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, clusterApiUrl } from "@solana/web3.js";
 import LootModal from "@/app/Components/LootModal";
 import TopNav from "@/app/Components/TopNav";
 import { useUserState } from "@/state/useUserState";
@@ -7,114 +7,37 @@ import { RefreshCcw } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import "react-spin-game/dist/index.css";
-import { useParams, usePathname, useRouter } from "next/navigation";
-import { options } from "@/app/data/data";
+import { useParams } from "next/navigation";
 import { supabase } from "@/service/supabase";
+import { Metaplex } from "@metaplex-foundation/js";
+import { useRequest } from "ahooks";
+const solanaConnections = new Connection(clusterApiUrl("mainnet-beta"), "confirmed");
+const metaplex = new Metaplex(solanaConnections);
 const Wheel = dynamic(() => import("react-custom-roulette").then((r) => r.Wheel), {
     ssr: false,
 });
 
-const data = [
-    {
-        option: "Rip",
-        // image: {
-        //     uri: "/coin.png",
-        //     offsetX: 0,
-        //     offsetY: 300,
-        // },
-    },
-    {
-        option: "Rip",
-        image: {
-            uri: "/2.png",
-            offsetX: 0,
-            offsetY: 230,
-            sizeMultiplier: 0.8,
-        },
-    },
-    {
-        option: "Rip",
-        // image: {
-        //     uri: "/coin.png",
-        //     offsetX: 0,
-        //     offsetY: 200,
-        // },
-    },
-    {
-        option: "3",
-        image: {
-            uri: "/3.png",
-            offsetX: 0,
-            offsetY: 230,
-            sizeMultiplier: 0.8,
-        },
-    },
-    {
-        option: "Rip",
-        // image: {
-        //     uri: "/coin.png",
-        //     offsetX: 0,
-        //     offsetY: 200,
-        // },
-    },
-    {
-        option: "5",
-        image: {
-            uri: "/1.png",
-            offsetX: 0,
-            offsetY: 230,
-            sizeMultiplier: 0.8,
-        },
-    },
-    {
-        option: "Rip",
-        // image: {
-        //     uri: "/coin.png",
-        //     offsetX: 0,
-        //     offsetY: 200,
-        // },
-    },
-    {
-        option: "7",
-        image: {
-            uri: "/2.png",
-            offsetX: 0,
-            offsetY: 230,
-            sizeMultiplier: 0.8,
-        },
-    },
-    {
-        option: "Rip",
-        // image: {
-        //     uri: "/coin.png",
-        //     offsetX: 0,
-        //     offsetY: 200,
-        // },
-    },
-    {
-        option: "9",
-        image: {
-            uri: "/3.png",
-            offsetX: 0,
-            offsetY: 230,
-            sizeMultiplier: 0.8,
-        },
-    },
-];
+const getProducts = async () => {
+    const response = await supabase.from("products").select();
+    return response;
+};
 export default function Details() {
+    const { data: products, loading, error } = useRequest(getProducts);
     const [user] = useUserState();
     const [mustSpin, setMustSpin] = useState(false);
     const [prizeNumber, setPrizeNumber] = useState(0);
     const [openModal, setOpenModal] = useState(false);
     const pathname = useParams<{ slug: string }>();
     const newData = useMemo(() => {
-        return options.find((i) => i.id === Number(pathname.slug));
-    }, [pathname.slug]);
+        // @ts-ignore
+        return products?.data?.find((i) => i.id === Number(pathname.slug));
+    }, [pathname.slug, [products]]);
 
     const handleSpinClick = () => {
         // sendSolanaTokens();
         if (!mustSpin) {
-            const newPrizeNumber = Math.floor(Math.random() * data.length);
+            //@ts-ignore
+            const newPrizeNumber = Math.floor(Math.random() * products?.data?.length || 0);
             setPrizeNumber(newPrizeNumber);
             setMustSpin(true);
         }
@@ -194,24 +117,50 @@ export default function Details() {
             }
         }
     };
-    return (
-        <div className="overflow-hidden md:container mx-auto">
-            <TopNav />
+    if (loading) {
+        return <div>Loading...</div>;
+    }
+    if (error) {
+        return <div>Error</div>;
+    }
+    const product = products?.data?.find((i) => i.id === Number(pathname.slug));
+    //@ts-ignore
+    const newProducts = products.data?.map((i) => {
+        return {
+            option: i.name,
+            image: {
+                uri: i.image,
+                offsetX: 0,
+                offsetY: 230,
+                sizeMultiplier: 0.8,
+            },
+        };
+    });
 
+    return (
+        <div>
+            <TopNav />
             <div className="flex items-center flex-col justify-center flex-wrap gap-4 relative">
-                <div className="w-full h-[80vh] flex items-center justify-center">
-                    <div className="w-full h-full flex flex-col items-center justify-center relative mt-20 relative">
+                <div className="w-full flex items-center justify-center">
+                    <div
+                        style={{
+                            backgroundImage: "url(/background.png)",
+                            backgroundRepeat: "no-repeat",
+                            backgroundSize: "cover",
+                            backgroundPosition: "center",
+                        }}
+                        className="w-full h-full flex flex-col items-center justify-center relative">
                         <Wheel
                             mustStartSpinning={mustSpin}
                             prizeNumber={prizeNumber}
-                            data={data}
+                            data={newProducts as any}
                             onStopSpinning={() => {
                                 handleModal();
                                 setMustSpin(false);
                             }}
                             outerBorderWidth={8}
                             outerBorderColor="#eb7ec3"
-                            backgroundColors={["#df1fc2", "#ef71b0", "#ef64aa", "#ef71b0", "#ef64aa", "#ef71b0"]}
+                            backgroundColors={["#ef71b0", "#ef71c9", "#ef71b0", "#ef71c9", "#ef71b0", "#ef71c9"]}
                             innerBorderColor="pink"
                             innerBorderWidth={4}
                             radiusLineWidth={3}
@@ -231,7 +180,7 @@ export default function Details() {
                                 onClick={sendSolanaTokens}
                                 className="flex justify-center items-center gap-6 cursor-pointer">
                                 <p className="bg-white backdrop-blur-sm p-2 rounded-lg text-background mt-2">
-                                    Spin for <span className="font-bold text-lg">{newData?.price}</span> Sol{" "}
+                                    Spin for <span className="font-bold text-lg">{product?.price}</span> Sol{" "}
                                 </p>
                             </div>
                             <button
