@@ -11,6 +11,8 @@ import { useParams } from "next/navigation";
 import { supabase } from "@/service/supabase";
 import { Metaplex } from "@metaplex-foundation/js";
 import { useRequest } from "ahooks";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
 const solanaConnections = new Connection(clusterApiUrl("mainnet-beta"), "confirmed");
 const metaplex = new Metaplex(solanaConnections);
 const Wheel = dynamic(() => import("react-custom-roulette").then((r) => r.Wheel), {
@@ -23,6 +25,7 @@ const getProducts = async () => {
 };
 export default function Details() {
     const { data: products, loading, error } = useRequest(getProducts);
+    const navigate = useRouter();
     const [user] = useUserState();
     const [mustSpin, setMustSpin] = useState(false);
     const [prizeNumber, setPrizeNumber] = useState(0);
@@ -179,23 +182,55 @@ export default function Details() {
                             <div
                                 onClick={sendSolanaTokens}
                                 className="flex justify-center items-center gap-6 cursor-pointer">
-                                <p className="bg-white backdrop-blur-sm p-2 rounded-lg text-background mt-2">
+                                <p className="backdrop-blur-sm p-2 rounded-lg bg-foreground text-white mt-2 ">
                                     Spin for <span className="font-bold text-lg">{product?.price}</span> Sol{" "}
                                 </p>
                             </div>
                             <button
                                 onClick={handleSpinClick}
-                                className="mx-auto flex items-center gap-2 mt-5 bg-transprent font-bold text-white text-foreground px-10 py-4 text-lg">
+                                className="mx-auto flex items-center gap-2 mt-5 bg-transprent font-bold text-foreground px-10 py-4 text-lg">
                                 <RefreshCcw
                                     size={20}
                                     height={20}
                                 />{" "}
                                 <span> Try it for free</span>
                             </button>
+                            <div className="text-white px-4">
+                                <h1 className="font-bold text-4xl text-foreground">Item</h1>
+                                <h1 className="font-bold text-4xl text-foreground">In the box</h1>
+                                <div className="grid grid-cols-3 md:grid-cols-3 lg:grid-cols-3 m-2 gap-y-6 gap-2 mb-40">
+                                    {
+                                        //@ts-ignore
+                                        products?.data.map((loot) => (
+                                            <div
+                                                key={loot.name}
+                                                className="bg-gradient-to-b from-foreground to-secondary border-white/40 p-2 py-10 rounded-xl text-background flex flex-col items-center relative">
+                                                <Image
+                                                    src={loot.image}
+                                                    alt={loot.name}
+                                                    width={200}
+                                                    height={200}
+                                                    className=""
+                                                />
+                                                <span className="font-bold text-center mx-auto text-white"> {loot.name}</span>
+                                                <span className="font-bold text-center flex mx-auto text-xl mb-4 text-white">Sol {loot.price}</span>
+                                                <button
+                                                    onClick={() => {
+                                                        navigate.push("/lootboxes/" + loot.id);
+                                                    }}
+                                                    className="text-xl rounded-full px-2 lg:px-5 py-1 lg:py-2 absolute -bottom-4 left-4 right-4 shadow-lg backdrop-blur-md bg-foreground border border-white/40 text-white text-center">
+                                                    Open
+                                                </button>
+                                            </div>
+                                        ))
+                                    }
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
+
             {openModal && <LootModal close={handleModal} />}
         </div>
     );

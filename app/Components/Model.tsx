@@ -5,15 +5,14 @@ import { memo, useState } from "react";
 const Model = () => {
     const [user, setUser] = useUserState();
     const [username, setUsername] = useState("");
-    console.log("model", user);
+    const [discord, setDiscord] = useState("");
 
     const handleClose = () => {
         setUser({ ...user, isShow: false });
     };
     const handleSubmit = async () => {
         if (user.walletAddress) {
-            const response = await supabase.from("user").update({ username: username }).eq("walletAddress", user.walletAddress);
-            console.log({ response });
+            await supabase.from("user").update({ username: username, discord: discord }).eq("walletAddress", user.walletAddress);
             setUser({ ...user, username, isShow: false });
         }
     };
@@ -23,7 +22,7 @@ const Model = () => {
             <div className="relative p-4 w-full max-w-2xl max-h-full">
                 <div className="relative bg-background backdrop-blur-lg rounded-lg shadow dark:bg-gray-700">
                     <div className="flex items-center justify-between p-4 md:p-5 border-b rounded-t dark:border-gray-600">
-                        <h3 className="text-xl font-semibold text-white dark:text-white">Profile</h3>
+                        <h3 className="text-xl font-semibold text-foreground dark:text-white">Profile</h3>
                         <button
                             type="button"
                             className="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm w-8 h-8 ms-auto inline-flex justify-center items-center dark:hover:bg-gray-600 dark:hover:text-white"
@@ -55,11 +54,21 @@ const Model = () => {
                             onChange={(t) => setUsername(t.target.value)}
                         />
                     </div>
+                    <div className="p-4 md:p-5 space-y-4">
+                        <label className="flex font-bold">Discord Username</label>
+                        <input
+                            type="text"
+                            placeholder="username"
+                            className="w-full border rounded-lg p-3 font-bold"
+                            value={discord}
+                            onChange={(t) => setDiscord(t.target.value)}
+                        />
+                    </div>
                     <div className="flex items-center p-4 md:p-5 border-t border-gray-200 rounded-b dark:border-gray-600">
                         <button
                             onClick={handleSubmit}
                             type="button"
-                            className="text-white bg-background border focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">
+                            className="bg-foreground text-white border focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">
                             Update
                         </button>
                         <button
