@@ -93,7 +93,7 @@ export default function TopNav() {
                     Apes Lootbox
                 </Link>
                 <Link
-                    href="/lootboxes/123"
+                    href="/live-draw"
                     className="text-base font-bold">
                     Live Draw
                 </Link>
