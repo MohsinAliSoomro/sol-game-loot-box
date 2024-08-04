@@ -5,6 +5,7 @@ import "./globals.css";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "./Components/ThemeProvider";
 import Footer from "./Components/Footer";
+import SidebarCart from "./Components/SidebarCart";
 
 // const fontSans = Princess_Sofia({
 //     subsets: ["latin"],
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     disableTransitionOnChange>
                     {children}
                     <Footer />
+                    <SidebarCart />
                 </ThemeProvider>
             </body>
         </html>

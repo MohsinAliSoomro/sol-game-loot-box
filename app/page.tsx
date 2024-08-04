@@ -23,6 +23,7 @@ export default function Home() {
     if (error) {
         return <div>Error</div>;
     }
+    console.log({ data });
     return (
         <div className="overflow-hidden">
             <TopNav />
@@ -42,6 +43,7 @@ export default function Home() {
                         <div
                             key={loot.name}
                             className="bg-gradient-to-b from-foreground to-secondary border-white/40 p-2 py-10 rounded-xl text-background flex flex-col items-center relative">
+                            <span className="absolute top-2 right-2">{loot?.winProb || "0%"}</span>
                             <Image
                                 src={loot.image}
                                 alt={loot.name}
@@ -50,7 +52,7 @@ export default function Home() {
                                 className=""
                             />
                             <span className="font-bold text-center mx-auto text-white"> {loot.name}</span>
-                            <span className="font-bold text-center flex mx-auto text-xl mb-4 text-white">Sol {loot.price}</span>
+                            <span className="font-bold text-center flex mx-auto text-xl mb-4 text-white">${loot.price}</span>
                             <button
                                 onClick={() => {
                                     navigate.push("/lootboxes/" + loot.id);

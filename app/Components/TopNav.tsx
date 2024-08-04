@@ -8,7 +8,8 @@ import { useEffectOnce } from "react-use";
 
 export default function TopNav() {
     const [walletAddress, setWalletAddress] = useState(null);
-    const [_, setUser] = useUserState();
+    const [user, setUser] = useUserState();
+
     const checkIfWalletIsConnected = async () => {
         try {
             //@ts-ignore
@@ -71,7 +72,7 @@ export default function TopNav() {
     });
 
     return (
-        <div className="flex justify-between items-center flex-wrap border-white  px-2 md:px-4 border-foreground backdrop-blur-sm">
+        <div className="flex justify-between items-center flex-wrap border-white py-4 px-2 md:px-4 border-foreground backdrop-blur-sm">
             <div className="flex items-center justify-center gap-4 flex-wrap">
                 <Link
                     href={"/"}
@@ -83,7 +84,6 @@ export default function TopNav() {
                         height={400}
                         className="w-full h-24"
                     />
-                    {/* <span className="font-bold text-xl">Spin 2 win</span> */}
                 </Link>
             </div>
             <div className="flex gap-x-8">
@@ -95,7 +95,7 @@ export default function TopNav() {
                 <Link
                     href="/live-draw"
                     className="text-base font-bold">
-                    Live Draw
+                    LiveDraw
                 </Link>
                 <Link
                     href="/lootboxes/123"
@@ -104,11 +104,30 @@ export default function TopNav() {
                 </Link>
             </div>
             {walletAddress ? (
-                <button
-                    onClick={() => setWalletAddress(null)}
-                    className="bg-foreground text-background px-8 py-2 rounded-full">
-                    Disconnect
-                </button>
+                <div>
+                    <div className="border border-foreground flex justify-between gap-6 rounded-lg px-10 pt-4 pb-2 relative h-16">
+                        <span className="absolute -top-2 left-16 bg-background px-2 text-lg">My Account</span>
+                        <div className="text-xs pt-2">
+                            <p>Apes</p>
+                            <p className="text-center">0</p>
+                        </div>
+                        <div className="text-xs pt-2">
+                            <p>USD</p>
+                            <p className="text-center">0</p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => setUser({ ...user, cart: true })}
+                        className="text-xs">
+                        Reward
+                    </button>{" "}
+                    | <button className="text-xs">Deposit</button> | <button className="text-xs">Withdraw</button> |{" "}
+                    <button
+                        className="text-xs"
+                        onClick={() => setWalletAddress(null)}>
+                        Logout
+                    </button>
+                </div>
             ) : (
                 <button
                     onClick={connectWallet}

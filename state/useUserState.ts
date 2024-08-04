@@ -5,4 +5,5 @@ export const useUserState = createGlobalState({
     walletAddress: "",
     created_at: "",
     isShow: false,
+    cart: false,
 });
