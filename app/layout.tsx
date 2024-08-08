@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { ThemeProvider } from "./Components/ThemeProvider";
 import Footer from "./Components/Footer";
 import SidebarCart from "./Components/SidebarCart";
+import PurchaseModal from "./Components/Purchase";
 
 // const fontSans = Princess_Sofia({
 //     subsets: ["latin"],
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     {children}
                     <Footer />
                     <SidebarCart />
+                    <PurchaseModal />
                 </ThemeProvider>
             </body>
         </html>
