@@ -3,7 +3,7 @@ import TopNav from "./Components/TopNav";
 import Image from "next/image";
 import Model from "./Components/Model";
 import { useRouter } from "next/navigation";
-import { useUserState } from "@/state/useUserState";
+// import { useUserState } from "@/state/useUserState";
 import { useRequest } from "ahooks";
 import { supabase } from "@/service/supabase";
 
@@ -15,7 +15,7 @@ export default function Home() {
     const { data, loading, error } = useRequest(getProducts);
 
     const navigate = useRouter();
-    const [user] = useUserState();
+    // const [user] = useUserState();
     // let buttons = ["Deposite", "PVP Battles", "Leaderboard", "Lootboxes"];
     if (loading) {
         return <div>Loading...</div>;
@@ -23,7 +23,6 @@ export default function Home() {
     if (error) {
         return <div>Error</div>;
     }
-    console.log({ data });
     return (
         <div className="overflow-hidden">
             <TopNav />
@@ -39,7 +38,7 @@ export default function Home() {
             <div className="grid grid-cols-3 md:grid-cols-3 lg:grid-cols-3 m-2 gap-y-6 gap-2 mb-40">
                 {
                     //@ts-ignore
-                    data?.data.map((loot, index) => (
+                    data?.data?.map((loot, index) => (
                         <div
                             key={loot.name}
                             className="bg-gradient-to-b from-foreground to-secondary border-white/40 p-2 py-10 rounded-xl text-background flex flex-col items-center relative">

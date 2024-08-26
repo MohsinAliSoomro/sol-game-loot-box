@@ -121,7 +121,13 @@ export default function TopNav() {
                         className="text-xs">
                         Reward
                     </button>{" "}
-                    | <button className="text-xs">Deposit</button> | <button className="text-xs">Withdraw</button> |{" "}
+                    |{" "}
+                    <button
+                        onClick={() => setUser({ ...user, purchase: true })}
+                        className="text-xs">
+                        Deposit
+                    </button>{" "}
+                    | <button className="text-xs">Withdraw</button> |{" "}
                     <button
                         className="text-xs"
                         onClick={() => setWalletAddress(null)}>
