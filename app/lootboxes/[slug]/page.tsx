@@ -1,5 +1,4 @@
 "use client";
-import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, clusterApiUrl } from "@solana/web3.js";
 import LootModal from "@/app/Components/LootModal";
 import TopNav from "@/app/Components/TopNav";
 import { useUserState } from "@/state/useUserState";
@@ -13,8 +12,9 @@ import { Metaplex } from "@metaplex-foundation/js";
 import { useRequest } from "ahooks";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-const solanaConnections = new Connection(clusterApiUrl("mainnet-beta"), "confirmed");
-const metaplex = new Metaplex(solanaConnections);
+import { Connection, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
+// const solanaConnections = new Connection(clusterApiUrl("mainnet-beta"), "confirmed");
+// const metaplex = new Metaplex(solanaConnections);
 const Wheel = dynamic(() => import("react-custom-roulette").then((r) => r.Wheel), {
     ssr: false,
 });
@@ -31,6 +31,7 @@ export default function Details() {
     const [prizeNumber, setPrizeNumber] = useState(0);
     const [openModal, setOpenModal] = useState(false);
     const pathname = useParams<{ slug: string }>();
+    console.log({ user });
     const newData = useMemo(() => {
         // @ts-ignore
         return products?.data?.find((i) => i.id === Number(pathname.slug));
@@ -109,7 +110,7 @@ export default function Details() {
                     });
                     handleSpinClick();
                     console.log("Transaction confirmed. Signature:", signature);
-                    alert("Thank you for sending SOL on testnet!");
+                    // alert("Thank you for sending SOL on devnet!");
                 } catch (error) {
                     console.error("Error during transaction signing or sending:", error);
                     throw new Error(`Failed to send transaction: ${error}`);
@@ -127,6 +128,7 @@ export default function Details() {
         return <div>Error</div>;
     }
     const product = products?.data?.find((i) => i.id === Number(pathname.slug));
+    console.log({ product, products });
     //@ts-ignore
     const newProducts = products.data?.map((i) => {
         return {
@@ -157,7 +159,21 @@ export default function Details() {
                             mustStartSpinning={mustSpin}
                             prizeNumber={prizeNumber}
                             data={newProducts as any}
-                            onStopSpinning={() => {
+                            onStopSpinning={async () => {
+                                const data = {
+                                    //@ts-ignore
+                                    name: products?.data[prizeNumber]?.name,
+                                    //@ts-ignore
+                                    sol: products?.data[prizeNumber]?.price,
+                                    //@ts-ignore
+                                    isWithdraw: false,
+                                    //@ts-ignore
+                                    image: products?.data[prizeNumber]?.image,
+                                    //@ts-ignore
+                                    percentage: products?.data[prizeNumber]?.winProb,
+                                    userId: user?.walletAddress,
+                                };
+                                await supabase.from("prizeWin").insert(data);
                                 handleModal();
                                 setMustSpin(false);
                             }}

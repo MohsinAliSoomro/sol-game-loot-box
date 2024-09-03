@@ -112,6 +112,10 @@ export default function TopNav() {
                             <p className="text-center">0</p>
                         </div>
                         <div className="text-xs pt-2">
+                            <p>Volume</p>
+                            <p className="text-center">100000000</p>
+                        </div>
+                        <div className="text-xs pt-2">
                             <p>USD</p>
                             <p className="text-center">0</p>
                         </div>
@@ -133,6 +137,11 @@ export default function TopNav() {
                         onClick={() => setWalletAddress(null)}>
                         Logout
                     </button>
+                    <Link
+                        className="absolute bottom-2 right-32 text-xs"
+                        href={"#"}>
+                        Affiliate
+                    </Link>
                 </div>
             ) : (
                 <button
