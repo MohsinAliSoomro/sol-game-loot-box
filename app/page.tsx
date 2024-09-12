@@ -13,15 +13,13 @@ const getProducts = async () => {
 };
 export default function Home() {
     const { data, loading, error } = useRequest(getProducts);
-
     const navigate = useRouter();
-    // const [user] = useUserState();
-    // let buttons = ["Deposite", "PVP Battles", "Leaderboard", "Lootboxes"];
+
     if (loading) {
         return <div>Loading...</div>;
     }
     if (error) {
-        return <div>Error</div>;
+        return <div>Error...</div>;
     }
     return (
         <div className="overflow-hidden">
@@ -88,9 +86,7 @@ export default function Home() {
                                         <span className="font-bold text-center mx-auto text-black">{loot.name}</span>
                                         {/* <span className="font-bold text-center flex mx-auto text-xl mb-4 text-white">${loot.price}</span> */}
                                         <button
-                                            onClick={() => {
-                                                navigate.push("/lootboxes/" + loot.id);
-                                            }}
+                                            onClick={() => navigate.push("/lootboxes/" + loot.id)}
                                             className="text-xs rounded-full px-2 lg:px-2 py-1 lg:py-2 absolute -top-2 left-8 right-8 shadow-lg backdrop-blur-md bg-foreground border border-white/40 text-white text-center">
                                             Win
                                         </button>
