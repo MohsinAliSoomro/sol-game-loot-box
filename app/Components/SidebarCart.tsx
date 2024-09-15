@@ -4,6 +4,11 @@ import { useUserState } from "@/state/useUserState";
 import { useRequest } from "ahooks";
 import { useEffect } from "react";
 
+/**
+ * Fetches the prizes won by a user, but have not been withdrawn.
+ * @param {string} userId - The ID of the user.
+ * @returns {Promise<SupabaseClient<Database>['data'] | Error>} - The prizes won by the user, or an error.
+ */
 const getWinPrizes = async (userId: string) => {
     try {
         const response = await supabase.from("prizeWin").select().eq("userId", userId).eq("isWithdraw", false);
@@ -12,6 +17,12 @@ const getWinPrizes = async (userId: string) => {
         return error;
     }
 };
+
+/**
+ * The sidebar cart component. It displays the available rewards for the user in a modal.
+ * The user can checkout or view the rewards in the modal.
+ * @returns A JSX element representing the sidebar cart component.
+ */
 export default function SidebarCart() {
     const { data, loading, error, run } = useRequest(getWinPrizes, {
         manual: true,
@@ -28,6 +39,11 @@ export default function SidebarCart() {
     if (loading) return <div>Loading...</div>;
     if (error) return <div>Error</div>;
 
+    /**
+     * Calculate the sum of all sol in the prize win data.
+     * @param data the prize win data
+     * @returns the sum of all sol
+     */
     const sum = (data: any) => {
         let sum = 0;
         data?.data?.map((i: any) => {
@@ -68,12 +84,12 @@ export default function SidebarCart() {
                                                     className="h-6 w-6"
                                                     fill="none"
                                                     viewBox="0 0 24 24"
-                                                    stroke-width="1.5"
+                                                    strokeWidth="1.5"
                                                     stroke="currentColor"
                                                     aria-hidden="true">
                                                     <path
-                                                        stroke-linecap="round"
-                                                        stroke-linejoin="round"
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
                                                         d="M6 18L18 6M6 6l12 12"
                                                     />
                                                 </svg>

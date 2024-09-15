@@ -118,10 +118,10 @@ export default function TopNav() {
                 <Link
                     href="/live-draw"
                     className="text-base font-bold">
-                    LiveDraw
+                    Jackpot
                 </Link>
                 <Link
-                    href="/lootboxes/123"
+                    href="/leaderboard"
                     className="text-base font-bold">
                     Leaderboard
                 </Link>
