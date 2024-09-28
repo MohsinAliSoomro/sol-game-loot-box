@@ -157,7 +157,7 @@ export default function TopNav() {
                     | <button className="text-xs">Withdraw</button> |{" "}
                     <Link
                         className="text-xs"
-                        href={"#"}>
+                        href={"/affiliate"}>
                         Affiliate
                     </Link>
                     |{" "}

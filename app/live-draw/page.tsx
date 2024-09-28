@@ -60,7 +60,7 @@ export default function LiveDraw() {
                                         navigate.push("/lootboxes/" + loot.id);
                                     }}
                                     className="text-xl rounded-full px-2 lg:px-5 py-1 lg:py-2 absolute -bottom-4 left-4 right-4 shadow-lg backdrop-blur-md bg-foreground border border-white/40 text-white text-center">
-                                    Purchase
+                                    Purchase ticket
                                 </button>
                             </div>
                         ))
@@ -99,6 +99,9 @@ export default function LiveDraw() {
                     </div>
                 </div>
             </div>
+            <button className="text-xl rounded-full px-2 lg:px-5 py-1 lg:py-2 mx-auto w-full shadow-lg backdrop-blur-md bg-foreground border border-white/40 text-white text-center">
+                Purchase ticket
+            </button>
             <Model />
         </div>
     );
