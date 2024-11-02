@@ -8,7 +8,7 @@ import { useMemo, useState } from "react";
 import "react-spin-game/dist/index.css";
 import { useParams } from "next/navigation";
 import { supabase } from "@/service/supabase";
-import { Metaplex } from "@metaplex-foundation/js";
+// import { Metaplex } from "@metaplex-foundation/js";
 import { useRequest } from "ahooks";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -31,7 +31,7 @@ export default function Details() {
     const [prizeNumber, setPrizeNumber] = useState(0);
     const [openModal, setOpenModal] = useState(false);
     const pathname = useParams<{ slug: string }>();
-    console.log({ user });
+
     const newData = useMemo(() => {
         // @ts-ignore
         return products?.data?.find((i) => i.id === Number(pathname.slug));
@@ -57,7 +57,7 @@ export default function Details() {
         if (solana && newData) {
             try {
                 const toWalletAddress = ownerWallet; // Replace with your wallet address
-                const amountToSend = newData?.price; // Amount in SOL
+                const amountToSend = 0.1; // Amount in SOL
 
                 // Use testnet connection with commitment
                 const connection = new Connection("https://api.devnet.solana.com", "confirmed");
@@ -107,6 +107,8 @@ export default function Details() {
                         transactionId: signature,
                         sol: newData.price,
                         name: newData.name,
+                        username: user.username,
+                        winner: user.walletAddress,
                     });
                     handleSpinClick();
                     console.log("Transaction confirmed. Signature:", signature);
@@ -128,7 +130,7 @@ export default function Details() {
         return <div>Error</div>;
     }
     const product = products?.data?.find((i) => i.id === Number(pathname.slug));
-    console.log({ product, products });
+    console.log({ products });
     //@ts-ignore
     const newProducts = products.data?.map((i) => {
         return {
@@ -139,6 +141,7 @@ export default function Details() {
                 offsetY: 230,
                 sizeMultiplier: 0.8,
             },
+            percentage: i?.percentage,
         };
     });
 
@@ -192,7 +195,7 @@ export default function Details() {
                             // }}
                         />
                         <div className="absolute top-0 left-0 w-full h-full flex justify-center items-center z-50">
-                            <span className=" w-40 h-40 md:h-96 md:w-96 rounded-full bg-background border-2 border-white/40"></span>
+                            <span className=" w-40 h-40 md:h-96 md:w-96 rounded-full bg-background border-2 border-white/40 flex justify-center items-center mb-10">Winner</span>
                         </div>
                         <div className="absolute top-1/2 left-0 right-0 z-50 -mb-20 bg-background w-full h-full">
                             <div
@@ -212,15 +215,15 @@ export default function Details() {
                                 <span> Try it for free</span>
                             </button>
                             <div className="text-white px-4">
-                                <h1 className="font-bold text-4xl text-foreground">Item</h1>
-                                <h1 className="font-bold text-4xl text-foreground">In the box</h1>
+                                <h1 className="font-bold text-4xl text-foreground text-center mt-4">Loot In the box</h1>
                                 <div className="grid grid-cols-3 md:grid-cols-3 lg:grid-cols-3 m-2 gap-y-6 gap-2 mb-40">
                                     {
                                         //@ts-ignore
                                         products?.data.map((loot) => (
                                             <div
                                                 key={loot.name}
-                                                className="bg-gradient-to-b from-foreground to-secondary border-white/40 p-2 py-10 rounded-xl text-background flex flex-col items-center relative">
+                                                className="bg-gradient-to-b from-foreground to-indigo-100 border-white/40 p-2 py-6 rounded-xl text-background flex flex-col items-center relative">
+                                                <span className="font-bold text-center mx-auto text-white absolute top-2 right-2 text-2xl">%{loot?.percentage}</span>
                                                 <Image
                                                     src={loot.image}
                                                     alt={loot.name}
@@ -228,15 +231,8 @@ export default function Details() {
                                                     height={200}
                                                     className=""
                                                 />
-                                                <span className="font-bold text-center mx-auto text-white"> {loot.name}</span>
-                                                <span className="font-bold text-center flex mx-auto text-xl mb-4 text-white">Sol {loot.price}</span>
-                                                <button
-                                                    onClick={() => {
-                                                        navigate.push("/lootboxes/" + loot.id);
-                                                    }}
-                                                    className="text-xl rounded-full px-2 lg:px-5 py-1 lg:py-2 absolute -bottom-4 left-4 right-4 shadow-lg backdrop-blur-md bg-foreground border border-white/40 text-white text-center">
-                                                    Open
-                                                </button>
+                                                <span className="font-bold text-center mx-auto text-foreground text-2xl mt-4"> {loot?.name}</span>
+                                                <span className="font-bold text-center flex mx-auto text-xl mb-4 text-foreground">Apes {loot.price}</span>
                                             </div>
                                         ))
                                     }
@@ -247,7 +243,12 @@ export default function Details() {
                 </div>
             </div>
 
-            {openModal && <LootModal close={handleModal} />}
+            {openModal && (
+                <LootModal
+                    close={handleModal}
+                    image={products && products.data && Array.isArray(products.data) ? (products?.data[prizeNumber]?.image as string) : "/1.png"}
+                />
+            )}
         </div>
     );
 }

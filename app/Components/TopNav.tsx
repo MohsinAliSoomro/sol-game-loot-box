@@ -111,7 +111,7 @@ export default function TopNav() {
             </div>
             <div className="flex gap-x-8">
                 <Link
-                    href="/lootboxes.123"
+                    href="/"
                     className="text-base font-bold">
                     Apes Lootbox
                 </Link>
