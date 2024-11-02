@@ -104,8 +104,10 @@ export default function SidebarCart() {
                                                 className="-my-6 divide-y divide-gray-200">
                                                 {
                                                     //@ts-ignore
-                                                    data?.data?.map((item) => (
-                                                        <li className="flex py-6">
+                                                    data?.data?.map((item, index) => (
+                                                        <li
+                                                            key={index}
+                                                            className="flex py-6">
                                                             <div className="h-24 w-24 flex-shrink-0 overflow-hidden rounded-md border border-gray-200">
                                                                 <img
                                                                     src={item?.image}
