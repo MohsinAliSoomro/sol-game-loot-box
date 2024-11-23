@@ -7,5 +7,6 @@ export const useUserState = createGlobalState({
     isShow: false,
     cart: false,
     purchase: false,
+    withdraw: false,
     apes: 0,
 });

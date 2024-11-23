@@ -157,7 +157,7 @@ export default function TopNav() {
                     </button>{" "}
                     |{" "}
                     <button
-                        onClick={() => router.push("/withdraw")}
+                        onClick={() => setUser({ ...user, withdraw: true })}
                         className="text-xs">
                         Withdraw
                     </button>{" "}
