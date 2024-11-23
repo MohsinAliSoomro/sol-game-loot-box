@@ -3,6 +3,7 @@ import { supabase } from "@/service/supabase";
 import { useUserState } from "@/state/useUserState";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useEffectOnce } from "react-use";
 
@@ -15,7 +16,7 @@ import { useEffectOnce } from "react-use";
 export default function TopNav() {
     const [walletAddress, setWalletAddress] = useState(null);
     const [user, setUser] = useUserState();
-
+    const router = useRouter();
     /**
      * Checks if a user has a connected Phantom wallet.
      * If yes, it fetches the user's info from the database and updates the state.
@@ -132,7 +133,7 @@ export default function TopNav() {
                         <span className="absolute -top-2 left-16 bg-background px-2 text-lg">My Account</span>
                         <div className="text-xs pt-2">
                             <p>Apes</p>
-                            <p className="text-center">0</p>
+                            <p className="text-center">{user?.apes || 0}</p>
                         </div>
                         <div className="text-xs pt-2">
                             <p className="text-center">Volume</p>
@@ -154,7 +155,13 @@ export default function TopNav() {
                         className="text-xs">
                         Deposit
                     </button>{" "}
-                    | <button className="text-xs">Withdraw</button> |{" "}
+                    |{" "}
+                    <button
+                        onClick={() => router.push("/withdraw")}
+                        className="text-xs">
+                        Withdraw
+                    </button>{" "}
+                    |{" "}
                     <Link
                         className="text-xs"
                         href={"/affiliate"}>

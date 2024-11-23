@@ -57,11 +57,18 @@ export default function Home() {
                                     className=""
                                 />
                                 <span className="font-bold text-center mx-auto text-white"> {loot.name}</span>
-                                <span className="font-bold text-center flex mx-auto text-xl mb-4 text-white">${loot.price}</span>
+                                <div className="font-bold text-center mx-auto text-4xl mb-4 text-white flex justify-center items-center">
+                                    <span className="mt-3">{loot.price}</span>
+                                    <Image
+                                        src={"/apeslogo.png"}
+                                        width={50}
+                                        height={50}
+                                        alt="apes"
+                                        className=" rounded-full"
+                                    />
+                                </div>
                                 <button
-                                    onClick={() => {
-                                        navigate.push("/lootboxes/" + loot.id);
-                                    }}
+                                    onClick={() => navigate.push("/lootboxes/" + loot.id)}
                                     className="text-xl rounded-full px-2 lg:px-5 py-1 lg:py-2 absolute -bottom-4 left-4 right-4 shadow-lg backdrop-blur-md bg-foreground border border-white/40 text-white text-center">
                                     Open
                                 </button>

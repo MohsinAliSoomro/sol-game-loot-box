@@ -54,9 +54,9 @@ export default function LiveDraw() {
                     }
                 </div>
             </div>
-            <button className="text-xl rounded-full px-2 lg:px-5 py-1 lg:py-2 mx-auto w-full shadow-lg backdrop-blur-md bg-foreground border border-white/40 text-white text-center">
+            {/* <button className="text-xl rounded-full px-2 lg:px-5 py-1 lg:py-2 mx-auto w-full shadow-lg backdrop-blur-md bg-foreground border border-white/40 text-white text-center">
                 Purchase ticket
-            </button>
+            </button> */}
             <Model />
         </div>
     );

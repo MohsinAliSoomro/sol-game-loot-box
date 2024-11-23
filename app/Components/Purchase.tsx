@@ -2,8 +2,10 @@
 import { useUserState } from "@/state/useUserState";
 import { useEffect, useMemo, useState } from "react";
 import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, sendAndConfirmTransaction, clusterApiUrl } from "@solana/web3.js";
+import { supabase } from "@/service/supabase";
 export default function PurchaseModal() {
     const [state, setState] = useUserState();
+
     const [form, setForm] = useState({
         amount: 1,
         balance: 100,
@@ -47,6 +49,20 @@ export default function PurchaseModal() {
         fetchSolBalance();
     }, []);
 
+    // const saveTransaction =async ({signature,})=>{
+    //     await supabase.from("transaction").insert({
+    //         transactionId: signature,
+    //         sol: newData.price,
+    //         name: newData.name,
+    //         username: user.username,
+    //         winner: user.walletAddress,
+    //     });
+    // }
+    const updaetUserApes = async () => {
+        const plus = calculateBalance + (state.apes || 0);
+        await supabase.from("user").update({ apes: plus }).eq("walletAddress", state.walletAddress);
+        setState({ ...state, apes: plus });
+    };
     const connectWallet = async () => {
         //@ts-ignore
         const { solana } = window;
@@ -94,13 +110,12 @@ export default function PurchaseModal() {
                     lamports: 0.1 * LAMPORTS_PER_SOL, // Convert SOL to lamports
                 })
             );
-
+            console.log({ transaction });
             // Set the blockhash and fee payer
             transaction.recentBlockhash = blockhash;
             transaction.lastValidBlockHeight = lastValidBlockHeight;
             transaction.feePayer = fromPubkey;
 
-            // Sign the transaction
             //@ts-ignore
             const signedTransaction = await window.solana.signTransaction(transaction);
 
@@ -114,12 +129,16 @@ export default function PurchaseModal() {
                 lastValidBlockHeight,
             });
 
-            console.log("Transaction sent and confirmed. Signature:", signature);
             console.log("Confirmation:", confirmation);
-
+            // await saveTransaction({});
+            await updaetUserApes();
+            alert("Transaction sent and confirmed ");
+            // dave into database transaction and add apes into user wallet
             return signature;
         } catch (error) {
             console.error("Error making transaction:", error);
+            //@ts-ignore
+            alert(`Error making transaction ===> ${JSON.stringify(error.transactionMessage)}`);
             if (error instanceof Error) {
                 console.error(error.message);
             }
@@ -176,7 +195,7 @@ export default function PurchaseModal() {
 
                             <label className="mt-6 flex">Availabe Apes</label>
                             <input
-                                value={0}
+                                value={state.apes || 0}
                                 className="w-full p-2 border border-gray-300 rounded-md"
                             />
                         </div>
