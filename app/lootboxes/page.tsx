@@ -142,7 +142,12 @@ export default function LookBox() {
                     </div>
                 </div>
             </div>
-            {openModal && <LootModal close={handleModal} />}
+            {openModal && (
+                <LootModal
+                    close={handleModal}
+                    image="/coin.png"
+                />
+            )}
         </div>
     );
 }

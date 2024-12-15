@@ -19,7 +19,7 @@ export default function Home() {
     const { data, loading, error } = useRequest(getProducts);
     const { data: transactions, loading: transactionLoading, error: transactionError } = useRequest(getLatestTransaction);
     const navigate = useRouter();
-    console.log({ transactions, transactionLoading, transactionError });
+
     if (loading) {
         return <div>Loading...</div>;
     }
