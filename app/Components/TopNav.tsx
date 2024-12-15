@@ -17,8 +17,10 @@ export default function TopNav() {
     const handleSocialLogin = async (provider: "google" | "discord") => {
         const { data, error } = await supabase.auth.signInWithOAuth({
             provider: provider,
+            options: {
+                redirectTo: "/auth/callback",
+            },
         });
-        console.log({ data, error });
     };
     const checkIfWalletIsConnected = async () => {
         try {
