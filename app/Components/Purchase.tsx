@@ -61,7 +61,7 @@ export default function PurchaseModal() {
     console.log({ state });
     const updaetUserApes = async () => {
         const plus = calculateBalance + (state.apes || 0);
-        await supabase.from("user").update({ apes: plus }).eq("walletAddress", state.walletAddress);
+        await supabase.from("user").update({ apes: plus }).eq("id", state.id);
         setState({ ...state, apes: plus });
     };
     const connectWallet = async () => {
