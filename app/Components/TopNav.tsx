@@ -4,11 +4,11 @@ import { useUserState } from "@/state/useUserState";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useEffectOnce } from "react-use";
 
 export default function TopNav() {
-    const [walletAddress, setWalletAddress] = useState(null);
+    // const [walletAddress, setWalletAddress] = useState(null);
     const [user, setUser] = useUserState();
     const [open, setOpen] = useState(false);
     const [isLogin, setIsLogin] = useState(false);
@@ -18,59 +18,106 @@ export default function TopNav() {
         const { data, error } = await supabase.auth.signInWithOAuth({
             provider: provider,
             options: {
-                redirectTo: "/auth/callback",
+                redirectTo: `https://spin2win.vibingapes.com/`,
             },
         });
+        console.log({ data, error });
+        debugger;
     };
-    const checkIfWalletIsConnected = async () => {
-        try {
-            //@ts-ignore
-            const { solana } = window;
 
-            if (solana) {
-                if (solana.isPhantom) {
-                    const response = await solana.connect({ onlyIfTrusted: true });
-                    const currentUser = await supabase.from("user").select().eq("walletAddress", response.publicKey.toString()).single();
-                    let params = { ...currentUser.data, isShow: currentUser.data?.username ? false : true };
-                    setUser(params);
-                    setWalletAddress(response.publicKey.toString());
-                }
+    useEffect(() => {
+        console.log("useEffect");
+        const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+            if (event === "SIGNED_IN" && session?.user) {
+                await saveUserToDatabase(session.user);
+            }
+        });
+        return () => data?.subscription.unsubscribe();
+    }, []);
+    const saveUserToDatabase = async (user: any) => {
+        try {
+            // Check if user already exists
+            const { data: existingUser, error: fetchError } = await supabase.from("user").select().eq("id", user.id).single();
+            if (fetchError && fetchError.code !== "PGRST116") {
+                throw fetchError;
+            }
+
+            const userData = {
+                uid: user.id,
+                id: user.id,
+                email: user.email,
+                full_name: user.user_metadata?.full_name,
+                avatar_url: user.user_metadata?.avatar_url,
+                provider: user.app_metadata?.provider,
+                updated_at: new Date().toISOString(),
+            };
+            if (!existingUser) {
+                // Create new user profile
+                const { error: insertError } = await supabase.from("user").insert({
+                    ...userData,
+                    created_at: new Date().toISOString(),
+                });
+                if (insertError) throw insertError;
             } else {
-                alert("Solana object not found! Get a Phantom Wallet 👻");
+                // Update existing user profile
+                const { error: updateError } = await supabase.from("user").update(userData).eq("id", user.id);
+
+                if (updateError) throw updateError;
             }
         } catch (error) {
-            console.error(error);
+            console.error("Error saving user:", error);
         }
     };
 
-    const connectWallet = async () => {
-        //@ts-ignore
-        const { solana } = window;
+    // const checkIfWalletIsConnected = async () => {
+    //     try {
+    //         //@ts-ignore
+    //         const { solana } = window;
 
-        if (solana) {
-            const response = await solana.connect();
-            const user = await supabase
-                .from("user")
-                .upsert(
-                    { walletAddress: response.publicKey.toString(), username: "" },
-                    {
-                        onConflict: "walletAddress",
-                        ignoreDuplicates: true,
-                    }
-                )
-                .select()
-                .single();
-            if (!user.count) {
-                const currentUser = await supabase.from("user").select().eq("walletAddress", response.publicKey.toString()).single();
-                let params = { ...currentUser.data, isShow: currentUser.data?.username ? false : true };
-                setUser(params);
-            } else {
-                setUser({ ...user.data, isShow: true });
-            }
-            console.log("Connected with Public Key:", response.publicKey.toString());
-            setWalletAddress(response.publicKey.toString());
-        }
-    };
+    //         if (solana) {
+    //             if (solana.isPhantom) {
+    //                 const response = await solana.connect({ onlyIfTrusted: true });
+    //                 const currentUser = await supabase.from("user").select().eq("walletAddress", response.publicKey.toString()).single();
+    //                 let params = { ...currentUser.data, isShow: currentUser.data?.username ? false : true };
+    //                 setUser(params);
+    //                 setWalletAddress(response.publicKey.toString());
+    //             }
+    //         } else {
+    //             alert("Solana object not found! Get a Phantom Wallet 👻");
+    //         }
+    //     } catch (error) {
+    //         console.error(error);
+    //     }
+    // };
+
+    // const connectWallet = async () => {
+    //     //@ts-ignore
+    //     const { solana } = window;
+
+    //     if (solana) {
+    //         const response = await solana.connect();
+    //         const user = await supabase
+    //             .from("user")
+    //             .upsert(
+    //                 { walletAddress: response.publicKey.toString(), username: "" },
+    //                 {
+    //                     onConflict: "walletAddress",
+    //                     ignoreDuplicates: true,
+    //                 }
+    //             )
+    //             .select()
+    //             .single();
+    //         if (!user.count) {
+    //             const currentUser = await supabase.from("user").select().eq("walletAddress", response.publicKey.toString()).single();
+    //             let params = { ...currentUser.data, isShow: currentUser.data?.username ? false : true };
+    //             setUser(params);
+    //         } else {
+    //             setUser({ ...user.data, isShow: true });
+    //         }
+    //         console.log("Connected with Public Key:", response.publicKey.toString());
+    //         setWalletAddress(response.publicKey.toString());
+    //     }
+    // };
     //@ts-ignore
     useEffectOnce(() => {
         const onLoad = async () => {
