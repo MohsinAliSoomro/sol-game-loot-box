@@ -45,7 +45,6 @@ export default function SidebarCart() {
      * @returns the sum of all sol
      */
     const sum = (data: any) => {
-        console.log({ data });
         let sum = 0;
         data?.data?.map((i: any) => {
             sum = sum + Number(i?.sol);

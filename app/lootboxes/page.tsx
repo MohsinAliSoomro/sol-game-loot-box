@@ -119,7 +119,6 @@ export default function LookBox() {
                             data={data}
                             onStopSpinning={() => {
                                 handleModal();
-                                console.log("STOP SPINNER");
                                 setMustSpin(false);
                             }}
                             outerBorderWidth={0}

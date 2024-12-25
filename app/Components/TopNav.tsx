@@ -8,7 +8,6 @@ import { useEffect, useState } from "react";
 import { useEffectOnce } from "react-use";
 
 export default function TopNav() {
-    // const [walletAddress, setWalletAddress] = useState(null);
     const [user, setUser] = useUserState();
     const [open, setOpen] = useState(false);
     const [isLogin, setIsLogin] = useState(false);
@@ -26,9 +25,8 @@ export default function TopNav() {
     };
 
     useEffect(() => {
-        console.log("useEffect");
         const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
-            if (event === "SIGNED_IN" && session?.user) {
+            if (event === "INITIAL_SESSION" && session?.user) {
                 await saveUserToDatabase(session.user);
             }
         });
@@ -50,7 +48,9 @@ export default function TopNav() {
                 avatar_url: user.user_metadata?.avatar_url,
                 provider: user.app_metadata?.provider,
                 updated_at: new Date().toISOString(),
+                apes: 0,
             };
+
             if (!existingUser) {
                 // Create new user profile
                 const { error: insertError } = await supabase.from("user").insert({
@@ -60,9 +60,8 @@ export default function TopNav() {
                 if (insertError) throw insertError;
             } else {
                 // Update existing user profile
-                const { error: updateError } = await supabase.from("user").update(userData).eq("id", user.id);
-
-                if (updateError) throw updateError;
+                // const { error: updateError } = await supabase.from("user").update(userData).eq("id", user.id);
+                // if (updateError) throw updateError;
             }
         } catch (error) {
             console.error("Error saving user:", error);
@@ -123,7 +122,9 @@ export default function TopNav() {
         const onLoad = async () => {
             try {
                 const response = await supabase.auth.getSession();
-                console.log({ response });
+                const userId = response.data.session?.user.id;
+                const userGet = await supabase.from("user").select().eq("id", userId).single();
+                setUser({ ...user, ...userGet.data });
                 setIsLogin(response.data.session ? true : false);
                 // await checkIfWalletIsConnected();
             } catch (error) {
@@ -146,7 +147,7 @@ export default function TopNav() {
                     href={"/"}
                     className="flex items-center">
                     <Image
-                        src={"/logo.png"}
+                        src={"/logo.jpeg"}
                         alt="logo"
                         width={600}
                         height={400}

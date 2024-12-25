@@ -130,7 +130,6 @@ export default function Details() {
         return <div>Error</div>;
     }
     const product = products?.data?.find((i) => i.id === Number(pathname.slug));
-    console.log({ products });
     //@ts-ignore
     const newProducts = products.data?.map((i) => {
         return {
