@@ -26,7 +26,7 @@ const getProducts = async () => {
 export default function Details() {
     const { data: products, loading, error } = useRequest(getProducts);
     const navigate = useRouter();
-    const [user] = useUserState();
+    const [user, setUser] = useUserState();
     const [mustSpin, setMustSpin] = useState(false);
     const [prizeNumber, setPrizeNumber] = useState(0);
     const [openModal, setOpenModal] = useState(false);
@@ -38,7 +38,6 @@ export default function Details() {
     }, [pathname.slug, [products]]);
 
     const handleSpinClick = () => {
-        // sendSolanaTokens();
         if (!mustSpin) {
             //@ts-ignore
             const newPrizeNumber = Math.floor(Math.random() * products?.data?.length || 0);
@@ -49,79 +48,80 @@ export default function Details() {
     const handleModal = () => {
         setOpenModal(!openModal);
     };
-    let ownerWallet = "Dw7xmScGHk74k3e8VLRZzkRAoNm1hjdQJF4wMHtxVzkB";
-    const sendSolanaTokens = async () => {
-        //@ts-ignore
-        const { solana } = window;
-
-        if (solana && newData) {
-            try {
-                const toWalletAddress = ownerWallet; // Replace with your wallet address
-                const amountToSend = 0.1; // Amount in SOL
-
-                // Use testnet connection with commitment
-                const connection = new Connection("https://api.devnet.solana.com", "confirmed");
-
-                // Check account balance
-                const balance = await connection.getBalance(new PublicKey(user.walletAddress));
-                console.log("Account balance:", balance / LAMPORTS_PER_SOL, "SOL");
-
-                // Set a fixed fee (in lamports)
-                const fixedFee = 5000; // Adjust this value as needed
-
-                // Check if there's enough balance
-                if (balance < LAMPORTS_PER_SOL * amountToSend + fixedFee) {
-                    throw new Error(`Insufficient balance. You need at least ${amountToSend + fixedFee / LAMPORTS_PER_SOL} SOL`);
-                }
-
-                // Create transaction
-                const transaction = new Transaction().add(
-                    SystemProgram.transfer({
-                        fromPubkey: new PublicKey(user.walletAddress),
-                        toPubkey: new PublicKey(toWalletAddress),
-                        lamports: LAMPORTS_PER_SOL * amountToSend,
-                    })
-                );
-
-                // Get latest blockhash
-                const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("finalized");
-                transaction.recentBlockhash = blockhash;
-                transaction.feePayer = new PublicKey(user.walletAddress);
-
-                // Sign and send transaction
-                try {
-                    const signedTransaction = await solana.signTransaction(transaction);
-                    const signature = await connection.sendRawTransaction(signedTransaction.serialize());
-
-                    console.log("Transaction sent. Awaiting confirmation...");
-                    const confirmation = await connection.confirmTransaction({
-                        signature,
-                        blockhash,
-                        lastValidBlockHeight,
-                    });
-
-                    if (confirmation.value.err) {
-                        throw new Error("Transaction failed to confirm.");
-                    }
-                    await supabase.from("transaction").insert({
-                        transactionId: signature,
-                        sol: newData.price,
-                        name: newData.name,
-                        username: user.username,
-                        winner: user.walletAddress,
-                    });
-                    handleSpinClick();
-                    console.log("Transaction confirmed. Signature:", signature);
-                    // alert("Thank you for sending SOL on devnet!");
-                } catch (error) {
-                    console.error("Error during transaction signing or sending:", error);
-                    throw new Error(`Failed to send transaction: ${error}`);
-                }
-            } catch (error) {
-                console.error("Error sending Solana tokens:", error);
-                alert(error || "Failed to send Solana tokens. Please try again.");
-            }
+    console.log({ user });
+    // let ownerWallet = "Dw7xmScGHk74k3e8VLRZzkRAoNm1hjdQJF4wMHtxVzkB";
+    const sendSolanaTokens = async (product: any) => {
+        if (user.apes <= 0) {
+            return alert("You need to purchae apes");
         }
+        let price = Number(product.price);
+        let minusPrice = user.apes - price;
+        console.log({ minusPrice });
+        const response = await supabase.from("user").update({ apes: minusPrice }).eq("id", user.id);
+        console.log({ response });
+        setUser({ ...user, apes: minusPrice });
+        handleSpinClick();
+        // //@ts-ignore
+        // const { solana } = window;
+        // if (solana && newData) {
+        //     try {
+        //         const toWalletAddress = ownerWallet; // Replace with your wallet address
+        //         const amountToSend = 0.1; // Amount in SOL
+        //         // Use testnet connection with commitment
+        //         const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+        //         // Check account balance
+        //         const balance = await connection.getBalance(new PublicKey(user.walletAddress));
+        //         console.log("Account balance:", balance / LAMPORTS_PER_SOL, "SOL");
+        //         // Set a fixed fee (in lamports)
+        //         const fixedFee = 5000; // Adjust this value as needed
+        //         // Check if there's enough balance
+        //         if (balance < LAMPORTS_PER_SOL * amountToSend + fixedFee) {
+        //             throw new Error(`Insufficient balance. You need at least ${amountToSend + fixedFee / LAMPORTS_PER_SOL} SOL`);
+        //         }
+        //         // Create transaction
+        //         const transaction = new Transaction().add(
+        //             SystemProgram.transfer({
+        //                 fromPubkey: new PublicKey(user.walletAddress),
+        //                 toPubkey: new PublicKey(toWalletAddress),
+        //                 lamports: LAMPORTS_PER_SOL * amountToSend,
+        //             })
+        //         );
+        //         // Get latest blockhash
+        //         const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("finalized");
+        //         transaction.recentBlockhash = blockhash;
+        //         transaction.feePayer = new PublicKey(user.walletAddress);
+        //         // Sign and send transaction
+        //         try {
+        //             const signedTransaction = await solana.signTransaction(transaction);
+        //             const signature = await connection.sendRawTransaction(signedTransaction.serialize());
+        //             console.log("Transaction sent. Awaiting confirmation...");
+        //             const confirmation = await connection.confirmTransaction({
+        //                 signature,
+        //                 blockhash,
+        //                 lastValidBlockHeight,
+        //             });
+        //             if (confirmation.value.err) {
+        //                 throw new Error("Transaction failed to confirm.");
+        //             }
+        //             await supabase.from("transaction").insert({
+        //                 transactionId: signature,
+        //                 sol: newData.price,
+        //                 name: newData.name,
+        //                 username: user.username,
+        //                 winner: user.walletAddress,
+        //             });
+        //             handleSpinClick();
+        //             console.log("Transaction confirmed. Signature:", signature);
+        //             // alert("Thank you for sending SOL on devnet!");
+        //         } catch (error) {
+        //             console.error("Error during transaction signing or sending:", error);
+        //             throw new Error(`Failed to send transaction: ${error}`);
+        //         }
+        //     } catch (error) {
+        //         console.error("Error sending Solana tokens:", error);
+        //         alert(error || "Failed to send Solana tokens. Please try again.");
+        //     }
+        // }
     };
     if (loading) {
         return <div>Loading...</div>;
@@ -130,6 +130,7 @@ export default function Details() {
         return <div>Error</div>;
     }
     const product = products?.data?.find((i) => i.id === Number(pathname.slug));
+    console.log({ product });
     //@ts-ignore
     const newProducts = products.data?.map((i) => {
         return {
@@ -198,10 +199,10 @@ export default function Details() {
                         </div>
                         <div className="absolute top-1/2 left-0 right-0 z-50 -mb-20 bg-background w-full h-full">
                             <div
-                                onClick={sendSolanaTokens}
+                                onClick={() => sendSolanaTokens(product)}
                                 className="flex justify-center items-center gap-6 cursor-pointer">
                                 <p className="backdrop-blur-sm p-2 rounded-lg bg-foreground text-white mt-2 ">
-                                    Spin for <span className="font-bold text-lg">{product?.price}</span> Sol{" "}
+                                    Spin for <span className="font-bold text-lg">{product?.price}</span> Apes{" "}
                                 </p>
                             </div>
                             <button
