@@ -19,7 +19,7 @@ export default function Home() {
     const { data, loading, error } = useRequest(getProducts);
     const { data: transactions, loading: transactionLoading, error: transactionError } = useRequest(getLatestTransaction);
     const navigate = useRouter();
-
+    console.log({transactions})
     if (loading) {
         return <div>Loading...</div>;
     }
@@ -48,9 +48,9 @@ export default function Home() {
                             <div
                                 key={index}
                                 className="h-96 bg-gradient-to-b from-foreground to-secondary border-white/40 p-2 py-10 rounded-xl text-background flex flex-col items-center relative">
-                                <span className="absolute top-2 right-2">{`%${loot?.percentage || "0"}`}</span>
+                                <span className="absolute top-2 right-2">{`%${loot?.price || "0"}`}</span>
                                 <Image
-                                    src={loot.image}
+                                    src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${loot.image}`}
                                     alt={loot.name}
                                     width={200}
                                     height={200}
@@ -89,7 +89,7 @@ export default function Home() {
                                     <p className="text-xl font-bold mb-2">{loot?.winner?.slice(0, 10) || "ajlasdjlfsf"}</p>
                                     <div className="w-40 h-40 bg-gradient-to-b from-foreground to-secondary border-white/40 p-2 py-2 rounded-xl text-background flex flex-col items-center relative">
                                         <Image
-                                            src={loot?.image || "/1.png"}
+                                          src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${loot.image}`}
                                             alt={loot?.name}
                                             width={120}
                                             height={120}
