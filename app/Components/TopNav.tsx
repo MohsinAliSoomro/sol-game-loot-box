@@ -142,24 +142,22 @@ export default function TopNav() {
     };
     return (
         <div className="flex justify-between items-center flex-wrap border-white py-4 px-2 md:px-4 border-foreground backdrop-blur-sm relative">
-            <div className="flex items-center justify-center gap-4 flex-wrap">
                 <Link
                     href={"/"}
                     className="flex items-center">
                     <Image
-                        src={"/logo.jpeg"}
+                        src={"/logo.png"}
                         alt="logo"
                         width={600}
                         height={400}
                         className="w-full h-24"
                     />
                 </Link>
-            </div>
             <div className="flex gap-x-8">
                 <Link
                     href="/"
                     className="text-base font-bold">
-                    Apes Lootbox
+                    OGX Lootbox
                 </Link>
                 <Link
                     href="/live-draw"

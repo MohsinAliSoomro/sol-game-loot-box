@@ -37,7 +37,7 @@ export default function Home() {
                 className="w-full h-[50vh] object-cover"
             />
             <div className="flex items-center">
-                <p className="text-3xl font-bold my-4 ml-4 w-9/12">Feature Apes Lootbox</p>
+                <p className="text-3xl font-bold my-4 ml-4 w-9/12">Feature OGX Lootbox</p>
                 <p className="text-3xl font-bold ml-8 w-3/12">Live draw</p>
             </div>
             <div className="w-full flex">
@@ -63,7 +63,7 @@ export default function Home() {
                                         src={"/apeslogo.png"}
                                         width={50}
                                         height={50}
-                                        alt="apes"
+                                        alt="ogx"
                                         className=" rounded-full"
                                     />
                                 </div>

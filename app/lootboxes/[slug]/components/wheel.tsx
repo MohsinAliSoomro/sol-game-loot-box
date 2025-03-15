@@ -127,14 +127,14 @@ const WheelSpinner = () => {
   };
 
   return (
-    <div className="w-full max-w-lg mx-auto">
+    <div className="w-full max-w-lg mx-auto mt-20">
       <div className="mb-6">
         {/* <div className="text-center">
           <div className="text-2xl">Prize Wheel Spinner</div>
         </div> */}
         <div className="flex flex-col items-center">
           {/* Wheel container with pointer */}
-          <div className="relative w-96 h-96 mb-8">
+          <div className="relative w-[20rem] h-[20rem] md:w-[35rem] md:h-[35rem] lg:w-[45rem] lg:h-[45rem] mb-8">
             {/* Fixed pointer at top */}
             <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 z-30 flex flex-col items-center">
               <div className="w-6 h-6 bg-red-600 rotate-45 transform origin-bottom-left"></div>
@@ -157,7 +157,7 @@ const WheelSpinner = () => {
               }}
             >
               {/* Center circle */}
-              <div className="absolute w-12 h-12 bg-foreground rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 border-4 border-foreground flex items-center justify-center">
+              <div className="absolute w-12 h-12 bg-foreground rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 border-10 border-foreground flex items-center justify-center">
                 <div className="w-2 h-2 bg-background rounded-full"></div>
               </div>
 

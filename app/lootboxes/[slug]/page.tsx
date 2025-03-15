@@ -157,8 +157,8 @@ export default function Details() {
                 <RefreshCcw size={20} height={20} />{" "}
                 <span> Try it for free</span>
               </button> */}
-              <div className="text-white px-4 mt-56">
-                <h1 className="font-bold text-4xl text-foreground text-center mt-4">
+              <div className="text-white px-4 mt-[28rem]">
+                <h1 className="font-bold text-4xl text-foreground text-center mt-">
                   Loot In the box
                 </h1>
                 <div className="grid grid-cols-3 md:grid-cols-3 lg:grid-cols-3 m-2 gap-y-6 gap-2 mb-40">
