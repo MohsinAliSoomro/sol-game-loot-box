@@ -60,7 +60,7 @@ export default function Home() {
                                 <div className="font-bold text-center mx-auto text-4xl mb-4 text-white flex justify-center items-center">
                                     <span className="mt-3">{loot.price}</span>
                                     <Image
-                                        src={"/apeslogo.png"}
+                                        src={"/logo.png"}
                                         width={50}
                                         height={50}
                                         alt="ogx"
