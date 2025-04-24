@@ -2,8 +2,9 @@
 import { supabase } from "@/service/supabase";
 import { useRequest } from "ahooks";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
+// import Image from "next/image";
 import Model from "../Components/Model";
+import Loader from "../Components/Loader";
 
 const getProducts = async () => {
     const response = await supabase.from("tickets").select();
@@ -15,48 +16,89 @@ export default function LiveDraw() {
     const navigate = useRouter();
 
     if (loading) {
-        return <div>Loading...</div>;
+        return <Loader />;
     }
+
     if (error) {
-        return <div>Error...</div>;
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="text-center p-4 rounded-lg bg-red-500/10 text-red-500">
+                    <p>Failed to load live draws. Please try again later.</p>
+                </div>
+            </div>
+        );
     }
 
     return (
-        <div className="overflow-hidden">
-            <div className="flex items-center">
-                <p className="text-3xl font-bold my-4 ml-4 w-full">Future Jackpots</p>
+        <div className="max-w-7xl mx-auto px-4 py-8 overflow-hidden">
+            <div className="flex items-center mb-8">
+                <h1 className="text-3xl font-bold bg-gradient-to-r from-[#f74e14] to-[#ff914d] bg-clip-text text-transparent">Future Jackpots</h1>
             </div>
-            <div className="w-full flex">
-                <div className="w-full grid grid-cols-3 md:grid-cols-3 lg:grid-cols-3 m-2 gap-y-6 gap-2 mb-40">
-                    {
-                        //@ts-ignore
-                        data?.data?.map((loot, index) => (
-                            <div
-                                key={loot.title}
-                                className="h-96 bg-gradient-to-b from-foreground to-secondary border-white/40 p-2 py-10 rounded-xl text-background flex flex-col items-center relative">
-                                <Image
-                                    src={loot.image}
-                                    alt={loot.name}
-                                    width={200}
-                                    height={200}
-                                    className=""
-                                />
-                                <span className="font-bold text-center mx-auto text-white"> {loot.title}</span>
-                                <button
-                                    onClick={() => {
-                                        navigate.push("/live-draw/" + loot.id);
-                                    }}
-                                    className="text-xl rounded-full px-2 lg:px-5 py-1 lg:py-2 absolute -bottom-4 left-4 right-4 shadow-lg backdrop-blur-md bg-foreground border border-white/40 text-white text-center">
-                                    Purchase ticket
-                                </button>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-12">
+                {
+                    //@ts-ignore
+                    data?.data?.map((loot, index) => (
+                        <div
+                            key={loot.title}
+                            className="bg-[#121212]/70 backdrop-blur-sm rounded-2xl border border-[#f74e14]/20 overflow-hidden shadow-xl flex flex-col relative h-[400px]"
+                        >
+                            {/* Background pattern */}
+                            <div className="absolute inset-0 opacity-5" style={{
+                                backgroundImage: `url('/lv-pattern.png')`,
+                                backgroundSize: '120px',
+                                backgroundRepeat: 'repeat',
+                            }}></div>
+                            
+                            {/* Content */}
+                            <div className="p-4 flex-1 flex flex-col items-center justify-center relative z-10">
+                                <div className="w-40 h-40 mb-4 relative">
+                                    <div className="absolute inset-0 rounded-full bg-gradient-to-r from-[#f74e14]/20 to-[#ff914d]/20 blur-md"></div>
+                                    <img
+                                        src={loot.image}
+                                        alt={loot.name}
+                                        width={160}
+                                        height={160}
+                                        className="relative z-10 object-contain w-full h-full"
+                                    />
+                                </div>
+                                
+                                <h2 className="font-bold text-xl text-center mb-2 text-white">{loot.title}</h2>
+                                
+                                <p className="text-[#ff914d] text-sm text-center mb-6">
+                                    {loot.description?.substring(0, 80)}
+                                    {loot.description?.length > 80 ? '...' : ''}
+                                </p>
+                                
+                                <div className="flex items-center justify-center gap-4 mt-auto">
+                                    <div className="text-center">
+                                        <span className="block text-xs text-[#ff914d]">PRICE</span>
+                                        <span className="text-white font-medium">{loot.price} OGX</span>
+                                    </div>
+                                    
+                                    <div className="h-10 border-r border-[#f74e14]/20"></div>
+                                    
+                                    <div className="text-center">
+                                        <span className="block text-xs text-[#ff914d]">ENDS IN</span>
+                                        <span className="text-white font-medium">2d 4h</span>
+                                    </div>
+                                </div>
                             </div>
-                        ))
-                    }
-                </div>
+                            
+                            {/* Bottom button */}
+                            <button
+                                onClick={() => {
+                                    navigate.push("/live-draw/" + loot.id);
+                                }}
+                                className="w-full py-4 bg-gradient-to-r from-[#f74e14] to-[#ff914d] text-white font-medium hover:opacity-90 transition-all duration-200 z-10 relative"
+                            >
+                                View Jackpot
+                            </button>
+                        </div>
+                    ))
+                }
             </div>
-            {/* <button className="text-xl rounded-full px-2 lg:px-5 py-1 lg:py-2 mx-auto w-full shadow-lg backdrop-blur-md bg-foreground border border-white/40 text-white text-center">
-                Purchase ticket
-            </button> */}
+            
             <Model />
         </div>
     );

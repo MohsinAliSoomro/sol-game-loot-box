@@ -4,6 +4,7 @@ import { Formik } from "formik";
 import { useState } from "react";
 import * as yup from "yup";
 import slugify from "slugify";
+import Loader from "../../Components/Loader";
 
 function generateUniqueId() {
     return Math.floor(100000 + Math.random() * 900000).toString(); // Generates a random 6-digit number
@@ -30,7 +31,7 @@ export default function Page() {
             if (response.data.user) {
                 setStep(2);
                 const id = generateUniqueId();
-                const slug = slugify(`${values.firstName} ${id} apes`, {
+                const slug = slugify(`${values.firstName} ${id} OGX`, {
                     trim: true,
                     lower: true,
                 });
@@ -55,119 +56,133 @@ export default function Page() {
         phone: "",
     };
     return (
-        <div className="container mx-auto">
-            <h1 className="text-center text-2xl font-bold mb-10">Register</h1>
-            {step === 1 ? (
-                <Formik
-                    initialValues={initialValues}
-                    onSubmit={handleSubmit}
-                    validationSchema={schema}>
-                    {({ values, errors, touched, handleChange, handleBlur, handleSubmit, isSubmitting }) => (
-                        <form
-                            onSubmit={handleSubmit}
-                            className="max-w-lg mx-auto">
-                            <div className="relative z-0 w-full mb-5 group">
-                                <input
-                                    type="email"
-                                    name="email"
-                                    className="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-gray-300 appearance-none dark:text-white dark:border-gray-600 dark:focus:border-blue-500 focus:outline-none focus:ring-0 focus:border-blue-600 peer"
-                                    placeholder=" "
-                                    onChange={handleChange}
-                                    onBlur={handleBlur}
-                                    value={values.email}
-                                />
-                                {errors.email && touched.email ? <div className="text-red-500">{errors.email}</div> : null}
-                                <label
-                                    htmlFor="email"
-                                    className="peer-focus:font-medium absolute text-sm text-gray-500 dark:text-gray-400 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:start-0 rtl:peer-focus:translate-x-1/4 rtl:peer-focus:left-auto peer-focus:text-blue-600 peer-focus:dark:text-blue-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6">
-                                    Email address
-                                </label>
-                            </div>
+        <div className="min-h-screen bg-gradient-to-b from-orange-500 to-orange-600 py-12 px-4 sm:px-6 lg:px-8">
+            <div className="max-w-2xl mx-auto bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl p-8">
+                <h1 className="text-center text-3xl font-bold mb-8 bg-gradient-to-r from-orange-500 to-orange-700 bg-clip-text text-transparent">
+                    Become an Affiliate
+                </h1>
+                {step === 1 ? (
+                    <Formik
+                        initialValues={initialValues}
+                        onSubmit={handleSubmit}
+                        validationSchema={schema}>
+                        {({ values, errors, touched, handleChange, handleBlur, handleSubmit, isSubmitting }) => (
+                            <form
+                                onSubmit={handleSubmit}
+                                className="space-y-6">
+                                {isSubmitting ? (
+                                    <Loader />
+                                ) : (
+                                    <>
+                                        <div className="relative z-0 w-full group">
+                                            <input
+                                                type="email"
+                                                name="email"
+                                                className="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-orange-300 appearance-none focus:outline-none focus:ring-0 focus:border-orange-500 peer"
+                                                placeholder=" "
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                value={values.email}
+                                            />
+                                            {errors.email && touched.email ? <div className="text-red-500 text-sm mt-1">{errors.email}</div> : null}
+                                            <label
+                                                htmlFor="email"
+                                                className="peer-focus:font-medium absolute text-sm text-gray-500 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:start-0 rtl:peer-focus:translate-x-1/4 peer-focus:text-orange-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6">
+                                                Email address
+                                            </label>
+                                        </div>
 
-                            <div className="grid md:grid-cols-2 md:gap-6">
-                                <div className="relative z-0 w-full mb-5 group">
-                                    <input
-                                        type="text"
-                                        name="firstName"
-                                        className="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-gray-300 appearance-none dark:text-white dark:border-gray-600 dark:focus:border-blue-500 focus:outline-none focus:ring-0 focus:border-blue-600 peer"
-                                        placeholder=" "
-                                        onChange={handleChange}
-                                        onBlur={handleBlur}
-                                        value={values.firstName}
-                                    />
-                                    {errors.firstName && touched.firstName ? <div className="text-red-500">{errors.firstName}</div> : null}
-                                    <label
-                                        htmlFor="firstName"
-                                        className="peer-focus:font-medium absolute text-sm text-gray-500 dark:text-gray-400 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:start-0 rtl:peer-focus:translate-x-1/4 peer-focus:text-blue-600 peer-focus:dark:text-blue-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6">
-                                        First name
-                                    </label>
-                                </div>
-                                <div className="relative z-0 w-full mb-5 group">
-                                    <input
-                                        type="text"
-                                        name="lastName"
-                                        className="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-gray-300 appearance-none dark:text-white dark:border-gray-600 dark:focus:border-blue-500 focus:outline-none focus:ring-0 focus:border-blue-600 peer"
-                                        placeholder=" "
-                                        onChange={handleChange}
-                                        onBlur={handleBlur}
-                                        value={values.lastName}
-                                    />
-                                    {errors.lastName && touched.lastName ? <div className="text-red-500">{errors.lastName}</div> : null}
-                                    <label
-                                        htmlFor="lastName"
-                                        className="peer-focus:font-medium absolute text-sm text-gray-500 dark:text-gray-400 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:start-0 rtl:peer-focus:translate-x-1/4 peer-focus:text-blue-600 peer-focus:dark:text-blue-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6">
-                                        Last name
-                                    </label>
-                                </div>
-                            </div>
-                            <div className="grid md:grid-cols-2 md:gap-6">
-                                <div className="relative z-0 w-full mb-5 group">
-                                    <input
-                                        type="text"
-                                        name="phone"
-                                        className="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-gray-300 appearance-none dark:text-white dark:border-gray-600 dark:focus:border-blue-500 focus:outline-none focus:ring-0 focus:border-blue-600 peer"
-                                        placeholder=" "
-                                        onChange={handleChange}
-                                        onBlur={handleBlur}
-                                        value={values.phone}
-                                    />
-                                    {errors.phone && touched.phone ? <div className="text-red-500">{errors.phone}</div> : null}
-                                    <label
-                                        htmlFor="phone"
-                                        className="peer-focus:font-medium absolute text-sm text-gray-500 dark:text-gray-400 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:start-0 rtl:peer-focus:translate-x-1/4 peer-focus:text-blue-600 peer-focus:dark:text-blue-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6">
-                                        Phone no (+1234567890)
-                                    </label>
-                                </div>
-                                <div className="relative z-0 w-full mb-5 group">
-                                    <input
-                                        type="text"
-                                        name="discord"
-                                        className="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-gray-300 appearance-none dark:text-white dark:border-gray-600 dark:focus:border-blue-500 focus:outline-none focus:ring-0 focus:border-blue-600 peer"
-                                        placeholder=" "
-                                        onChange={handleChange}
-                                        onBlur={handleBlur}
-                                        value={values.discord}
-                                    />
-                                    {errors.discord && touched.discord ? <div className="text-red-500">{errors.discord}</div> : null}
-                                    <label
-                                        htmlFor="discord"
-                                        className="peer-focus:font-medium absolute text-sm text-gray-500 dark:text-gray-400 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:start-0 rtl:peer-focus:translate-x-1/4 peer-focus:text-blue-600 peer-focus:dark:text-blue-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6">
-                                        Discord
-                                    </label>
-                                </div>
-                            </div>
-                            <button
-                                type="submit"
-                                disabled={isSubmitting}
-                                className="text-white bg-foreground hover:bg-foreground focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">
-                                Submit
-                            </button>
-                        </form>
-                    )}
-                </Formik>
-            ) : (
-                <div className="max-w-lg mx-auto">Please visit the email verification link sent to your email</div>
-            )}
+                                        <div className="grid md:grid-cols-2 gap-6">
+                                            <div className="relative z-0 w-full group">
+                                                <input
+                                                    type="text"
+                                                    name="firstName"
+                                                    className="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-orange-300 appearance-none focus:outline-none focus:ring-0 focus:border-orange-500 peer"
+                                                    placeholder=" "
+                                                    onChange={handleChange}
+                                                    onBlur={handleBlur}
+                                                    value={values.firstName}
+                                                />
+                                                {errors.firstName && touched.firstName ? <div className="text-red-500 text-sm mt-1">{errors.firstName}</div> : null}
+                                                <label
+                                                    htmlFor="firstName"
+                                                    className="peer-focus:font-medium absolute text-sm text-gray-500 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:start-0 rtl:peer-focus:translate-x-1/4 peer-focus:text-orange-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6">
+                                                    First name
+                                                </label>
+                                            </div>
+                                            <div className="relative z-0 w-full group">
+                                                <input
+                                                    type="text"
+                                                    name="lastName"
+                                                    className="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-orange-300 appearance-none focus:outline-none focus:ring-0 focus:border-orange-500 peer"
+                                                    placeholder=" "
+                                                    onChange={handleChange}
+                                                    onBlur={handleBlur}
+                                                    value={values.lastName}
+                                                />
+                                                {errors.lastName && touched.lastName ? <div className="text-red-500 text-sm mt-1">{errors.lastName}</div> : null}
+                                                <label
+                                                    htmlFor="lastName"
+                                                    className="peer-focus:font-medium absolute text-sm text-gray-500 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:start-0 rtl:peer-focus:translate-x-1/4 peer-focus:text-orange-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6">
+                                                    Last name
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div className="grid md:grid-cols-2 gap-6">
+                                            <div className="relative z-0 w-full group">
+                                                <input
+                                                    type="text"
+                                                    name="phone"
+                                                    className="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-orange-300 appearance-none focus:outline-none focus:ring-0 focus:border-orange-500 peer"
+                                                    placeholder=" "
+                                                    onChange={handleChange}
+                                                    onBlur={handleBlur}
+                                                    value={values.phone}
+                                                />
+                                                {errors.phone && touched.phone ? <div className="text-red-500 text-sm mt-1">{errors.phone}</div> : null}
+                                                <label
+                                                    htmlFor="phone"
+                                                    className="peer-focus:font-medium absolute text-sm text-gray-500 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:start-0 rtl:peer-focus:translate-x-1/4 peer-focus:text-orange-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6">
+                                                    Phone no (+1234567890)
+                                                </label>
+                                            </div>
+                                            <div className="relative z-0 w-full group">
+                                                <input
+                                                    type="text"
+                                                    name="discord"
+                                                    className="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-orange-300 appearance-none focus:outline-none focus:ring-0 focus:border-orange-500 peer"
+                                                    placeholder=" "
+                                                    onChange={handleChange}
+                                                    onBlur={handleBlur}
+                                                    value={values.discord}
+                                                />
+                                                {errors.discord && touched.discord ? <div className="text-red-500 text-sm mt-1">{errors.discord}</div> : null}
+                                                <label
+                                                    htmlFor="discord"
+                                                    className="peer-focus:font-medium absolute text-sm text-gray-500 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:start-0 rtl:peer-focus:translate-x-1/4 peer-focus:text-orange-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6">
+                                                    Discord URL
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="submit"
+                                            disabled={isSubmitting}
+                                            className="w-full text-white bg-gradient-to-r from-orange-500 to-orange-700 hover:from-orange-600 hover:to-orange-800 focus:ring-4 focus:ring-orange-300 font-bold rounded-lg text-sm px-8 py-3 text-center transition-all active:scale-95 disabled:opacity-70">
+                                            {isSubmitting ? 'Submitting...' : 'Register as Affiliate'}
+                                        </button>
+                                    </>
+                                )}
+                            </form>
+                        )}
+                    </Formik>
+                ) : (
+                    <div className="text-center p-8 space-y-4">
+                        <div className="text-6xl mb-4">📧</div>
+                        <h2 className="text-2xl font-bold text-orange-600">Check Your Email</h2>
+                        <p className="text-gray-600">Please visit the email verification link sent to your email to complete your registration.</p>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

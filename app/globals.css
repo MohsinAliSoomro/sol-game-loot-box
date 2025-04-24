@@ -264,3 +264,270 @@
   right: 90px !important;
   top: 80px !important;
 }
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+/* body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: url('https://images.unsplash.com/photo-1507521628349-6e9b9a9a1b1a?ixlib=rb-4.0.3&auto=format&fit=crop&w=1350&q=80') no-repeat center center fixed;
+  background-size: cover;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+} */
+
+.spin-wheel-container {
+  text-align: center;
+  color: #333;
+}
+
+h1 {
+  font-size: 2.5rem;
+  margin-bottom: 20px;
+}
+
+.wheel-wrapper {
+  position: relative;
+  width: 300px;
+  height: 150px; /* Half of the width for a semi-circle */
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+.wheel {
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  background: #333;
+  border-radius: 50%;
+  transform-origin: center center;
+  clip-path: polygon(0 0, 100% 0, 100% 50%, 0 50%); /* Creates a semi-circle */
+}
+
+.wheel-section {
+  position: absolute;
+  width: 50px;
+  height: 50px;
+  left: 50%;
+  top: 50%;
+  transform-origin: center 150px; /* Adjust based on wheel radius */
+}
+
+.wheel-item {
+  width: 50px;
+  height: 50px;
+  background: #fff;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 1.5rem;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.spin-button {
+  background-color: #6a0dad;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  font-size: 1rem;
+  border-radius: 5px;
+  cursor: pointer;
+  margin: 20px 10px;
+}
+
+.spin-button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.try-free-button {
+  background-color: #00c4b4;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  font-size: 1rem;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.backdrop-blur {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  backdrop-filter: blur(10px); /* Adjust the blur intensity as needed */
+  z-index: 9998; /* Ensure it's below the modal but above other content */
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #121212;
+    --foreground: #ffffff;
+    /* ... other dark theme variables ... */
+  }
+}
+
+/* From Uiverse.io by vinodjangid07 */ 
+.Btn {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 45px;
+  height: 45px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition-duration: .3s;
+  box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.199);
+  background-color: rgb(255, 65, 65);
+}
+
+/* plus sign */
+.sign {
+  width: 100%;
+  transition-duration: .3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sign svg {
+  width: 17px;
+}
+
+.sign svg path {
+  fill: white;
+}
+/* text */
+.text {
+  position: absolute;
+  right: 0%;
+  width: 0%;
+  opacity: 0;
+  color: white;
+  font-size: 1.2em;
+  font-weight: 600;
+  transition-duration: .3s;
+}
+/* hover effect on button width */
+.Btn:hover {
+  width: 125px;
+  border-radius: 40px;
+  transition-duration: .3s;
+}
+
+.Btn:hover .sign {
+  width: 30%;
+  transition-duration: .3s;
+  padding-left: 20px;
+}
+/* hover effect button's text */
+.Btn:hover .text {
+  opacity: 1;
+  width: 70%;
+  transition-duration: .3s;
+  padding-right: 10px;
+}
+/* button click effect*/
+.Btn:active {
+  transform: translate(2px ,2px);
+}
+.loader {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  --color: #f74e14;
+  --animation: 1.5s ease-in-out infinite;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 145, 77, 0.1);
+  backdrop-filter: blur(8px);
+  z-index: 9999;
+}
+
+.loader .circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--color);
+  border-radius: 50%;
+  margin: 0 10px;
+  animation: circle-keys var(--animation);
+}
+
+.loader .circle .dot {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background-color: var(--color);
+  animation: dot-keys var(--animation);
+}
+
+.loader .circle .outline {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  animation: outline-keys var(--animation);
+}
+
+.circle:nth-child(2) { animation-delay: 0.2s; }
+.circle:nth-child(3) { animation-delay: 0.4s; }
+.circle:nth-child(4) { animation-delay: 0.6s; }
+.circle:nth-child(5) { animation-delay: 0.8s; }
+
+.circle:nth-child(2) .dot { animation-delay: 0.2s; }
+.circle:nth-child(3) .dot { animation-delay: 0.4s; }
+.circle:nth-child(4) .dot { animation-delay: 0.6s; }
+.circle:nth-child(5) .dot { animation-delay: 0.8s; }
+
+.circle:nth-child(1) .outline { animation-delay: 0.6s; }
+.circle:nth-child(2) .outline { animation-delay: 0.8s; }
+.circle:nth-child(3) .outline { animation-delay: 1s; }
+.circle:nth-child(4) .outline { animation-delay: 1.2s; }
+.circle:nth-child(5) .outline { animation-delay: 1.4s; }
+
+@keyframes circle-keys {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0.5; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes dot-keys {
+  0% { transform: scale(1); }
+  50% { transform: scale(0); }
+  100% { transform: scale(1); }
+}
+
+@keyframes outline-keys {
+  0% {
+    transform: scale(0);
+    outline: 8px solid var(--color);
+    outline-offset: 0;
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    outline: 0 solid transparent;
+    outline-offset: 8px;
+    opacity: 0;
+  }
+}

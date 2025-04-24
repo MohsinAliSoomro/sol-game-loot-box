@@ -58,7 +58,7 @@ export default function WithdrawModal() {
     const makeTransaction = async () => {
         if (!form.walletAddress || !form.withdrawBalance) return alert("Please fill all the fields");
         if (state.apes < form.withdrawBalance) {
-            return alert("Insufficient apes");
+            return alert("Insufficient OGX");
         }
         try {
             await supabase.from("withdraw").insert({
@@ -81,7 +81,7 @@ export default function WithdrawModal() {
                 <div className="relative p-4 w-full max-w-2xl h-[40rem] ">
                     <div className="relative bg-background rounded-lg shadow dark:bg-gray-700 h-full overflow-hidden">
                         <div className="flex items-center justify-between p-4 md:p-5 border-b rounded-t dark:border-gray-600">
-                            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mx-auto -mr-5">Withdraw Apes</h3>
+                            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mx-auto -mr-5">Withdraw OGX</h3>
                             <button
                                 onClick={() => setState({ ...state, withdraw: false })}
                                 type="button"
@@ -122,13 +122,13 @@ export default function WithdrawModal() {
                                     With less than a month to go before the European Union enacts new consumer privacy laws for its citizens, companies around the world are updating their terms of
                                     service agreements to comply.
                                 </p>
-                                <label className="mt-6 flex">Availabe Apes</label>
+                                <label className="mt-6 flex">Availabe OGX</label>
                                 <input
                                     className="w-full p-2 border border-gray-300 rounded-md"
                                     value={state.apes}
                                     disabled
                                 />
-                                <label className="mt-6 flex">Withdraw Apes</label>
+                                <label className="mt-6 flex">Withdraw OGX</label>
                                 <input
                                     value={form.withdrawBalance}
                                     type="number"
@@ -147,57 +147,67 @@ export default function WithdrawModal() {
                             </div>
                         )}
                         {tab === "history" && (
-                            <div className="w-full">
+                            <div className="p-4 md:p-5 overflow-x-auto w-full">
                                 {loading ? (
-                                    <div>Loading...</div>
+                                    <div className="flex justify-center items-center py-8">
+                                        <div className="w-12 h-12 border-4 border-[#ff914d] border-t-transparent rounded-full animate-spin"></div>
+                                    </div>
                                 ) : (
-                                    <table className="w-full text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400">
+                                    <table className="w-full text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400 min-w-full table-fixed">
                                         <thead className="text-xs text-gray-700 uppercase dark:text-gray-400">
                                             <tr>
                                                 <th
                                                     scope="col"
-                                                    className="px-6 py-3 bg-gray-50 dark:bg-gray-800">
+                                                    className="px-6 py-3 bg-gray-50 dark:bg-gray-800 w-1/3">
                                                     Wallet
                                                 </th>
                                                 <th
                                                     scope="col"
-                                                    className="px-6 py-3">
-                                                    Apes
+                                                    className="px-6 py-3 w-1/3">
+                                                    OGX
                                                 </th>
                                                 <th
                                                     scope="col"
-                                                    className="px-6 py-3 bg-gray-50 dark:bg-gray-800">
+                                                    className="px-6 py-3 bg-gray-50 dark:bg-gray-800 w-1/3">
                                                     Status
                                                 </th>
                                             </tr>
                                         </thead>
                                         <tbody className="w-full">
-                                            {data?.map((item) => (
-                                                <tr
-                                                    key={item?.id}
-                                                    className="border-b border-gray-200 dark:border-gray-700 w-full">
-                                                    <th
-                                                        scope="row"
-                                                        className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap bg-gray-50 dark:text-white dark:bg-gray-800">
-                                                        {item?.walletAddress}
-                                                    </th>
-                                                    <td className="px-6 py-4">{item?.apes}</td>
-                                                    <td className="px-6 py-4 bg-gray-50 dark:bg-gray-800">{item?.status}</td>
+                                            {data?.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={3} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                                                        No withdraw history found
+                                                    </td>
                                                 </tr>
-                                            ))}
+                                            ) : (
+                                                data?.map((item) => (
+                                                    <tr
+                                                        key={item?.id}
+                                                        className="border-b border-gray-200 dark:border-gray-700 w-full">
+                                                        <th
+                                                            scope="row"
+                                                            className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap bg-gray-50 dark:text-white dark:bg-gray-800 truncate">
+                                                            {item?.walletAddress}
+                                                        </th>
+                                                        <td className="px-6 py-4">{item?.apes}</td>
+                                                        <td className="px-6 py-4 bg-gray-50 dark:bg-gray-800">{item?.status}</td>
+                                                    </tr>
+                                                ))
+                                            )}
                                         </tbody>
                                     </table>
                                 )}
                             </div>
                         )}
 
-                        <div className="flex absolute bottom-0 right-0 items-center p-4 md:p-5 border-t border-gray-200 rounded-b dark:border-gray-600">
+                        <div className="flex absolute bottom-0 right-0 items-center p-4 md:p-5  rounded-b dark:border-gray-600">
                             {tab === "withdraw" && (
                                 <button
                                     data-modal-hide="default-modal"
                                     type="button"
                                     onClick={makeTransaction}
-                                    className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">
+                                    className="px-5 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-[#f74e14] to-[#ff914d] text-white hover:opacity-90 focus:ring-2 focus:ring-[#ff914d]/50">
                                     Withdraw
                                 </button>
                             )}
@@ -205,7 +215,7 @@ export default function WithdrawModal() {
                                 onClick={() => setState({ ...state, withdraw: false })}
                                 data-modal-hide="default-modal"
                                 type="button"
-                                className="py-2.5 px-5 ms-3 text-sm font-medium text-gray-900 focus:outline-none bg-white rounded-lg border border-gray-200 hover:bg-gray-100 hover:text-blue-700 focus:z-10 focus:ring-4 focus:ring-gray-100 dark:focus:ring-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600 dark:hover:text-white dark:hover:bg-gray-700">
+                                className="px-5 py-2.5 text-sm font-medium rounded-lg border border-[#ff914d]/20 text-gray-300 hover:bg-[#ff914d]/20 focus:ring-2 focus:ring-[#ff914d]/50">
                                 Cancel
                             </button>
                         </div>

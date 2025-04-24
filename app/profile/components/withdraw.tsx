@@ -33,7 +33,7 @@ export default function WithdrawHistory() {
                         <th
                             scope="col"
                             className="px-6 py-3">
-                            Apes
+                            OGX
                         </th>
                         <th
                             scope="col"

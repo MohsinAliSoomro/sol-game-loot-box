@@ -2,11 +2,12 @@
 import { supabase } from "@/service/supabase";
 import { useUserState } from "@/state/useUserState";
 import { useRequest } from "ahooks";
-import Image from "next/image";
+// import Image from "next/image";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import Countdown from "react-countdown";
 import { toast } from "react-toastify";
+import Loader from "../../Components/Loader";
 
 const getProducts = async (id: string) => {
     const ticketPurchase = await supabase.from("ticketPurchase").select("*", { count: "exact", head: true }).eq("ticketId", id);
@@ -74,74 +75,125 @@ export default function Page() {
         run(params?.slug);
         // purchase ticket and update apes
     };
-    if (loading) return <div>Loading...</div>;
-    if (error) return <div>Error</div>;
+
+    if (loading) return <Loader />;
+    if (error) return (
+        <div className="flex items-center justify-center min-h-screen">
+            <div className="text-center p-4 rounded-lg bg-red-500/10 text-red-500">
+                <p>Failed to load jackpot details. Please try again later.</p>
+            </div>
+        </div>
+    );
 
     return (
-        <div className="w-full container mx-auto flex gap-2">
-            <div className="w-4/12">
-                <Image
-                    //@ts-ignore
-                    src={data?.data[0].image}
-                    //@ts-ignore
-                    alt={data?.data[0].name}
-                    width={200}
-                    height={200}
-                    className="w-full h-full object-cover"
-                />
-            </div>
-            <div className="w-8/12">
-                <h1 className="text-3xl ">
-                    {
-                        //@ts-ignore
-                        data?.data[0]?.title
-                    }
-                </h1>
-                <p className="p-10 border bg-slate-100 rounded-full my-6">
-                    <span className="flex text-2xl"> Description</span>
-                    {
-                        //@ts-ignore
-                        data?.data[0]?.description
-                    }
-                </p>
-
-                <div className="grid grid-flow-row grid-cols-2 gap-2">
-                    <div className="w-full">
-                        <Countdown
-                            //@ts-ignore
-                            date={new Date(data?.data[0]?.endTime)}
-                            className="text-2xl bg-slate-100 rounded-full py-2 flex justify-center items-center w-full h-32"
-                        />
-                    </div>
-
-                    <div className="w-full">
-                        <div className="w-full h-32 bg-slate-100 rounded-full flex justify-center items-center flex-col">
-                            <span className="text-4xl">{data?.count}</span>
-                            <span className="text-sm">Tickets Solid</span>
+        <div className="max-w-7xl mx-auto px-4 py-8">
+            <div className="bg-[#121212]/70 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-[#f74e14]/20 overflow-hidden">
+                <div className="flex flex-col md:flex-row gap-8">
+                    {/* Left Section - Image */}
+                    <div className="w-full md:w-4/12">
+                        <div className="rounded-xl overflow-hidden border-2 border-[#f74e14]/20 shadow-lg">
+                            <img
+                                //@ts-ignore
+                                src={data?.data[0].image}
+                                //@ts-ignore
+                                alt={data?.data[0].name}
+                                width={200}
+                                height={200}
+                                className="w-full h-full object-cover aspect-square"
+                            />
                         </div>
                     </div>
-                </div>
-                <div className="grid grid-flow-row grid-cols-3 gap-2 mt-6">
-                    <input
-                        type="number"
-                        placeholder={
-                            //@ts-ignore
-                            `Ticket Price ${data?.data[0]?.price} Apes`
-                        }
-                        className="w-full h-12 bg-slate-100 rounded-full px-6"
-                    />
-                    <input
-                        type="number"
-                        placeholder="Enter tickers"
-                        className="w-full h-12 bg-slate-100 rounded-full px-10"
-                        value={value}
-                        onChange={(e) => setValue(e.target.value)}
-                    />
-                    <button
-                        onClick={() => handlePurchase()}
-                        className="w-full h-12 bg-slate-100 rounded-full">
-                        Purchase
-                    </button>
+                    
+                    {/* Right Section - Content */}
+                    <div className="w-full md:w-8/12">
+                        <h1 className="text-3xl font-bold bg-gradient-to-r from-[#f74e14] to-[#ff914d] bg-clip-text text-transparent mb-4">
+                            {
+                                //@ts-ignore
+                                data?.data[0]?.title
+                            }
+                        </h1>
+                        
+                        {/* Description Box */}
+                        <div className="p-6 border border-[#f74e14]/20 bg-[#1e1e1e] rounded-xl my-6">
+                            <h2 className="text-xl font-semibold mb-2 text-[#ff914d]">Description</h2>
+                            <p className="text-gray-300">
+                                {
+                                    //@ts-ignore
+                                    data?.data[0]?.description
+                                }
+                            </p>
+                        </div>
+
+                        {/* Countdown and Tickets Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <div className="bg-[#1e1e1e] border border-[#f74e14]/20 rounded-xl p-6 flex flex-col items-center justify-center">
+                                <p className="text-[#ff914d] mb-2">Time Remaining</p>
+                                <Countdown
+                                    //@ts-ignore
+                                    date={new Date(data?.data[0]?.endTime)}
+                                    className="text-2xl font-bold text-white"
+                                    renderer={props => (
+                                        <div className="flex gap-2">
+                                            <div className="flex flex-col items-center">
+                                                <span className="text-xl md:text-2xl text-white">{props.days}</span>
+                                                <span className="text-xs text-[#ff914d]">DAYS</span>
+                                            </div>
+                                            <span className="text-xl md:text-2xl text-[#f74e14]">:</span>
+                                            <div className="flex flex-col items-center">
+                                                <span className="text-xl md:text-2xl text-white">{props.hours}</span>
+                                                <span className="text-xs text-[#ff914d]">HRS</span>
+                                            </div>
+                                            <span className="text-xl md:text-2xl text-[#f74e14]">:</span>
+                                            <div className="flex flex-col items-center">
+                                                <span className="text-xl md:text-2xl text-white">{props.minutes}</span>
+                                                <span className="text-xs text-[#ff914d]">MINS</span>
+                                            </div>
+                                            <span className="text-xl md:text-2xl text-[#f74e14]">:</span>
+                                            <div className="flex flex-col items-center">
+                                                <span className="text-xl md:text-2xl text-white">{props.seconds}</span>
+                                                <span className="text-xs text-[#ff914d]">SECS</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                />
+                            </div>
+
+                            <div className="bg-[#1e1e1e] border border-[#f74e14]/20 rounded-xl p-6 flex flex-col items-center justify-center">
+                                <p className="text-[#ff914d] mb-2">Tickets Sold</p>
+                                <span className="text-3xl md:text-4xl font-bold text-white">{data?.count}</span>
+                            </div>
+                        </div>
+                        
+                        {/* Purchase Form */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#ff914d] text-sm">Price:</span>
+                                <input
+                                    type="number"
+                                    disabled
+                                    placeholder={
+                                        //@ts-ignore
+                                        `${data?.data[0]?.price} OGX`
+                                    }
+                                    className="w-full h-12 bg-[#1e1e1e] border border-[#f74e14]/20 rounded-lg pl-16 pr-4 text-white"
+                                />
+                            </div>
+                            <div className="relative">
+                                <input
+                                    type="number"
+                                    placeholder="Enter amount"
+                                    className="w-full h-12 bg-[#1e1e1e] border border-[#f74e14]/20 rounded-lg px-4 text-white focus:border-[#f74e14] transition-all duration-200"
+                                    value={value}
+                                    onChange={(e) => setValue(e.target.value)}
+                                />
+                            </div>
+                            <button
+                                onClick={() => handlePurchase()}
+                                className="h-12 bg-gradient-to-r from-[#f74e14] to-[#ff914d] rounded-lg text-white font-medium hover:opacity-90 transition-all duration-200">
+                                Purchase Tickets
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

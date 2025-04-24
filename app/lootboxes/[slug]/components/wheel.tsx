@@ -1,78 +1,42 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Check, RefreshCcw, Trophy } from "lucide-react";
+import img from "../../../../public/lv.jpg"
+interface WheelItem {
+  id: number;
+  name: string;
+  image: string;
+  color: string;
+  textColor: string;
+  probability: number;
+}
 
 const WheelSpinner = () => {
-  // Sample data with 6 items and configurable win probabilities
-  const [items, setItems] = useState([
-    {
-      id: 1,
-      name: "10% Off",
-      image: "/1.png",
-      color: "bg-white-500",
-      textColor: "text-white",
-      probability: 30,
-    },
-    {
-      id: 2,
-      name: "Free Item",
-      image: "/1.png",
-      color: "bg-white-500",
-      textColor: "text-white",
-      probability: 10,
-    },
-    {
-      id: 3,
-      name: "25% Off",
-      image: "/1.png",
-      color: "bg-white-500",
-      textColor: "text-white",
-      probability: 20,
-    },
-    {
-      id: 4,
-      name: "Try Again",
-      image: "/1.png",
-      color: "bg-white-500",
-      textColor: "text-white",
-      probability: 15,
-    },
-    {
-      id: 5,
-      name: "50% Off",
-      image: "/1.png",
-      color: "bg-white-500",
-      textColor: "text-white",
-      probability: 5,
-    },
-    {
-      id: 6,
-      name: "Gift Card",
-      image: "/1.png",
-      color: "bg-white-500",
-      textColor: "text-white",
-      probability: 20,
-    },
+  const [items] = useState<WheelItem[]>([
+    { id: 1, name: "10% Off", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
+    { id: 2, name: "Free Item", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
+    { id: 3, name: "25% Off", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
+    { id: 4, name: "Try Again", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
+    { id: 5, name: "50% Off", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
+    { id: 6, name: "Gift Card", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
+    { id: 7, name: "5% Off", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
+    { id: 8, name: "Free Shipping", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
+    { id: 8, name: "Free Shipping", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
+    { id: 8, name: "Free Shipping", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
+    { id: 8, name: "Free Shipping", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
+    { id: 8, name: "Free Shipping", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
   ]);
 
   const [rotation, setRotation] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
-  const [winner, setWinner] = useState<any>(null);
+  const [winner, setWinner] = useState<WheelItem | null>(null);
   const [showWinnerDialog, setShowWinnerDialog] = useState(false);
-  const wheelRef = useRef(null);
+  const wheelRef = useRef<HTMLDivElement>(null);
 
-  // Calculate total probability
-  const totalProbability = items.reduce(
-    (sum, item) => sum + item.probability,
-    0
-  );
+  const totalProbability = items.reduce((sum, item) => sum + item.probability, 0);
 
-  // Function to determine the slice angle based on probability
-  const getSliceAngle = (probability: any) => {
-    return (17 / totalProbability) * 360;
-  };
+  const getSliceAngle = (probability: number) => (probability / totalProbability) * 360;
 
-  // Function to spin the wheel
   const spinWheel = () => {
     if (isSpinning) return;
 
@@ -80,7 +44,6 @@ const WheelSpinner = () => {
     setWinner(null);
     setShowWinnerDialog(false);
 
-    // Generate random number based on probability weights
     const random = Math.random() * totalProbability;
     let cumulativeProbability = 0;
     let selectedItem = items[0];
@@ -93,77 +56,79 @@ const WheelSpinner = () => {
       }
     }
 
-    // Calculate ending rotation
     let itemIndex = items.findIndex((item) => item.id === selectedItem.id);
     let itemAngleSum = 0;
 
-    // Sum angles of items before the selected one
     for (let i = 0; i < itemIndex; i++) {
       itemAngleSum += getSliceAngle(items[i].probability);
     }
 
-    // Add half the angle of the selected item to point to its center
     itemAngleSum += getSliceAngle(selectedItem.probability) / 2;
 
-    // Final rotation: current + 12 full rotations + angle to selected item
-    // We subtract from 360 because we want the item to land at the top
     const spinAngle = 4320 + (360 - itemAngleSum);
     const newRotation = rotation + spinAngle;
 
     setRotation(newRotation);
 
-    // Set winner after animation completes (30 seconds)
     setTimeout(() => {
       setWinner(selectedItem);
       setShowWinnerDialog(true);
       setIsSpinning(false);
-    }, 30000); // 30 seconds spin duration
+    }, 5000); // Reduced spin time for testing
   };
 
-  // Reset the wheel
   const resetWheel = () => {
     setShowWinnerDialog(false);
     setWinner(null);
   };
 
   return (
-    <div className="w-full max-w-lg mx-auto mt-20">
-      <div className="mb-6">
-        {/* <div className="text-center">
-          <div className="text-2xl">Prize Wheel Spinner</div>
-        </div> */}
-        <div className="flex flex-col items-center">
-          {/* Wheel container with pointer */}
-          <div className="relative w-[20rem] h-[20rem] md:w-[35rem] md:h-[35rem] lg:w-[45rem] lg:h-[45rem] mb-8">
-            {/* Fixed pointer at top */}
-            <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 z-30 flex flex-col items-center">
-              <div className="w-6 h-6 bg-red-600 rotate-45 transform origin-bottom-left"></div>
-              <div className="w-1 h-8 bg-red-600"></div>
+    <div className="w-full bg-[#ff914d]/10  py-4 sm:py-8">
+      <div className="w-full">
+        <div className="flex flex-col items-center justify-center" style={{ height:'58vh'}}>  
+          {/* Wheel Container */}
+          <div 
+            className="relative w-full h-[47.5vw] sm:h-[42.5vw] md:h-[37.5vw] max-w-[1265px] max-h-[450px] mb-4 sm:mb-8 overflow-hidden"
+          >
+            {/* Background Pattern */}
+            <div 
+              className="absolute inset-0 overflow-hidden"
+              style={{
+                backgroundImage: `url(${img.src})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
+              }}
+            />
+
+            {/* Pointer */}
+            <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 z-30">
+              <div 
+                className="w-4 h-6 sm:w-6 sm:h-10 bg-[#f74e14]" 
+                style={{ 
+                  clipPath: 'polygon(0 0, 100% 0, 50% 100%)',
+                  filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))'
+                }}
+              />
             </div>
 
-            {/* Outer wheel border */}
-            <div className="absolute inset-0 rounded-full border-2 border-foreground z-10"></div>
-
-            {/* Wheel */}
+            {/* Main Wheel */}
             <div
               ref={wheelRef}
-              className="w-full h-full rounded-full overflow-hidden relative"
+              className="absolute -bottom-[47.5vw] sm:-bottom-[42.5vw] md:-bottom-[37.5vw] left-1/2 w-[125vw] sm:w-[115vw] md:w-[105vw] h-[125vw] sm:h-[115vw] md:h-[105vw] max-w-[1100px] max-h-[1100px] rounded-full"
               style={{
-                transform: `rotate(${rotation}deg)`,
+                transform: `translate(-50%, 25%) rotate(${rotation}deg)`,
                 transition: isSpinning
-                  ? "transform 30s cubic-bezier(0.1, 0.2, 0.1, 1)"
+                  ? "transform 5s cubic-bezier(0.1, 0.2, 0.1, 1)"
                   : "none",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
+                boxShadow: "0 0 40px rgba(247, 78, 20, 0.2)"
               }}
             >
-              {/* Center circle */}
-              <div className="absolute w-12 h-12 bg-foreground rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 border-10 border-foreground flex items-center justify-center">
-                <div className="w-2 h-2 bg-background rounded-full"></div>
-              </div>
+              {/* Center Circle */}
+              <div className="absolute w-1/3 h-1/3 bg-white rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 border-4 border-[#f74e14]" />
 
-              {/* Slices - Exactly 6 items */}
+              {/* Wheel Segments */}
               {items.map((item, index) => {
-                // Calculate accumulated angle for positioning this slice
                 let startAngle = 0;
                 for (let i = 0; i < index; i++) {
                   startAngle += getSliceAngle(items[i].probability);
@@ -172,112 +137,96 @@ const WheelSpinner = () => {
                 const angle = getSliceAngle(item.probability);
                 const endAngle = startAngle + angle;
 
-                // Convert angles to radians for calculations
                 const startRad = (startAngle * Math.PI) / 180;
                 const endRad = (endAngle * Math.PI) / 180;
 
-                // Calculate SVG path for a clean pie slice
-                const x1 = 50 + 50 * Math.cos(startRad);
-                const y1 = 50 + 50 * Math.sin(startRad);
-                const x2 = 50 + 50 * Math.cos(endRad);
-                const y2 = 50 + 50 * Math.sin(endRad);
+                const outerX1 = 50 + 50 * Math.cos(startRad);
+                const outerY1 = 50 + 50 * Math.sin(startRad);
+                const outerX2 = 50 + 50 * Math.cos(endRad);
+                const outerY2 = 50 + 50 * Math.sin(endRad);
 
-                // Determine if the slice spans more than 180 degrees
+                const innerRadius = 25;
+                const innerX1 = 50 + innerRadius * Math.cos(endRad);
+                const innerY1 = 50 + innerRadius * Math.sin(endRad);
+                const innerX2 = 50 + innerRadius * Math.cos(startRad);
+                const innerY2 = 50 + innerRadius * Math.sin(startRad);
+
                 const largeArcFlag = angle > 180 ? 1 : 0;
 
-                const pathData = `M50,50 L${x1},${y1} A50,50 0 ${largeArcFlag},1 ${x2},${y2} Z`;
+                const pathData = `
+                  M${outerX1},${outerY1}
+                  A50,50 0 ${largeArcFlag},1 ${outerX2},${outerY2}
+                  L${innerX1},${innerY1}
+                  A${innerRadius},${innerRadius} 0 ${largeArcFlag},0 ${innerX2},${innerY2}
+                  Z
+                `;
 
-                // Calculate position for label
                 const labelAngle = startAngle + angle / 2;
                 const labelRad = (labelAngle * Math.PI) / 180;
-                const labelDistance = 35; // Distance from center (0-50)
+                const labelDistance = 37;
                 const labelX = 50 + labelDistance * Math.cos(labelRad);
                 const labelY = 50 + labelDistance * Math.sin(labelRad);
 
                 return (
                   <div
                     key={item.id}
-                    className={`absolute inset-0 ${item.color} ${
-                      winner && winner.id === item.id
-                        ? "ring-4 ring-yellow-300 ring-inset"
-                        : ""
-                    }`}
+                    className="absolute inset-0"
                   >
                     <svg width="100%" height="100%" viewBox="0 0 100 100">
-                      <path d={pathData} fill="#ff914d" />
-                      {/* Add divider lines between slices */}
-                      <line
-                        x1="50"
-                        y1="50"
-                        x2={x1}
-                        y2={y1}
-                        stroke="#ff914d"
-                        strokeWidth="1"
+                      <path 
+                        d={pathData} 
+                        fill="#ff914d"
+                        stroke="#f74e14" 
+                        strokeWidth="0.5" 
                       />
                     </svg>
 
-                    {/* Label */}
                     <div
-                      className={`absolute text-white font-bold text-sm w-28 text-center flex`}
+                      className="absolute w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 flex items-center justify-center bg-white/80 rounded-lg shadow-lg border border-[#f74e14]/20"
                       style={{
                         left: `${labelX}%`,
                         top: `${labelY}%`,
-                        transform: `translate(-50%, -50%) rotate(${labelAngle}deg)`,
+                        transform: `translate(-50%, -50%) rotate(${-rotation}deg)`,
                       }}
                     >
                       <img
                         src={item.image}
                         alt={item.name}
-                        width={10}
-                        height={10}
-                        className="w-10 h-10 object-contain"
+                        className="w-12 h-12 sm:w-16 sm:h-16 md:w-20 md:h-20 object-contain p-1 sm:p-2"
                       />
-                      <div>
-                        {item.name} {item.probability}
-                      </div>
-                      {/* <div className="text-xs opacity-80">{item.probability}%</div> */}
                     </div>
-
-                    {/* Winner indicator */}
-                    {winner && winner.id === item.id && !isSpinning && (
-                      <div className="absolute inset-0 flex items-center justify-center z-20">
-                        <div className="absolute w-full h-full bg-yellow-300 opacity-20 animate-pulse"></div>
-                      </div>
-                    )}
                   </div>
                 );
               })}
 
-              {/* Add visible divider lines between all 6 slices */}
+              {/* Divider Lines */}
               <svg
-                className="absolute inset-0 z-5"
+                className="absolute inset-0"
                 width="100%"
                 height="100%"
-                viewBox="0 0 100 100"
+                viewBox="0 0 0 0"
               >
                 {items.map((_, index) => {
-                  // Calculate angle for this divider
                   let dividerAngle = 0;
                   for (let i = 0; i <= index; i++) {
                     dividerAngle += getSliceAngle(items[i].probability);
                   }
 
-                  // Convert angle to radians
                   const dividerRad = (dividerAngle * Math.PI) / 180;
-
-                  // Calculate end point of line
+                  const startX = 50 + 25 * Math.cos(dividerRad);
+                  const startY = 50 + 25 * Math.sin(dividerRad);
                   const endX = 50 + 50 * Math.cos(dividerRad);
                   const endY = 50 + 50 * Math.sin(dividerRad);
 
                   return (
                     <line
                       key={`divider-${index}`}
-                      x1="50"
-                      y1="50"
+                      x1={startX}
+                      y1={startY}
                       x2={endX}
                       y2={endY}
                       stroke="#f74e14"
-                      strokeWidth="1"
+                      strokeWidth="2"
                     />
                   );
                 })}
@@ -285,46 +234,53 @@ const WheelSpinner = () => {
             </div>
           </div>
 
-          {/* Spin button */}
-          <Button
-            onClick={spinWheel}
-            disabled={isSpinning}
-            className="px-6 py-2 mb-4 bg-foreground"
-            size="lg"
-          >
-            {isSpinning ? "Spinning... (30 sec)" : "Spin the Wheel!"}
-          </Button>
+          {/* Buttons */}
         </div>
+          <div className="flex flex-col items-center gap-3 sm:gap-4">
+            <button
+              onClick={spinWheel}
+              disabled={isSpinning}
+              className="px-6 sm:px-8 py-3 sm:py-4 bg-[#f74e14] hover:bg-[#e63900] text-white rounded-full font-bold text-lg sm:text-xl md:text-2xl transition-all shadow-lg whitespace-nowrap"
+              style={{
+                fontFamily: "'Comic Sans MS', cursive"
+              }}
+            >
+              SPIN FOR 850 CREDITS
+            </button>
+            
+            <button 
+              className="text-[#f74e14] hover:text-[#e63900] font-bold text-base sm:text-lg"
+              style={{
+                fontFamily: "'Comic Sans MS', cursive"
+              }}
+            >
+              TRY FOR FREE
+            </button>
+          </div>
       </div>
 
-      {/* Winner display section */}
+      {/* Winner Dialog */}
       {showWinnerDialog && winner && (
-        <div className="absolute top-auto right-auto bottom-72 max-w-lg w-96 h-96 rounded-lg left-auto items-center bg-foreground border-2 border-yellow-300 z-50">
-          <div className="text-center pb-2 mt-20">
-            <div className="flex items-center justify-center text-xl">
-              <Trophy className="mr-2 text-yellow-500 h-6 w-6" />
-              Winner Announcement
-            </div>
-          </div>
-          <div className="text-center">
-            <div className="flex flex-col items-center justify-center mb-4">
-              <div
-                className={`w-16 h-16 rounded-full ${winner.color} mb-2 flex items-center justify-center ${winner.textColor} text-lg font-bold`}
-              >
-                #{winner.id}
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl p-4 sm:p-6 w-[90%] max-w-lg border-2 border-[#f74e14]">
+            <div className="text-center">
+              <h2 className="text-xl sm:text-2xl font-bold mb-4 text-[#f74e14]">Congratulations!</h2>
+              <div className="flex items-center justify-center mb-4 sm:mb-6">
+                <img src={winner.image} alt={winner.name} className="w-24 h-24 sm:w-32 sm:h-32 object-contain" />
               </div>
-              <span className="text-2xl font-bold">{winner.name}</span>
-              <span className="text-sm text-gray-600">
-                Win Probability: {winner.probability}%
-              </span>
-            </div>
-            <div className="flex justify-center gap-4">
-              <button onClick={resetWheel} className=" bg-white text-background flex gap-4 items-center justify-center rounded-lg p-2">
-                <RefreshCcw className="mr-1 h-4 w-4" /> Play Again
-              </button>
-              <button  className=" bg-white text-background flex gap-4 items-center justify-center rounded-lg p-2">
-                <Check className="mr-1 h-4 w-4" /> Claim Prize
-              </button>
+              <p className="text-lg sm:text-xl mb-2 text-gray-800">{winner.name}</p>
+              <p className="text-sm text-gray-600 mb-4 sm:mb-6">Probability: {winner.probability}%</p>
+              <div className="flex justify-center gap-3 sm:gap-4">
+                <button 
+                  onClick={resetWheel}
+                  className="px-4 sm:px-6 py-2 border-2 border-[#f74e14] text-[#f74e14] rounded-lg hover:bg-[#f74e14] hover:text-white transition-colors text-sm sm:text-base font-medium"
+                >
+                  Spin Again
+                </button>
+                <button className="px-4 sm:px-6 py-2 bg-[#f74e14] text-white rounded-lg hover:bg-[#e63900] transition-colors text-sm sm:text-base font-medium">
+                  Claim Prize
+                </button>
+              </div>
             </div>
           </div>
         </div>
