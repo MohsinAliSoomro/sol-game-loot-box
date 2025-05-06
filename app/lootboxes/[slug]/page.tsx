@@ -193,7 +193,7 @@ export default function Details() {
               </div>
             </div>
             <div className="flex flex-col items-center justify-center h-screen text-white z-50">
-              <WheelSpinner />
+              <WheelSpinner data={products?.data} product={product} user={user}  setUser={setUser}/>
              
             </div>
           </div>
