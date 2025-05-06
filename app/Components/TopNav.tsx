@@ -61,7 +61,7 @@ export default function TopNav() {
             console.error("Error saving user:", error);
         }
     };
-
+    //@ts-ignore
     useEffectOnce(() => {
         const onLoad = async () => {
             try {
