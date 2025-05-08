@@ -86,7 +86,7 @@ export default function TopNav() {
     };
 
     const handleOpenModal = async () => {
-        await router.push('/');
+        // await router.push('/');
         setOpen(true);
     };
 
@@ -151,7 +151,7 @@ export default function TopNav() {
 
             {/* Auth section */}
             <div className={`${mobileMenuOpen ? 'flex' : 'hidden'} md:flex w-full md:w-1/4 flex-col items-center md:items-end mt-4 md:mt-0`}>
-                {true ? (
+                {isLogin ? (
                     <div className="flex flex-col items-center md:items-end gap-4">
                         <div className="flex items-center gap-4 w-full">
                             <div className="border border-foreground flex-1 flex justify-between gap-6 rounded-lg px-6 md:px-10 pt-4 pb-2 relative h-16">
@@ -228,7 +228,7 @@ export default function TopNav() {
             {/* Login modal */}
             {open && (
                 <div
-                    style={{ zIndex: 9999 }}
+                    style={{ zIndex: 9999999 }}
                     className="fixed top-0 left-0 backdrop-blur-md bg-black/60 z-50 flex justify-center items-center h-screen w-screen"
                 >
                     <div className="bg-background w-full md:w-[400px] rounded-2xl p-6 relative shadow-xl border border-foreground/20 mx-4 overflow-hidden">

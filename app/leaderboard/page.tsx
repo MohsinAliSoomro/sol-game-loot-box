@@ -20,7 +20,7 @@ const mockData = [
     {
         id: 1,
         username: "Degener8s",
-        wageredCredits: 3025336.750000047,
+        wageredCredits: 3025336.1,
         avatar: "/degener8s.png"
     },
     {
@@ -64,7 +64,7 @@ export default function Leaderboard() {
 
     const timeFilterButtons = [
         { id: 'all', label: 'All Time' },
-        { id: 'monthly', label: 'Monthly' },
+        // { id: 'monthly', label: 'Monthly' },
         { id: 'weekly', label: 'Weekly' },
         { id: 'daily', label: 'Daily' },
     ];
@@ -85,12 +85,29 @@ export default function Leaderboard() {
     return (
         <div className="max-w-[1400px] mx-auto px-8 py-12">
             {/* Time Filter Buttons */}
+            {/* <div className="flex flex-col items-center gap-3 sm:gap-4">
+            <button
+              onClick={spinWheel}
+              disabled={isSpinning}
+              className="px-2 sm:px-4  py-3 sm:py-3 bg-[#f74e14] hover:bg-[#e63900] text-white rounded-xl font-bold text-sm sm:text-sm md:text-sm transition-all shadow-lg whitespace-nowrap"
+            
+            >
+              SPIN FOR 850 OGX
+            </button>
+            
+            <button 
+              className="text-[#f74e14] hover:text-[#e63900] font-bold text-base sm:text-lg"
+          
+            >
+              TRY FOR FREE
+            </button>
+          </div> */}
             <div className="flex justify-center gap-6 mb-16">
                 {timeFilterButtons.map((button) => (
                     <button
                         key={button.id}
                         onClick={() => setTimeFilter(button.id)}
-                        className={`px-12 py-3 rounded-full font-medium transition-all duration-200 ${
+                        className={`px-16 sm:px-16  py-4 sm:py-4 bg-[#f74e14] hover:bg-[#e63900] text-white rounded-xl font-bold text-sm sm:text-sm md:text-sm transition-all shadow-lg whitespace-nowrap  ${
                             timeFilter === button.id 
                             ? 'bg-[#6C5DD3] text-white' 
                             : 'bg-white/5 backdrop-blur-sm text-white hover:bg-white/10'
@@ -102,37 +119,64 @@ export default function Leaderboard() {
             </div>
 
             {/* Top 3 Winners */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-                {mockData.slice(0, 3).map((user, index) => {
-                    const badge = getRankBadge(index);
-                    return (
-                        <div key={user.id} className="relative">
-                            <div className={`absolute -top-3 left-1/2 transform -translate-x-1/2 ${badge?.bg} px-6 py-1 rounded-sm font-bold text-black z-10`}>
-                                {badge?.text}
-                            </div>
-                            <div className="bg-white rounded-2xl p-8 flex flex-col items-center shadow-[0_4px_20px_rgba(0,0,0,0.1)]">
-                                <div className="w-24 h-24 rounded-full overflow-hidden mb-4">
-                                    <img
-                                        src={user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`}
-                                        alt={user.username}
-                                        className="w-full h-full object-cover"
-                                    />
-                                </div>
-                                <h3 className="text-xl font-bold text-black mb-4">{user.username}</h3>
-                                <div className="bg-[#00FFD5] rounded-full px-6 py-2 w-full text-center">
-                                    <span className="font-medium">Wagered Credits: </span>
-                                    <span className="font-bold">{formatNumber(user.wageredCredits)}</span>
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+  {/* Second Box (now first) */}
+  <div className="relative top-24 ">
+    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-yellow-400 px-6 py-1 rounded-sm font-bold text-black z-10">
+      2nd Place
+    </div>
+    <div className="bg-white rounded-2xl p-8 flex flex-col items-center shadow-lg">
+      <div className="w-24 h-24 rounded-full overflow-hidden mb-4">
+        <img src={mockData[1].avatar} alt={mockData[1].username} className="w-full h-full object-cover" />
+      </div>
+      <h3 className="text-xl font-bold text-black mb-4">{mockData[1].username}</h3>
+      <div className="bg-[#00FFD5] rounded-full px-6 py-2 w-full text-center">
+        <span className="font-medium">OGX Credits: </span>
+        <span className="font-bold">{formatNumber(mockData[1].wageredCredits)}</span>
+      </div>
+    </div>
+  </div>
+
+  {/* First Box (now second, lowered & smaller) */}
+  <div className="relative mt-6 ">
+    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-yellow-500 px-6 py-1 rounded-sm font-bold text-black z-10">
+      1st Place
+    </div>
+    <div className="bg-white rounded-2xl p-8 flex flex-col items-center shadow-lg">
+      <div className="w-28 h-28 rounded-full overflow-hidden mb-4">
+        <img src={mockData[0].avatar} alt={mockData[0].username} className="w-full h-full object-cover" />
+      </div>
+      <h3 className="text-xl font-bold text-black mb-4">{mockData[0].username}</h3>
+      <div className="bg-[#00FFD5] rounded-full px-6 py-2 w-full text-center">
+        <span className="font-medium">OGX Credits: </span>
+        <span className="font-bold">{formatNumber(mockData[0].wageredCredits)}</span>
+      </div>
+    </div>
+  </div>
+
+  {/* Third Box (shifted lower & smaller) */}
+  <div className="relative mt-6  top-20">
+    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-yellow-600 px-6 py-1 rounded-sm font-bold text-black z-10">
+      3rd Place
+    </div>
+    <div className="bg-white rounded-2xl p-8 flex flex-col items-center shadow-lg">
+      <div className="w-24 h-24 rounded-full overflow-hidden mb-4">
+        <img src={mockData[2].avatar} alt={mockData[2].username} className="w-full h-full object-cover" />
+      </div>
+      <h3 className="text-xl font-bold text-black mb-4">{mockData[2].username}</h3>
+      <div className="bg-[#00FFD5] rounded-full px-6 py-2 w-full text-center">
+        <span className="font-medium">OGX Credits: </span>
+        <span className="font-bold">{formatNumber(mockData[2].wageredCredits)}</span>
+      </div>
+    </div>
+  </div>
+</div>
+
 
             {/* Remaining Rankings */}
             <div className="space-y-4">
                 {mockData.slice(3).map((user, index) => (
-                    <div key={user.id} className="relative">
+                    <div key={user.id} className="relative mt-28">
                         <div className="absolute -left-4 top-1/2 transform -translate-y-1/2">
                             <div className="bg-[#00FFD5] px-4 py-1 rounded-sm font-bold text-black">
                                 {index + 4}th

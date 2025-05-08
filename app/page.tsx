@@ -25,12 +25,12 @@ interface Transaction {
     price: string;
 }
 
-const getProducts = async () => {
+const getProducts = async (): Promise<{ data: Product[]; error: any }> => {
     const response = await supabase.from("products").select();
     return response;
 };
 
-const getLatestTransaction = async () => {
+const getLatestTransaction = async (): Promise<{ data: Transaction[]; error: any }> => {
     const response = await supabase.from("prizeWin").select("*").order("created_at", { ascending: false }).limit(8);
     return response;
 };
@@ -39,8 +39,11 @@ export default function Home() {
     const { data, loading, error } = useRequest(getProducts);
     const { data: transactions, loading: transactionLoading, error: transactionError } = useRequest(getLatestTransaction);
     const navigate = useRouter();
-    if (loading) {
-        return <div>Loading...</div>;
+    const [showSlider, setShowSlider] = useState(transactions?.data?.length > 0);
+
+    // Check for loading and error states
+    if (loading || transactionLoading) {
+        return <Loader />;
     }
 
     if (error || transactionError) {

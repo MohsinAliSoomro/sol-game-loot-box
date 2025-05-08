@@ -8,42 +8,29 @@ import { useMemo, useState } from "react";
 import "react-spin-game/dist/index.css";
 import { useParams } from "next/navigation";
 import { supabase } from "@/service/supabase";
-// import { Metaplex } from "@metaplex-foundation/js";
 import { useRequest } from "ahooks";
 import Image from "next/image";
-// import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
 import WheelSpinner from "./components/wheel";
-
-const options = [
-  { label: "Prize 1", percentage: 20 },
-  { label: "Prize 2", percentage: 30 },
-  { label: "Prize 3", percentage: 25 },
-  { label: "Prize 4", percentage: 15 },
-  { label: "Prize 5", percentage: 10 },
-  { label: "Prize 5", percentage: 10 },
-  { label: "Prize 5", percentage: 10 },
-  { label: "Prize 5", percentage: 10 },
-];
+import Loader from "../../Components/Loader";
 
 const getProducts = async () => {
   const response = await supabase.from("products").select();
   return response;
 };
+
 export default function Details() {
   const { data: products, loading, error } = useRequest(getProducts);
-  // const navigate = useRouter();
   const [user, setUser] = useUserState();
   const [mustSpin, setMustSpin] = useState(false);
   const [prizeNumber, setPrizeNumber] = useState(0);
   const [openModal, setOpenModal] = useState(false);
-  const pathname = useParams<{ slug: string }>();
+  const pathname = useParams();
 
   const [spinning, setSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [winner, setWinner] = useState(null);
 
-  const totalSlices = options.length;
+  const totalSlices = 8;
   const sliceAngle = 360 / totalSlices;
   const spinDuration = 5; // Spin for 5 seconds
 
@@ -59,38 +46,32 @@ export default function Details() {
     setRotation(totalRotation);
     setTimeout(() => {
       setSpinning(false);
-      //@ts-ignore
-      setWinner(options[randomIndex]);
+      setWinner(newProducts[randomIndex]);
     }, spinDuration * 1000);
   };
+
   const newData = useMemo(() => {
-    // @ts-ignore
     return products?.data?.find((i) => i.id === Number(pathname.slug));
-  }, [pathname.slug, [products]]);
+  }, [pathname.slug, products]);
 
   const handleSpinClick = () => {
     if (!mustSpin) {
-      //@ts-ignore
-      const newPrizeNumber = Math.floor(
-        //@ts-ignore
-        Math.random() * products?.data?.length || 0
-      );
+      const newPrizeNumber = Math.floor(Math.random() * products?.data?.length || 0);
       setPrizeNumber(newPrizeNumber);
       setMustSpin(true);
     }
   };
+
   const handleModal = () => {
     setOpenModal(!openModal);
   };
-  console.log({ user });
-  // let ownerWallet = "Dw7xmScGHk74k3e8VLRZzkRAoNm1hjdQJF4wMHtxVzkB";
-  const sendSolanaTokens = async (product: any) => {
+
+  const sendSolanaTokens = async (product) => {
     if (user.apes <= 0) {
-      return alert("You need to purchae apes");
+      return alert("You need to purchase OGX");
     }
     let price = Number(product.price);
     let minusPrice = user.apes - price;
-    console.log({ minusPrice });
     const response = await supabase
       .from("user")
       .update({ apes: minusPrice })
@@ -100,15 +81,20 @@ export default function Details() {
   };
 
   if (loading) {
-    return <div>Loading...</div>;
+    return <Loader />;
   }
   if (error) {
-    return <div>Error</div>;
+    return (
+      <div className="min-h-screen bg-orange-500">
+        <TopNav />
+        <div className="flex items-center justify-center h-[calc(100vh-64px)] text-white text-xl">
+          Error loading data...
+        </div>
+      </div>
+    );
   }
-  const product = products?.data?.find((i) => i.id === Number(pathname.slug));
-  console.log({ product });
-  //@ts-ignore
-  const newProducts = products.data?.map((i) => {
+
+  const newProducts = products?.data?.map((i) => {
     return {
       option: i.name,
       image: {
@@ -122,79 +108,67 @@ export default function Details() {
   });
 
   return (
-    <div>
+    <div className="overflow-hidden bg-orange-500 text-white">
       <TopNav />
-    
-      <div className="flex items-center flex-col justify-center flex-wrap gap-4 relative">
-        <div className="w-full flex items-center justify-center">
-          <div
-            style={{
-              backgroundImage: "url(/background.png)",
-              backgroundRepeat: "no-repeat",
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              height: "50rem",
-            }}
-            className="w-full h-full flex flex-col items-center justify-center relative "
-          >
-         
-         
-            <div className="absolute top-1/2 left-0 right-0 z-50 -mb-20 bg-background w-full h-full ">
-              {/* <div
-                onClick={() => sendSolanaTokens(product)}
-                className="flex justify-center items-center gap-6 cursor-pointer"
-              >
-                <p className="backdrop-blur-sm p-2 rounded-lg bg-foreground text-white mt-2 ">
-                  Spin for{" "}
-                  <span className="font-bold text-lg">{product?.price}</span>{" "}
-                  Apes{" "}
-                </p>
-              </div> */}
-              {/* <button
-                onClick={handleSpinClick}
-                className="mx-auto flex items-center gap-2 mt-5 bg-transprent font-bold text-foreground px-10 py-4 text-lg"
-              >
-                <RefreshCcw size={20} height={20} />{" "}
-                <span> Try it for free</span>
-              </button> */}
-              <div className="text-white px-4 mt-[28rem]">
-                <h1 className="font-bold text-4xl text-foreground text-center mt-">
-                  Loot In the box
-                </h1>
-                <div className="grid grid-cols-3 md:grid-cols-3 lg:grid-cols-3 m-2 gap-y-6 gap-2 mb-40">
-                  {
-                    //@ts-ignore
-                    products?.data.map((loot) => (
-                      <div
-                        key={loot.name}
-                        className="bg-gradient-to-b from-foreground to-indigo-100 border-white/40 p-2 py-6 rounded-xl text-background flex flex-col items-center relative"
-                      >
-                        <span className="font-bold text-center mx-auto text-white absolute top-2 right-2 text-2xl">
-                          %{loot?.percentage}
-                        </span>
+
+      <div className="flex flex-col gap-2">
+        <div className="flex justify-center items-center">
+          <WheelSpinner />
+        </div>
+
+        <div className="flex justify-center items-center">
+          <p className="text-3xl font-bold w-full text-center">Loot In the Box</p>
+        </div>
+        <div className="w-full">
+          <div className="w-full px-4">
+            <div className="overflow-x-auto py-6 scrollbar-hide">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {products?.data?.map((loot, index) => (
+                  <div
+                    key={index}
+                    className="w-full bg-white border border-orange-300 p-3 py-4 rounded-lg shadow-md text-orange-800 flex flex-col items-center relative
+                              transition-all duration-300 hover:shadow-lg group"
+                  >
+                    <div className="relative w-24 h-24 mb-3 group-hover:scale-105 transition-transform duration-300">
+                      <Image
+                        src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${loot.image}`}
+                        alt={loot.name}
+                        fill
+                        className="object-contain drop-shadow-md"
+                        sizes="(max-width: 768px) 100vw, 200px"
+                      />
+                    </div>
+
+                    <span className="font-bold text-center mx-auto text-orange-700 mt-1 text-sm tracking-tight">
+                      {loot.name}
+                    </span>
+
+                    <div className="font-bold text-center mx-auto text-lg mb-2 text-orange-800 flex justify-center items-center space-x-1">
+                      <span className="mt-1 bg-gradient-to-r from-orange-500 to-orange-700 bg-clip-text text-transparent">
+                        {loot.price}
+                      </span>
+                      <div className="relative w-6 h-6">
                         <Image
-                          src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${loot.image}`}
-                          alt={loot.name}
-                          width={200}
-                          height={200}
-                          className=""
+                          src={"/logo.png"}
+                          fill
+                          alt="OGX"
+                          className="rounded-full object-cover ring-2 ring-orange-300"
                         />
-                        <span className="font-bold text-center mx-auto text-foreground text-2xl mt-4">
-                          {" "}
-                          {loot?.name}
-                        </span>
-                        <span className="font-bold text-center flex mx-auto text-xl mb-4 text-foreground">
-                          Apes {loot.price}
-                        </span>
                       </div>
-                    ))
-                  }
-                </div>
+                    </div>
+
+                    <button
+                      onClick={() => sendSolanaTokens(loot)}
+                      className="text-sm rounded-full px-3 py-1 absolute -bottom-3 left-3 right-3 shadow-lg
+                                bg-gradient-to-r from-orange-500 to-orange-700 border border-orange-300 text-white
+                                font-medium hover:from-orange-600 hover:to-orange-800 transition-all
+                                active:scale-95"
+                    >
+                      Open
+                    </button>
+                  </div>
+                ))}
               </div>
-            </div>
-            <div className="flex flex-col items-center justify-center h-screen text-white z-50">
-              <WheelSpinner data={products?.data} product={product} user={user}  setUser={setUser}/>
-             
             </div>
           </div>
         </div>
