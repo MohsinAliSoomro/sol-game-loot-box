@@ -43,7 +43,6 @@ export default function Page() {
                 await supabase.from("affiliate").insert(newObj);
             }
         } catch (error) {
-            console.log({ error });
             alert("Error signing up");
         }
     };

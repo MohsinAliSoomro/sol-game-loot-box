@@ -20,7 +20,6 @@ export default function TopNav() {
                 redirectTo: `https://spin2win.vibingapes.com/`,
             },
         });
-        console.log({ data, error });
     };
 
     useEffect(() => {
@@ -71,7 +70,6 @@ export default function TopNav() {
                 setUser({ ...user, ...userGet.data });
                 setIsLogin(response.data.session ? true : false);
             } catch (error) {
-                console.log({ error });
                 alert("Error connecting to wallet");
             }
         };
@@ -93,7 +91,6 @@ export default function TopNav() {
     const handleCloseModal = () => {
         setOpen(false);
     };
-    console.log({isLogin})
 
     return (
         <div className="flex flex-col md:flex-row justify-between items-center border-white py-4 px-2 md:px-4 border-foreground backdrop-blur-sm relative">

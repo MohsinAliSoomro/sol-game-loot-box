@@ -5,39 +5,47 @@ import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, cl
 import { supabase } from "@/service/supabase";
 import { useRequest } from "ahooks";
 
-const DepositHistory = ({ deposits }:any) => {
-    return (
-        <div className="deposit-history w-full">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Deposit History</h2>
-            {/* {deposits.length > 0 ? (
-                <div className="p-4 md:p-5 overflow-x-auto w-full">
-                    <table className="w-full text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400 min-w-full table-fixed">
-                        <thead className="text-xs text-gray-700 uppercase dark:text-gray-400">
-                            <tr>
-                                <th scope="col" className="px-6 py-3 bg-gray-50 dark:bg-gray-800 w-1/3">Wallet</th>
-                                <th scope="col" className="px-6 py-3 w-1/3">Amount</th>
-                                <th scope="col" className="px-6 py-3 bg-gray-50 dark:bg-gray-800 w-1/3">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody className="w-full">
-                            {deposits.map((deposit, index) => (
-                                <tr key={index} className="border-b border-gray-200 dark:border-gray-700 w-full">
-                                    <th scope="row" className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap bg-gray-50 dark:text-white dark:bg-gray-800 truncate">
-                                        {deposit.wallet}
-                                    </th>
-                                    <td className="px-6 py-4">{deposit.apes}</td>
-                                    <td className="px-6 py-4 bg-gray-50 dark:bg-gray-800">{deposit.status}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            ) : (
-                <p className="text-gray-500">No deposit history found</p>
-            )} */}
-        </div>
-    );
+const getTransactions = async (userId:string) => {
+    const response = await supabase.from("transaction").select().eq("userId",userId).order("created_at",{ ascending: false }).limit(8);
+    return response;
 };
+function truncate(str:string, maxLength:number) {
+    if (str.length <= maxLength) return str;
+    return str.slice(0, maxLength - 3) + '...';
+  }
+// const DepositHistory = ({ deposits }:any) => {
+//     return (
+//         <div className="deposit-history w-full">
+//             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Deposit History</h2>
+//             {deposits.length > 0 ? (
+//                 <div className="p-4 md:p-5 overflow-x-auto w-full">
+//                     <table className="w-full text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400 min-w-full table-fixed">
+//                         <thead className="text-xs text-gray-700 uppercase dark:text-gray-400">
+//                             <tr>
+//                                 <th scope="col" className="px-6 py-3 bg-gray-50 dark:bg-gray-800 w-1/3">Wallet</th>
+//                                 <th scope="col" className="px-6 py-3 w-1/3">Amount</th>
+//                                 <th scope="col" className="px-6 py-3 bg-gray-50 dark:bg-gray-800 w-1/3">Status</th>
+//                             </tr>
+//                         </thead>
+//                         <tbody className="w-full">
+//                             {deposits.map((deposit, index) => (
+//                                 <tr key={index} className="border-b border-gray-200 dark:border-gray-700 w-full">
+//                                     <th scope="row" className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap bg-gray-50 dark:text-white dark:bg-gray-800 truncate">
+//                                         {deposit.wallet}
+//                                     </th>
+//                                     <td className="px-6 py-4">{deposit.apes}</td>
+//                                     <td className="px-6 py-4 bg-gray-50 dark:bg-gray-800">{deposit.status}</td>
+//                                 </tr>
+//                             ))}
+//                         </tbody>
+//                     </table>
+//                 </div>
+//             ) : (
+//                 <p className="text-gray-500">No deposit history found</p>
+//             )}
+//         </div>
+//     );
+// };
 
 export default function PurchaseModal() {
     const [state, setState] = useUserState();
@@ -46,9 +54,7 @@ export default function PurchaseModal() {
         balance: 100,
         availableBalance: 0,
     });
-    // const { run, data, loading } = useRequest();
-
-    // const [deposits, setDeposits] = useState([]);
+     const { run, data, loading } = useRequest(getTransactions,{manual:true});
     const [activeTab, setActiveTab] = useState('deposit');
 
     async function fetchSolBalance() {
@@ -93,69 +99,103 @@ export default function PurchaseModal() {
     }, [form]);
 
     useEffect(() => {
-        // fetchSolBalance();
-        fetchDepositHistory();
-    }, []);
+        if(state.id){
+            run(state.id)
+        }
+    }, [state.id]);
 
-    const updaetUserApes = async () => {
+    const updaetUserApes = async (transaction:any) => {
         const plus = calculateBalance + (state.apes || 0);
         await supabase.from("user").update({ apes: plus }).eq("id", state.id);
+        await saveTransaction(transaction)
         setState({ ...state, apes: plus });
     };
 
     const connectWallet = async () => {
-        // const { solana } = window;
-        // if (solana) {
-        //     const response = await solana.connect();
-        //     console.log("Connected with Public Key:", response.publicKey.toString());
-        //     return response.publicKey.toString();
-        // }
+        //@ts-ignore
+        const { solana } = window;
+        if (solana) {
+            const response = await solana.connect();
+            // console.log("Connected with Public Key:", response.publicKey.toString());
+            return response.publicKey.toString();
+        }
     };
-
+    const saveTransaction =async (transaction:any)=>{
+        await supabase.from("transaction").insert({
+            transactionId: transaction,
+            ogx: calculateBalance,
+            userId: state.id,
+            t_status: "purchase",
+        });
+        run(state.id)
+    }
     const makeTransaction = async () => {
-        // try {
-        //     let walletAddress = await connectWallet();
-        //     if (!walletAddress) return;
+        try {
+            // Ensure the wallet is connected
+            let walletAddress = "";
+            //@ts-ignore
+            walletAddress = await connectWallet();
+            if (!walletAddress) return;
 
-        //     const connection = new Connection(clusterApiUrl("testnet"), "confirmed");
-        //     const blockHeight = await connection.getBlockHeight();
-        //     console.log("Connected to Solana testnet. Current block height:", blockHeight);
+            // Create connection to testnet
+            const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
 
-        //     let recipientAddress = "J97hUXpUzFoRuyJLPmN26JEdE8Eog6BMeByVmAQabgdY";
-        //     const fromPubkey = new PublicKey(walletAddress);
-        //     const toPubkey = new PublicKey(recipientAddress);
+            // Test the connection
+            try {
+                const blockHeight = await connection.getBlockHeight();
+                // console.log("Connected to Solana testnet. Current block height:", blockHeight);
+            } catch (error) {
+                console.error("Failed to connect to Solana testnet:", error);
+                throw new Error("Network connection failed");
+            }
 
-        //     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+            let recipientAddress = "CRt41RoAZ4R9M7QHx5vyKB2Jee3NvDSmhoSak8GfMwtY";
 
-        //     let transaction = new Transaction().add(
-        //         SystemProgram.transfer({
-        //             fromPubkey: fromPubkey,
-        //             toPubkey: toPubkey,
-        //             lamports: 0.1 * LAMPORTS_PER_SOL,
-        //         })
-        //     );
+            const fromPubkey = new PublicKey(walletAddress);
+            const toPubkey = new PublicKey(recipientAddress);
 
-        //     transaction.recentBlockhash = blockhash;
-        //     transaction.lastValidBlockHeight = lastValidBlockHeight;
-        //     transaction.feePayer = fromPubkey;
+            // Get recent blockhash
+            const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
 
-        //     const signedTransaction = await window.solana.signTransaction(transaction);
-        //     const signature = await connection.sendRawTransaction(signedTransaction.serialize());
+            // Create a new transaction
+            let transaction = new Transaction().add(
+                SystemProgram.transfer({
+                    fromPubkey: fromPubkey,
+                    toPubkey: toPubkey,
+                    lamports: 0.1 * LAMPORTS_PER_SOL, // Convert SOL to lamports
+                })
+            );
+            // Set the blockhash and fee payer
+            transaction.recentBlockhash = blockhash;
+            transaction.lastValidBlockHeight = lastValidBlockHeight;
+            transaction.feePayer = fromPubkey;
 
-        //     const confirmation = await connection.confirmTransaction({
-        //         signature,
-        //         blockhash,
-        //         lastValidBlockHeight,
-        //     });
+            //@ts-ignore
+            const signedTransaction = await window.solana.signTransaction(transaction);
 
-        //     console.log("Confirmation:", confirmation);
-        //     await updaetUserApes();
-        //     alert("Transaction sent and confirmed ");
-        //     return signature;
-        // } catch (error) {
-        //     console.error("Error making transaction:", error);
-        //     alert(`Error making transaction ===> ${JSON.stringify(error.transactionMessage)}`);
-        // }
+            // Send the transaction
+            const signature = await connection.sendRawTransaction(signedTransaction.serialize());
+
+            // Confirm the transaction
+            const confirmation = await connection.confirmTransaction({
+                signature,
+                blockhash,
+                lastValidBlockHeight,
+            });
+
+            await updaetUserApes(signature);
+            alert("Transaction sent and confirmed ");
+            // dave into database transaction and add apes into user wallet
+            return signature;
+        } catch (error) {
+            console.error("Error making transaction:", error);
+            //@ts-ignore
+            alert(`Error making transaction ===> ${JSON.stringify(error.transactionMessage)}`);
+            if (error instanceof Error) {
+                console.error(error.message);
+            }
+            // Handle the error appropriately in your UI
+        }
     };
 
     if (!state.purchase) return null;
@@ -240,11 +280,11 @@ export default function PurchaseModal() {
                             )}
                             {activeTab === "history" && (
                             <div className="p-4 md:p-5 overflow-x-auto w-full min-h-[400px] flex flex-col">
-                                {/* {loading ? (
+                                {loading ? (
                                     <div className="flex justify-center items-center py-8 w-full flex-grow">
                                         <div className="w-12 h-12 border-4 border-[#ff914d] border-t-transparent rounded-full animate-spin"></div>
                                     </div>
-                                ) : ( */}
+                                ) : (
                                     <div className="flex-grow flex flex-col">
                                         <table className="w-full text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400 min-w-full table-fixed">
                                             <thead className="text-xs text-gray-700 uppercase dark:text-gray-400">
@@ -252,7 +292,7 @@ export default function PurchaseModal() {
                                                     <th
                                                         scope="col"
                                                         className="px-6 py-3 bg-gray-50 dark:bg-gray-800 w-1/3">
-                                                        Wallet
+                                                        TransactionId
                                                     </th>
                                                     <th
                                                         scope="col"
@@ -267,34 +307,34 @@ export default function PurchaseModal() {
                                                 </tr>
                                             </thead>
                                             <tbody className="w-full">
-                                                {/* {data?.length === 0 ? (
+                                                {data?.data?.length === 0 ? (
                                                     <tr>
                                                         <td colSpan={3} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                                                             No withdraw history found
                                                         </td>
                                                     </tr>
                                                 ) : (
-                                                    data?.map((item) => (
+                                                    data?.data?.map((item) => (
                                                         <tr
                                                             key={item?.id}
                                                             className="border-b border-gray-200 dark:border-gray-700 w-full">
                                                             <th
                                                                 scope="row"
                                                                 className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap bg-gray-50 dark:text-white dark:bg-gray-800 truncate">
-                                                                {item?.walletAddress}
+                                                                {truncate( item?.transactionId,10)}
                                                             </th>
-                                                            <td className="px-6 py-4">{item?.apes}</td>
-                                                            <td className="px-6 py-4 bg-gray-50 dark:bg-gray-800">{item?.status}</td>
+                                                            <td className="px-6 py-4">{item?.ogx}</td>
+                                                            <td className="px-6 py-4 bg-gray-50 dark:bg-gray-800">{item?.t_status}</td>
                                                         </tr>
                                                     ))
-                                                )} */}
+                                                )}
                                             </tbody>
                                         </table>
-                                        {/* {(!data || data.length === 0) && (
+                                        {(!data || data.data?.length === 0) && (
                                             <div className="flex-grow flex items-center justify-center" style={{height:'348px'}}>
                                                 <p className="text-gray-500 dark:text-gray-400">No deposit history found</p>
                                             </div>
-                                        )} */}
+                                        )}
                                          <div className="flex items-center justify-end  pt-4 space-x-3 border-t border-[#ff914d]/20">
                                            
                                             <button
@@ -304,7 +344,7 @@ export default function PurchaseModal() {
                                             </button>
                                         </div>
                                     </div>
-                                {/* )} */}
+                             )} 
                             </div>
                             
                         )}

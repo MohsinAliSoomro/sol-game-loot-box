@@ -14,21 +14,7 @@ interface WheelItem {
 }
 
 const WheelSpinner = ({ data, item, user, setUser }: any) => {
-  console.log({ data, item });
-  // const [items] = useState<WheelItem[]>([
-  //   { id: 1, name: "10% Off", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
-  //   { id: 2, name: "Free Item", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
-  //   { id: 3, name: "25% Off", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
-  //   { id: 4, name: "Try Again", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
-  //   { id: 5, name: "50% Off", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
-  //   { id: 6, name: "Gift Card", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
-  //   { id: 7, name: "5% Off", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
-  //   { id: 8, name: "Free Shipping", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
-  //   { id: 8, name: "Free Shipping", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
-  //   { id: 8, name: "Free Shipping", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
-  //   { id: 8, name: "Free Shipping", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
-  //   { id: 8, name: "Free Shipping", image: "/1.png", color: "bg-white", textColor: "text-black", probability: 15 },
-  // ]);
+
 
   const [rotation, setRotation] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
