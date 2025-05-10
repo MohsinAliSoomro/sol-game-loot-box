@@ -187,14 +187,14 @@ export default function TopNav() {
                             </button>
                         </div>
 
-                        <div className="flex flex-wrap justify-center md:justify-end gap-2 text-xs" style={{marginRight:'30px'}}>
-                            <button
+                        <div className="flex flex-wrap justify-center md:justify-end gap-2 text-xs" style={{marginRight:'62px'}}>
+                            {/* <button
                                 onClick={() => setUser({ ...user, cart: true })}
                                 className="hover:text-gray-300 transition-colors"
                             >
                                 Reward
                             </button>
-                            <span>|</span>
+                            <span>|</span> */}
                             <button
                                 onClick={() => setUser({ ...user, purchase: true })}
                                 className="hover:text-gray-300 transition-colors"
