@@ -5,11 +5,11 @@ import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, cl
 import { supabase } from "@/service/supabase";
 import { useRequest } from "ahooks";
 
-const DepositHistory = ({ deposits }) => {
+const DepositHistory = ({ deposits }:any) => {
     return (
         <div className="deposit-history w-full">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Deposit History</h2>
-            {deposits.length > 0 ? (
+            {/* {deposits.length > 0 ? (
                 <div className="p-4 md:p-5 overflow-x-auto w-full">
                     <table className="w-full text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400 min-w-full table-fixed">
                         <thead className="text-xs text-gray-700 uppercase dark:text-gray-400">
@@ -34,7 +34,7 @@ const DepositHistory = ({ deposits }) => {
                 </div>
             ) : (
                 <p className="text-gray-500">No deposit history found</p>
-            )}
+            )} */}
         </div>
     );
 };
@@ -46,46 +46,46 @@ export default function PurchaseModal() {
         balance: 100,
         availableBalance: 0,
     });
-    const { run, data, loading } = useRequest();
+    // const { run, data, loading } = useRequest();
 
-    const [deposits, setDeposits] = useState([]);
+    // const [deposits, setDeposits] = useState([]);
     const [activeTab, setActiveTab] = useState('deposit');
 
     async function fetchSolBalance() {
-        try {
-            const response = await fetch(`https://api.solana.com`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    jsonrpc: "2.0",
-                    id: 1,
-                    method: "getBalance",
-                    params: [""],
-                }),
-            });
+        // try {
+        //     const response = await fetch(`https://api.solana.com`, {
+        //         method: "POST",
+        //         headers: {
+        //             "Content-Type": "application/json",
+        //         },
+        //         body: JSON.stringify({
+        //             jsonrpc: "2.0",
+        //             id: 1,
+        //             method: "getBalance",
+        //             params: [""],
+        //         }),
+        //     });
 
-            const data = await response.json();
-            const solBalance = data.result / 1000000000;
-            console.log(`Current SOL balance: ${solBalance}`);
-        } catch (error) {
-            console.error("Error fetching SOL balance:", error);
-        }
+        //     const data = await response.json();
+        //     const solBalance = data.result / 1000000000;
+        //     console.log(`Current SOL balance: ${solBalance}`);
+        // } catch (error) {
+        //     console.error("Error fetching SOL balance:", error);
+        // }
     }
 
     const fetchDepositHistory = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('deposits')
-                .select('*')
-                .eq('user_id', state.id);
+        // try {
+        //     const { data, error } = await supabase
+        //         .from('deposits')
+        //         .select('*')
+        //         .eq('user_id', state.id);
 
-            if (error) throw error;
-            setDeposits(data);
-        } catch (error) {
-            console.error("Error fetching deposit history:", error);
-        }
+        //     if (error) throw error;
+        //     setDeposits(data);
+        // } catch (error) {
+        //     console.error("Error fetching deposit history:", error);
+        // }
     };
 
     const calculateBalance = useMemo(() => {
@@ -93,7 +93,7 @@ export default function PurchaseModal() {
     }, [form]);
 
     useEffect(() => {
-        fetchSolBalance();
+        // fetchSolBalance();
         fetchDepositHistory();
     }, []);
 
@@ -104,63 +104,63 @@ export default function PurchaseModal() {
     };
 
     const connectWallet = async () => {
-        const { solana } = window;
-        if (solana) {
-            const response = await solana.connect();
-            console.log("Connected with Public Key:", response.publicKey.toString());
-            return response.publicKey.toString();
-        }
+        // const { solana } = window;
+        // if (solana) {
+        //     const response = await solana.connect();
+        //     console.log("Connected with Public Key:", response.publicKey.toString());
+        //     return response.publicKey.toString();
+        // }
     };
 
     const makeTransaction = async () => {
-        try {
-            let walletAddress = await connectWallet();
-            if (!walletAddress) return;
+        // try {
+        //     let walletAddress = await connectWallet();
+        //     if (!walletAddress) return;
 
-            const connection = new Connection(clusterApiUrl("testnet"), "confirmed");
-            const blockHeight = await connection.getBlockHeight();
-            console.log("Connected to Solana testnet. Current block height:", blockHeight);
+        //     const connection = new Connection(clusterApiUrl("testnet"), "confirmed");
+        //     const blockHeight = await connection.getBlockHeight();
+        //     console.log("Connected to Solana testnet. Current block height:", blockHeight);
 
-            let recipientAddress = "J97hUXpUzFoRuyJLPmN26JEdE8Eog6BMeByVmAQabgdY";
-            const fromPubkey = new PublicKey(walletAddress);
-            const toPubkey = new PublicKey(recipientAddress);
+        //     let recipientAddress = "J97hUXpUzFoRuyJLPmN26JEdE8Eog6BMeByVmAQabgdY";
+        //     const fromPubkey = new PublicKey(walletAddress);
+        //     const toPubkey = new PublicKey(recipientAddress);
 
-            const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+        //     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
 
-            let transaction = new Transaction().add(
-                SystemProgram.transfer({
-                    fromPubkey: fromPubkey,
-                    toPubkey: toPubkey,
-                    lamports: 0.1 * LAMPORTS_PER_SOL,
-                })
-            );
+        //     let transaction = new Transaction().add(
+        //         SystemProgram.transfer({
+        //             fromPubkey: fromPubkey,
+        //             toPubkey: toPubkey,
+        //             lamports: 0.1 * LAMPORTS_PER_SOL,
+        //         })
+        //     );
 
-            transaction.recentBlockhash = blockhash;
-            transaction.lastValidBlockHeight = lastValidBlockHeight;
-            transaction.feePayer = fromPubkey;
+        //     transaction.recentBlockhash = blockhash;
+        //     transaction.lastValidBlockHeight = lastValidBlockHeight;
+        //     transaction.feePayer = fromPubkey;
 
-            const signedTransaction = await window.solana.signTransaction(transaction);
-            const signature = await connection.sendRawTransaction(signedTransaction.serialize());
+        //     const signedTransaction = await window.solana.signTransaction(transaction);
+        //     const signature = await connection.sendRawTransaction(signedTransaction.serialize());
 
-            const confirmation = await connection.confirmTransaction({
-                signature,
-                blockhash,
-                lastValidBlockHeight,
-            });
+        //     const confirmation = await connection.confirmTransaction({
+        //         signature,
+        //         blockhash,
+        //         lastValidBlockHeight,
+        //     });
 
-            console.log("Confirmation:", confirmation);
-            await updaetUserApes();
-            alert("Transaction sent and confirmed ");
-            return signature;
-        } catch (error) {
-            console.error("Error making transaction:", error);
-            alert(`Error making transaction ===> ${JSON.stringify(error.transactionMessage)}`);
-        }
+        //     console.log("Confirmation:", confirmation);
+        //     await updaetUserApes();
+        //     alert("Transaction sent and confirmed ");
+        //     return signature;
+        // } catch (error) {
+        //     console.error("Error making transaction:", error);
+        //     alert(`Error making transaction ===> ${JSON.stringify(error.transactionMessage)}`);
+        // }
     };
 
     if (!state.purchase) return null;
     return (
-        <div className="fixed top-0 left-0 w-screen h-screen flex items-center justify-center bg-black/40">
+        <div className="fixed top-0 left-0 w-screen h-screen flex items-center justify-center bg-black/40 z-50">
             <div className="z-50 justify-center items-center w-full max-w-2xl">
                 <div className="relative p-4 w-full">
                     <div className="relative bg-background rounded-lg shadow dark:bg-gray-700">
@@ -240,11 +240,11 @@ export default function PurchaseModal() {
                             )}
                             {activeTab === "history" && (
                             <div className="p-4 md:p-5 overflow-x-auto w-full min-h-[400px] flex flex-col">
-                                {loading ? (
+                                {/* {loading ? (
                                     <div className="flex justify-center items-center py-8 w-full flex-grow">
                                         <div className="w-12 h-12 border-4 border-[#ff914d] border-t-transparent rounded-full animate-spin"></div>
                                     </div>
-                                ) : (
+                                ) : ( */}
                                     <div className="flex-grow flex flex-col">
                                         <table className="w-full text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400 min-w-full table-fixed">
                                             <thead className="text-xs text-gray-700 uppercase dark:text-gray-400">
@@ -267,7 +267,7 @@ export default function PurchaseModal() {
                                                 </tr>
                                             </thead>
                                             <tbody className="w-full">
-                                                {data?.length === 0 ? (
+                                                {/* {data?.length === 0 ? (
                                                     <tr>
                                                         <td colSpan={3} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                                                             No withdraw history found
@@ -287,14 +287,14 @@ export default function PurchaseModal() {
                                                             <td className="px-6 py-4 bg-gray-50 dark:bg-gray-800">{item?.status}</td>
                                                         </tr>
                                                     ))
-                                                )}
+                                                )} */}
                                             </tbody>
                                         </table>
-                                        {(!data || data.length === 0) && (
+                                        {/* {(!data || data.length === 0) && (
                                             <div className="flex-grow flex items-center justify-center" style={{height:'348px'}}>
                                                 <p className="text-gray-500 dark:text-gray-400">No deposit history found</p>
                                             </div>
-                                        )}
+                                        )} */}
                                          <div className="flex items-center justify-end  pt-4 space-x-3 border-t border-[#ff914d]/20">
                                            
                                             <button
@@ -304,7 +304,7 @@ export default function PurchaseModal() {
                                             </button>
                                         </div>
                                     </div>
-                                )}
+                                {/* )} */}
                             </div>
                             
                         )}

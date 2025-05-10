@@ -76,7 +76,7 @@ export default function WithdrawModal() {
     };
     if (!state.withdraw) return null;
     return (
-        <div className="fixed top-0 left-0 w-screen h-screen flex items-center justify-center bg-black/40">
+        <div className="fixed top-0 left-0 w-screen h-screen flex items-center justify-center bg-black/40 z-50">
             <div className="z-50 justify-center items-center">
                 <div className="relative p-4 w-full max-w-2xl h-[40rem] ">
                     <div className="relative bg-background rounded-lg shadow dark:bg-gray-700 h-full overflow-hidden">

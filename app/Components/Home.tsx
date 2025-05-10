@@ -8,7 +8,10 @@ export default function HomePage() {
     return (
         <Fragment>
             <div className="p-4 sm:ml-64">
-                <TopNav />
+            <div className="nav-top z-50 relative">
+            <TopNav />
+
+            </div>
                 <Banner />
                 <Table />
             </div>

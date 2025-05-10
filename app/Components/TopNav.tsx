@@ -90,6 +90,11 @@ export default function TopNav() {
         setOpen(true);
     };
 
+    const handleCloseModal = () => {
+        setOpen(false);
+    };
+    console.log({isLogin})
+
     return (
         <div className="flex flex-col md:flex-row justify-between items-center border-white py-4 px-2 md:px-4 border-foreground backdrop-blur-sm relative">
             {open && <div className="backdrop-blur"></div>}
@@ -169,12 +174,12 @@ export default function TopNav() {
                                     <p className="text-center">0</p>
                                 </div>
                             </div>
-                            <button 
+                            <button
                                 onClick={logout}
                                 className="Btn h-16 flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white px-4 rounded-lg transition-all duration-300"
                             >
                                 <div className="sign">
-                                    <svg 
+                                    <svg
                                         viewBox="0 0 512 512"
                                         className="w-4 h-4 fill-current"
                                     >
@@ -228,8 +233,8 @@ export default function TopNav() {
             {/* Login modal */}
             {open && (
                 <div
-                    style={{ zIndex: 9999999 }}
-                    className="fixed top-0 left-0 backdrop-blur-md bg-black/60 z-50 flex justify-center items-center h-screen w-screen"
+                    style={{ zIndex: 9999 }}
+                    className=" fixed top-0 left-0 backdrop-blur-md bg-black/60 z-50 flex justify-center items-center h-screen w-screen"
                 >
                     <div className="bg-background w-full md:w-[400px] rounded-2xl p-6 relative shadow-xl border border-foreground/20 mx-4 overflow-hidden">
                         {/* Background pattern */}
@@ -238,13 +243,14 @@ export default function TopNav() {
                             backgroundSize: '120px',
                             backgroundRepeat: 'repeat',
                         }}></div>
-                        
+
                         {/* Close button */}
                         <button
-                            onClick={() => setOpen(false)}
+                            onClick={handleCloseModal}
                             className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-foreground/10 hover:bg-foreground/20 transition-colors duration-200 text-foreground"
                         >
-                            <svg
+                            {/* <svg
+                            className="me-2"
                                 width="24px"
                                 height="24px"
                                 viewBox="0 0 24 24"
@@ -257,15 +263,16 @@ export default function TopNav() {
                                     strokeWidth="1.5"
                                     strokeLinecap="round"
                                 />
-                            </svg>
+                            </svg> */}
+                            <p className="ms-5">x</p>
                         </button>
-                        
+
                         {/* Header */}
                         <div className="mb-8 text-center relative z-10">
                             <h1 className="text-3xl font-bold text-foreground">SIGN IN</h1>
                             <p className="text-foreground/60 mt-2">Connect to access your account</p>
                         </div>
-                        
+
                         {/* Buttons */}
                         <div className="space-y-4 relative z-10">
                             <button
@@ -298,7 +305,7 @@ export default function TopNav() {
                                 </svg>
                                 Continue with Google
                             </button>
-                            
+
                             <button
                                 onClick={() => handleSocialLogin("discord")}
                                 className="flex items-center justify-center gap-3 w-full bg-[#5865F2] text-white py-3 px-6 rounded-lg hover:bg-[#4752c4] transition-colors duration-200 font-medium"
@@ -322,17 +329,17 @@ export default function TopNav() {
                                 Continue with Discord
                             </button>
                         </div>
-                        
+
                         {/* Divider */}
                         <div className="flex items-center my-6 relative z-10">
                             <div className="flex-grow bg-gray-700 h-px"></div>
                             <span className="mx-3 text-gray-400 text-sm">OR</span>
                             <div className="flex-grow bg-gray-700 h-px"></div>
                         </div>
-                        
+
                         {/* Guest option */}
-                        <button 
-                            onClick={() => setOpen(false)}
+                        <button
+                            onClick={handleCloseModal}
                             className="w-full border border-gray-700 text-gray-300 py-3 px-6 rounded-lg hover:bg-gray-800 transition-colors duration-200 font-medium relative z-10"
                         >
                             Continue as Guest

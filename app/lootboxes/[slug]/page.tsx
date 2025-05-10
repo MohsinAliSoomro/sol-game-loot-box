@@ -34,50 +34,50 @@ export default function Details() {
   const sliceAngle = 360 / totalSlices;
   const spinDuration = 5; // Spin for 5 seconds
 
-  const spinWheel = () => {
-    if (spinning) return;
-    setSpinning(true);
-    setWinner(null);
+  // const spinWheel = () => {
+  //   if (spinning) return;
+  //   setSpinning(true);
+  //   setWinner(null);
 
-    const randomIndex = Math.floor(Math.random() * totalSlices); // Pick a winning slice
-    const randomAngle = 360 - randomIndex * sliceAngle - sliceAngle / 2; // Stop at the winning slice
-    const totalRotation = 360 * 5 + randomAngle; // Ensure multiple spins before stopping
+  //   const randomIndex = Math.floor(Math.random() * totalSlices); // Pick a winning slice
+  //   const randomAngle = 360 - randomIndex * sliceAngle - sliceAngle / 2; // Stop at the winning slice
+  //   const totalRotation = 360 * 5 + randomAngle; // Ensure multiple spins before stopping
 
-    setRotation(totalRotation);
-    setTimeout(() => {
-      setSpinning(false);
-      setWinner(newProducts[randomIndex]);
-    }, spinDuration * 1000);
-  };
+  //   setRotation(totalRotation);
+  //   setTimeout(() => {
+  //     setSpinning(false);
+  //     // setWinner(newProducts[randomIndex]);
+  //   }, spinDuration * 1000);
+  // };
 
   const newData = useMemo(() => {
     return products?.data?.find((i) => i.id === Number(pathname.slug));
   }, [pathname.slug, products]);
 
   const handleSpinClick = () => {
-    if (!mustSpin) {
-      const newPrizeNumber = Math.floor(Math.random() * products?.data?.length || 0);
-      setPrizeNumber(newPrizeNumber);
-      setMustSpin(true);
-    }
+    // if (!mustSpin) {
+    //   const newPrizeNumber = Math.floor(Math.random() * products?.data?.length || 0);
+    //   setPrizeNumber(newPrizeNumber);
+    //   setMustSpin(true);
+    // }
   };
 
   const handleModal = () => {
     setOpenModal(!openModal);
   };
 
-  const sendSolanaTokens = async (product) => {
-    if (user.apes <= 0) {
-      return alert("You need to purchase OGX");
-    }
-    let price = Number(product.price);
-    let minusPrice = user.apes - price;
-    const response = await supabase
-      .from("user")
-      .update({ apes: minusPrice })
-      .eq("id", user.id);
-    setUser({ ...user, apes: minusPrice });
-    handleSpinClick();
+  const sendSolanaTokens = async (product:any) => {
+    // if (user.apes <= 0) {
+    //   return alert("You need to purchase OGX");
+    // }
+    // let price = Number(product.price);
+    // let minusPrice = user.apes - price;
+    // const response = await supabase
+    //   .from("user")
+    //   .update({ apes: minusPrice })
+    //   .eq("id", user.id);
+    // setUser({ ...user, apes: minusPrice });
+    // handleSpinClick();
   };
 
   if (loading) {
@@ -86,7 +86,10 @@ export default function Details() {
   if (error) {
     return (
       <div className="min-h-screen bg-orange-500">
-        <TopNav />
+       <div className="nav-top z-50 relative">
+            <TopNav />
+
+            </div>
         <div className="flex items-center justify-center h-[calc(100vh-64px)] text-white text-xl">
           Error loading data...
         </div>
@@ -94,26 +97,29 @@ export default function Details() {
     );
   }
 
-  const newProducts = products?.data?.map((i) => {
-    return {
-      option: i.name,
-      image: {
-        uri: i.image,
-        offsetX: 0,
-        offsetY: 230,
-        sizeMultiplier: 0.8,
-      },
-      percentage: i?.percentage,
-    };
-  });
+  // const newProducts = products?.data?.map((i) => {
+  //   return {
+  //     option: i.name,
+  //     image: {
+  //       uri: i.image,
+  //       offsetX: 0,
+  //       offsetY: 230,
+  //       sizeMultiplier: 0.8,
+  //     },
+  //     percentage: i?.percentage,
+  //   };
+  // });
 
   return (
     <div className="overflow-hidden bg-orange-500 text-white">
-      <TopNav />
+      <div className="nav-top z-50 relative">
+                <TopNav />
+    
+                </div>
 
       <div className="flex flex-col gap-2">
         <div className="flex justify-center items-center">
-          <WheelSpinner />
+          <WheelSpinner data={products?.data} item={newData} user={user} setUser={setUser}/>
         </div>
 
         <div className="flex justify-center items-center">

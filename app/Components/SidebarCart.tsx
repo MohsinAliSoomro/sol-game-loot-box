@@ -94,7 +94,7 @@ export default function SidebarCart() {
                                 <div className="flex-1 overflow-y-auto pr-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-white/10 [&::-webkit-scrollbar-thumb]:bg-white/40 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-white/50">
                                     <div className="px-4 py-2">
                                         <div className="space-y-4">
-                                            {data?.data?.map((item, index) => (
+                                            {/* {data?.data?.map((item, index) => (
                                                 <div key={index} className="flex items-center bg-white/10 rounded-lg p-4">
                                                     <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg">
                                                         <img
@@ -113,7 +113,7 @@ export default function SidebarCart() {
                                                         <p className="text-white/60 text-sm">QTY {1}</p>
                                                     </div>
                                                 </div>
-                                            ))}
+                                            ))} */}
                                         </div>
                                     </div>
                                 </div>

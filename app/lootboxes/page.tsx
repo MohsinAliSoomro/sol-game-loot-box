@@ -108,7 +108,10 @@ export default function LookBox() {
 
     return (
         <div className="sm:ml-64 overflow-hidden">
+            <div className="nav-top z-50 relative">
             <TopNav />
+
+            </div>
 
             <div className="flex items-center flex-col justify-center flex-wrap gap-4 relative">
                 <div className="w-full h-[80vh] flex items-center justify-center">

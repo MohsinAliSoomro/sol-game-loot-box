@@ -25,12 +25,12 @@ interface Transaction {
     price: string;
 }
 
-const getProducts = async (): Promise<{ data: Product[]; error: any }> => {
+const getProducts = async () => {
     const response = await supabase.from("products").select();
     return response;
 };
 
-const getLatestTransaction = async (): Promise<{ data: Transaction[]; error: any }> => {
+const getLatestTransaction = async () => {
     const response = await supabase.from("prizeWin").select("*").order("created_at", { ascending: false }).limit(8);
     return response;
 };
@@ -39,7 +39,7 @@ export default function Home() {
     const { data, loading, error } = useRequest(getProducts);
     const { data: transactions, loading: transactionLoading, error: transactionError } = useRequest(getLatestTransaction);
     const navigate = useRouter();
-    const [showSlider, setShowSlider] = useState(transactions?.data?.length > 0);
+    // const [showSlider, setShowSlider] = useState(transactions?.data?.length > 0);
 
     // Check for loading and error states
     if (loading || transactionLoading) {
@@ -49,7 +49,10 @@ export default function Home() {
     if (error || transactionError) {
         return (
             <div className="min-h-screen bg-orange-500">
-                <TopNav />
+                <div className="nav-top z-50 relative">
+            <TopNav />
+
+            </div>
                 <div className="flex items-center justify-center h-[calc(100vh-64px)] text-white text-xl">
                     Error loading data...
                 </div>
@@ -59,7 +62,10 @@ export default function Home() {
 
     return (
         <div className="overflow-hidden bg-orange-500 text-white">
+            <div className="nav-top z-50 relative">
             <TopNav />
+
+            </div>
             <ImageSlider />
 
             {/* Live Draw Section */}
