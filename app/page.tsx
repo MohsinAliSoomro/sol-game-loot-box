@@ -106,7 +106,7 @@ export default function Home() {
                     {data?.data?.map((loot, index) => (
                         <div
                             key={index}
-                            className="w-full bg-white border border-orange-300 p-3 py-4 rounded-lg shadow-md text-orange-800 flex flex-col items-center relative
+                            className="w-full bg-white border border-orange-300 p-3 py-4 rounded-lg shadow-md text-orange-800 flex flex-col items-center justify-center relative
                             transition-all duration-300 hover:shadow-lg group"
                         >
                             <div className="relative w-24 h-24 mb-3 group-hover:scale-105 transition-transform duration-300">
@@ -123,11 +123,22 @@ export default function Home() {
                                 {loot.name}
                             </span>
 
-                            <div className="font-bold text-center mx-auto text-lg mb-2 text-orange-800 flex justify-center items-center space-x-1 w-full">
-                                <span className="mt-1 bg-gradient-to-r from-orange-500 to-orange-700 bg-clip-text text-transparent">
+                           
+
+                          <div className="button ">
+                          <button
+                                onClick={() => navigate.push("/lootboxes/" + loot.id)}
+                                className=" sm:w-44 text-sm rounded-full  absolute -bottom-3 left-7 right-6 shadow-lg
+                              bg-gradient-to-r from-orange-500 to-orange-700 border border-orange-300 text-white
+                              font-medium hover:from-orange-600 hover:to-orange-800 transition-all
+                              active:scale-95 flex justify-around items-center"
+                            >
+                                <div className="font-bold text-center mx-auto text-sm  text-white flex justify-center items-center space-x-1 w-full">
+                                <p className="me-2">Open</p>
+                                <span className="mt-1 bg-white bg-clip-text text-transparent">
                                     {loot.price}
                                 </span>
-                                <div className="relative w-6 h-6">
+                                <div className="relative w-3 h-3">
                                     <Image
                                         src={"/logo.png"}
                                         fill
@@ -136,16 +147,8 @@ export default function Home() {
                                     />
                                 </div>
                             </div>
-
-                            <button
-                                onClick={() => navigate.push("/lootboxes/" + loot.id)}
-                                className="text-sm rounded-full px-3 py-1 absolute -bottom-3 left-3 right-3 shadow-lg
-                              bg-gradient-to-r from-orange-500 to-orange-700 border border-orange-300 text-white
-                              font-medium hover:from-orange-600 hover:to-orange-800 transition-all
-                              active:scale-95"
-                            >
-                                Open
                             </button>
+                          </div>
                         </div>
                     ))}
                 </div>

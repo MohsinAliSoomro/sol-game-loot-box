@@ -86,8 +86,8 @@ export default function Page() {
     );
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-8">
-            <div className="bg-[#121212]/70 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-[#f74e14]/20 overflow-hidden">
+        <div className="max-w-7xl mx-auto px-4 ">
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-[#f74e14]/20 overflow-hidden">
                 <div className="flex flex-col md:flex-row gap-8">
                     {/* Left Section - Image */}
                     <div className="w-full md:w-4/12">
@@ -103,20 +103,20 @@ export default function Page() {
                             />
                         </div>
                     </div>
-                    
+
                     {/* Right Section - Content */}
-                    <div className="w-full md:w-8/12">
-                        <h1 className="text-3xl font-bold bg-gradient-to-r from-[#f74e14] to-[#ff914d] bg-clip-text text-transparent mb-4">
+                    <div className="w-full md:w-8/12 ">
+                        <h1 className="text-3xl font-bold bg-gradient-to-r from-[#f74e14] to-[#ff914d] bg-clip-text text-transparent mb-4 flex justify-center ">
                             {
                                 //@ts-ignore
                                 data?.data[0]?.title
                             }
                         </h1>
-                        
+
                         {/* Description Box */}
-                        <div className="p-6 border border-[#f74e14]/20 bg-[#1e1e1e] rounded-xl my-6">
+                        <div className="p-6 border border-[#f74e14]/20 bg-white  rounded-xl my-6 flex justify-center flex-col items-center">
                             <h2 className="text-xl font-semibold mb-2 text-[#ff914d]">Description</h2>
-                            <p className="text-gray-300">
+                            <p className="text-black">
                                 {
                                     //@ts-ignore
                                     data?.data[0]?.description
@@ -126,31 +126,31 @@ export default function Page() {
 
                         {/* Countdown and Tickets Grid */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                            <div className="bg-[#1e1e1e] border border-[#f74e14]/20 rounded-xl p-6 flex flex-col items-center justify-center">
+                            <div className="bg-white border border-[#f74e14]/20 rounded-xl p-6 flex flex-col items-center justify-center">
                                 <p className="text-[#ff914d] mb-2">Time Remaining</p>
                                 <Countdown
                                     //@ts-ignore
                                     date={new Date(data?.data[0]?.endTime)}
-                                    className="text-2xl font-bold text-white"
+                                    className="text-2xl font-bold text-black"
                                     renderer={props => (
                                         <div className="flex gap-2">
                                             <div className="flex flex-col items-center">
-                                                <span className="text-xl md:text-2xl text-white">{props.days}</span>
+                                                <span className="text-xl md:text-2xl text-black">{props.days}</span>
                                                 <span className="text-xs text-[#ff914d]">DAYS</span>
                                             </div>
                                             <span className="text-xl md:text-2xl text-[#f74e14]">:</span>
                                             <div className="flex flex-col items-center">
-                                                <span className="text-xl md:text-2xl text-white">{props.hours}</span>
+                                                <span className="text-xl md:text-2xl text-black">{props.hours}</span>
                                                 <span className="text-xs text-[#ff914d]">HRS</span>
                                             </div>
                                             <span className="text-xl md:text-2xl text-[#f74e14]">:</span>
                                             <div className="flex flex-col items-center">
-                                                <span className="text-xl md:text-2xl text-white">{props.minutes}</span>
+                                                <span className="text-xl md:text-2xl text-black">{props.minutes}</span>
                                                 <span className="text-xs text-[#ff914d]">MINS</span>
                                             </div>
                                             <span className="text-xl md:text-2xl text-[#f74e14]">:</span>
                                             <div className="flex flex-col items-center">
-                                                <span className="text-xl md:text-2xl text-white">{props.seconds}</span>
+                                                <span className="text-xl md:text-2xl text-black">{props.seconds}</span>
                                                 <span className="text-xs text-[#ff914d]">SECS</span>
                                             </div>
                                         </div>
@@ -158,12 +158,12 @@ export default function Page() {
                                 />
                             </div>
 
-                            <div className="bg-[#1e1e1e] border border-[#f74e14]/20 rounded-xl p-6 flex flex-col items-center justify-center">
+                            <div className="bg-white border border-[#f74e14]/20 rounded-xl p-6 flex flex-col items-center justify-center">
                                 <p className="text-[#ff914d] mb-2">Tickets Sold</p>
-                                <span className="text-3xl md:text-4xl font-bold text-white">{data?.count}</span>
+                                <span className="text-3xl md:text-4xl font-bold text-black">{data?.count}</span>
                             </div>
                         </div>
-                        
+
                         {/* Purchase Form */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div className="relative">
@@ -175,21 +175,21 @@ export default function Page() {
                                         //@ts-ignore
                                         `${data?.data[0]?.price} OGX`
                                     }
-                                    className="w-full h-12 bg-[#1e1e1e] border border-[#f74e14]/20 rounded-lg pl-16 pr-4 text-white"
+                                    className="w-full h-12 bg-white border border-[#f74e14]/20 rounded-lg pl-16 pr-4 text-black text-right placeholder:text-right placeholder:text-black"
                                 />
                             </div>
                             <div className="relative">
                                 <input
                                     type="number"
                                     placeholder="Enter amount"
-                                    className="w-full h-12 bg-[#1e1e1e] border border-[#f74e14]/20 rounded-lg px-4 text-white focus:border-[#f74e14] transition-all duration-200"
+                                    className="w-full h-12 bg-white border border-[#f74e14]/20 rounded-lg px-4 text-black focus:border-[#f74e14] transition-all duration-200 placeholder:text-black"
                                     value={value}
                                     onChange={(e) => setValue(e.target.value)}
                                 />
                             </div>
                             <button
                                 onClick={() => handlePurchase()}
-                                className="h-12 bg-gradient-to-r from-[#f74e14] to-[#ff914d] rounded-lg text-white font-medium hover:opacity-90 transition-all duration-200">
+                                className="h-12 bg-gradient-to-r from-[#f74e14] to-[#ff914d] rounded-lg text-black font-medium hover:opacity-90 transition-all duration-200">
                                 Purchase Tickets
                             </button>
                         </div>

@@ -247,7 +247,7 @@ export default function PurchaseModal() {
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-sm font-medium text-orange-600 mb-2">Withdraw OGX</label>
+                                                <label className="block text-sm font-medium text-orange-600 mb-2">Deposite OGX</label>
                                                 <input
                                                     value={form.amount}
                                                     onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })}
@@ -310,7 +310,7 @@ export default function PurchaseModal() {
                                                 {data?.data?.length === 0 ? (
                                                     <tr>
                                                         <td colSpan={3} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
-                                                            No withdraw history found
+                                                            No deposit history found
                                                         </td>
                                                     </tr>
                                                 ) : (

@@ -72,10 +72,8 @@ export default function Leaderboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12  min-h-screen">
             {/* Header and Time Filters */}
             <div className="text-center mb-8">
-                <h1 className="text-3xl md:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#f74e14] to-[#ff9a3c] mb-6">
-                    Leaderboard
-                </h1>
-                <div className="flex flex-wrap justify-center gap-3 mb-8">
+              
+                <div className="flex flex-wrap justify-center gap-3 mb-28">
                     {timeFilterButtons.map((button) => (
                         <button
                             key={button.id}
@@ -85,7 +83,8 @@ export default function Leaderboard() {
                                     timeFilter === button.id 
                                     ? 'bg-[#f74e14] text-white shadow-lg' 
                                     : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                                }`}
+
+                                } w-56`}
                         >
                             {button.label}
                         </button>
@@ -108,7 +107,7 @@ export default function Leaderboard() {
                             </div>
                             <h3 className="text-lg font-bold text-white mb-2">{mockData[1].username}</h3>
                             <div className="bg-[#00FFD5] rounded-full px-4 py-1 w-full text-center shadow-md">
-                                <span className="font-medium text-xs text-gray-900">Wagered: </span>
+                                <span className="font-medium text-xs text-gray-900">Spent </span>
                                 <span className="font-bold text-gray-900">{formatNumber(mockData[1].wageredCredits)}</span>
                             </div>
                         </div>
@@ -128,7 +127,7 @@ export default function Leaderboard() {
                             </div>
                             <h3 className="text-xl font-bold text-white mb-2">{mockData[0].username}</h3>
                             <div className="bg-[#00FFD5] rounded-full px-4 py-1 w-full text-center shadow-md">
-                                <span className="font-medium text-xs text-gray-900">Wagered: </span>
+                                <span className="font-medium text-xs text-gray-900">Spent </span>
                                 <span className="font-bold text-gray-900">{formatNumber(mockData[0].wageredCredits)}</span>
                             </div>
                         </div>
@@ -148,7 +147,7 @@ export default function Leaderboard() {
                             </div>
                             <h3 className="text-lg font-bold text-white mb-2">{mockData[2].username}</h3>
                             <div className="bg-[#00FFD5] rounded-full px-4 py-1 w-full text-center shadow-md">
-                                <span className="font-medium text-xs text-gray-900">Wagered: </span>
+                                <span className="font-medium text-xs text-gray-900">Spent </span>
                                 <span className="font-bold text-gray-900">{formatNumber(mockData[2].wageredCredits)}</span>
                             </div>
                         </div>
@@ -177,7 +176,7 @@ export default function Leaderboard() {
                                 <span className="font-bold text-white">{user.username}</span>
                             </div>
                             <div className="bg-gray-700 rounded-full px-4 py-1">
-                                <span className="text-gray-300 text-sm">Wagered: </span>
+                                <span className="text-gray-300 text-sm">Spent </span>
                                 <span className="text-white font-bold">{formatNumber(user.wageredCredits)}</span>
                             </div>
                         </div>
