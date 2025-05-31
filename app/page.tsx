@@ -5,7 +5,6 @@ import Model from "./Components/Model";
 import { useRouter } from "next/navigation";
 import { useRequest } from "ahooks";
 import { supabase } from "@/service/supabase";
-import { useRef, useState } from "react";
 import ImageSlider from "./Components/ImageSlider";
 import Loader from "./Components/Loader";
 
