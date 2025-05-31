@@ -23,29 +23,30 @@ export default function Details() {
   const [openModal, setOpenModal] = useState(false);
   const pathname = useParams();
 
-  const [spinning, setSpinning] = useState(false);
-  const [rotation, setRotation] = useState(0);
-  const [winner, setWinner] = useState(null);
+  // const [spinning, setSpinning] = useState(false);
+  // const [rotation, setRotation] = useState(0);
+  // const [winner, setWinner] = useState(null);
 
-  const totalSlices = 8;
-  const sliceAngle = 360 / totalSlices;
-  const spinDuration = 5; // Spin for 5 seconds
+  // const totalSlices = 8;
+  // const sliceAngle = 360 / totalSlices;
+  // const spinDuration = 5; // Spin for 5 seconds
 
-  const spinWheel = () => {
-    if (spinning) return;
-    setSpinning(true);
-    setWinner(null);
+  // const spinWheel = () => {
+  //   if (spinning) return;
+  //   setSpinning(true);
+  //   setWinner(null);
 
-    const randomIndex = Math.floor(Math.random() * totalSlices); // Pick a winning slice
-    const randomAngle = 360 - randomIndex * sliceAngle - sliceAngle / 2; // Stop at the winning slice
-    const totalRotation = 360 * 5 + randomAngle; // Ensure multiple spins before stopping
+  //   const randomIndex = Math.floor(Math.random() * totalSlices); // Pick a winning slice
+  //   const randomAngle = 360 - randomIndex * sliceAngle - sliceAngle / 2; // Stop at the winning slice
+  //   const totalRotation = 360 * 5 + randomAngle; // Ensure multiple spins before stopping
 
-    setRotation(totalRotation);
-    setTimeout(() => {
-      setSpinning(false);
-      setWinner(newProducts[randomIndex]);
-    }, spinDuration * 1000);
-  };
+  //   setRotation(totalRotation);
+  //   setTimeout(() => {
+  //     setSpinning(false);
+
+  //     setWinner(newProducts[randomIndex]);
+  //   }, spinDuration * 1000);
+  // };
 
   const newData = useMemo(() => {
     return products?.data?.find((i) => i.id === Number(pathname.slug));
@@ -53,6 +54,7 @@ export default function Details() {
 
   const handleSpinClick = () => {
     if (!mustSpin) {
+      //@ts-ignore
       const newPrizeNumber = Math.floor(Math.random() * products?.data?.length || 0);
       setPrizeNumber(newPrizeNumber);
       setMustSpin(true);
@@ -63,7 +65,7 @@ export default function Details() {
     setOpenModal(!openModal);
   };
 
-  const sendSolanaTokens = async (product) => {
+  const sendSolanaTokens = async (product:any) => {
     if (user.apes <= 0) {
       return alert("You need to purchase OGX");
     }
