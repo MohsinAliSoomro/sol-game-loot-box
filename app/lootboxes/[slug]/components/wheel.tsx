@@ -157,7 +157,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
 
             {/* Main Wheel - Single SVG with all segments */}
             <svg
-              ref={wheelRef}
+              ref={wheelRef as any}
               className="absolute -bottom-[47.5vw] sm:-bottom-[42.5vw] md:-bottom-[37.5vw] left-1/2 w-[125vw] sm:w-[115vw] md:w-[105vw] h-[125vw] sm:h-[115vw] md:h-[105vw] max-w-[1100px] max-h-[1100px] rounded-full"
               style={{
                 transform: `translate(-50%, 25%) rotate(${rotation}deg)`,
