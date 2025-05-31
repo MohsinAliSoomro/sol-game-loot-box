@@ -2,8 +2,6 @@
 import LootModal from "@/app/Components/LootModal";
 import TopNav from "@/app/Components/TopNav";
 import { useUserState } from "@/state/useUserState";
-import { RefreshCcw } from "lucide-react";
-import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import "react-spin-game/dist/index.css";
 import { useParams } from "next/navigation";
@@ -12,9 +10,6 @@ import { useRequest } from "ahooks";
 import Image from "next/image";
 import WheelSpinner from "./components/wheel";
 import Loader from "../../Components/Loader";
-import Box from '@mui/joy/Box';
-import Badge from '@mui/joy/Badge';
-import JellyWheel from './components/JellyWheel'
 const getProducts = async () => {
   const response = await supabase.from("products").select();
   return response;
