@@ -23,12 +23,13 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
         <html lang="en">
-            <body className={cn("min-h-screen bg-background antialiased", myFont.className)}>
+            <body className={cn("min-h-screen bg-orange-500 antialiased", myFont.className)}>
                 <ThemeProvider
                     attribute="class"
-                    defaultTheme="system"
-                    enableSystem
-                    disableTransitionOnChange>
+                    // defaultTheme="system"
+                    // enableSystem
+                    // disableTransitionOnChange
+                    >
                     {children}
                     <Footer />
                     <SidebarCart />

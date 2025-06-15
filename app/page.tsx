@@ -5,7 +5,6 @@ import Model from "./Components/Model";
 import { useRouter } from "next/navigation";
 import { useRequest } from "ahooks";
 import { supabase } from "@/service/supabase";
-import { useRef, useState } from "react";
 import ImageSlider from "./Components/ImageSlider";
 import Loader from "./Components/Loader";
 
@@ -50,9 +49,9 @@ export default function Home() {
         return (
             <div className="min-h-screen bg-orange-500">
                 <div className="nav-top z-50 relative">
-            <TopNav />
+                    <TopNav />
 
-            </div>
+                </div>
                 <div className="flex items-center justify-center h-[calc(100vh-64px)] text-white text-xl">
                     Error loading data...
                 </div>
@@ -63,7 +62,7 @@ export default function Home() {
     return (
         <div className="overflow-hidden bg-orange-500 text-white">
             <div className="nav-top z-50 relative">
-            <TopNav />
+                <TopNav />
 
             </div>
             <ImageSlider />
@@ -84,8 +83,10 @@ export default function Home() {
                                     <Image
                                         src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${loot.image}`}
                                         alt={loot?.name}
-                                        fill
+                                        
                                         className="object-contain p-4"
+                                        width={300}
+                                        height={300}
                                     />
                                     <span className="font-bold text-xs text-center mx-auto text-orange-700 mt-1 truncate w-full">
                                         {loot?.name}
@@ -102,20 +103,22 @@ export default function Home() {
                 <p className="text-3xl font-bold w-full text-center">Feature OGX Lootbox</p>
             </div>
             <div className="w-full mb-40">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 px-4">
+                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 px-4">
                     {data?.data?.map((loot, index) => (
                         <div
                             key={index}
-                            className="w-full bg-white border border-orange-300 p-3 py-4 rounded-lg shadow-md text-orange-800 flex flex-col items-center relative
+                            className="w-full bg-white border border-orange-300 p-3 py-4 rounded-lg shadow-md text-orange-800 flex flex-col items-center justify-center relative
                             transition-all duration-300 hover:shadow-lg group"
                         >
                             <div className="relative w-24 h-24 mb-3 group-hover:scale-105 transition-transform duration-300">
                                 <Image
                                     src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${loot.image}`}
                                     alt={loot.name}
-                                    fill
+                                    
                                     className="object-contain drop-shadow-md"
                                     sizes="(max-width: 768px) 100vw, 200px"
+                                    width={300}
+                                    height={300}
                                 />
                             </div>
 
@@ -123,29 +126,33 @@ export default function Home() {
                                 {loot.name}
                             </span>
 
-                            <div className="font-bold text-center mx-auto text-lg mb-2 text-orange-800 flex justify-center items-center space-x-1 w-full">
-                                <span className="mt-1 bg-gradient-to-r from-orange-500 to-orange-700 bg-clip-text text-transparent">
-                                    {loot.price}
-                                </span>
-                                <div className="relative w-6 h-6">
-                                    <Image
-                                        src={"/logo.png"}
-                                        fill
-                                        alt="ogx"
-                                        className="rounded-full object-cover ring-2 ring-orange-300"
-                                    />
-                                </div>
-                            </div>
 
-                            <button
-                                onClick={() => navigate.push("/lootboxes/" + loot.id)}
-                                className="text-sm rounded-full px-3 py-1 absolute -bottom-3 left-3 right-3 shadow-lg
+
+                            <div className="button ">
+                                <button
+                                    onClick={() => navigate.push("/lootboxes/" + loot.id)}
+                                    className=" sm:w-44 text-sm rounded-full  absolute -bottom-3 left-7 right-6 shadow-lg
                               bg-gradient-to-r from-orange-500 to-orange-700 border border-orange-300 text-white
                               font-medium hover:from-orange-600 hover:to-orange-800 transition-all
-                              active:scale-95"
-                            >
-                                Open
-                            </button>
+                              active:scale-95 flex justify-around items-center"
+                                >
+                                    <div className="font-bold text-center mx-auto text-sm  text-white flex justify-center items-center space-x-1 w-full">
+                                        <p className="me-2">Open</p>
+                                        <span className="mt-1 bg-white bg-clip-text text-transparent">
+                                            {loot.price}
+                                        </span>
+                                        <div className="relative w-3 h-3">
+                                            <Image
+                                                src={"/logo.png"}
+                                                alt="ogx"
+                                                className="rounded-full object-cover ring-2 ring-orange-300"
+                                                width={300}
+                                                height={300}
+                                            />
+                                        </div>
+                                    </div>
+                                </button>
+                            </div>
                         </div>
                     ))}
                 </div>

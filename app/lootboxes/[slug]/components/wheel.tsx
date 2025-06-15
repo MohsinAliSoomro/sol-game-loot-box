@@ -1,12 +1,19 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Check, RefreshCcw, Trophy } from "lucide-react";
 import img from "../../../../public/lv.jpg";
+import rewardImg1 from "../../../../public/reward1.jpeg";
+import rewardImg2 from "../../../../public/reward (2).jpeg";
+import rewardImg3 from "../../../../public/reward (3).jpeg";
+import rewardImg4 from "../../../../public/reward (4).jpeg";
+import rewardImg5 from "../../../../public/reward (5).jpeg";
+import rewardImg6 from "../../../../public/reward (6).jpeg";
+import rewardImg7 from "../../../../public/reward (7).jpeg";
 import { supabase } from "@/service/supabase";
+import Image from "next/image";
+
 interface WheelItem {
   id: number;
   name: string;
-  image: string;
+  image: any;
   color: string;
   textColor: string;
   percentage: number;
@@ -14,7 +21,20 @@ interface WheelItem {
 }
 
 const WheelSpinner = ({ data, item, user, setUser }: any) => {
-
+  const [items] = useState<WheelItem[]>([
+    { id: 1, name: "10% Off", image: rewardImg1, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
+    { id: 2, name: "Free Item", image: rewardImg2, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
+    { id: 3, name: "25% Off", image: rewardImg3, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
+    { id: 4, name: "Try Again", image: rewardImg4, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
+    { id: 5, name: "50% Off", image: rewardImg5, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
+    { id: 6, name: "Gift Card", image: rewardImg6, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
+    { id: 7, name: "5% Off", image: rewardImg7, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
+    { id: 8, name: "Free Shipping", image: rewardImg2, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
+    { id: 9, name: "Free Shipping", image: rewardImg3, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
+    { id: 10, name: "Free Shipping", image: rewardImg4, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
+    { id: 11, name: "Free Shipping", image: rewardImg6, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
+    { id: 12, name: "Free Shipping", image: rewardImg2, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
+  ]);
 
   const [rotation, setRotation] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
@@ -22,22 +42,28 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
   const [showWinnerDialog, setShowWinnerDialog] = useState(false);
   const wheelRef = useRef<HTMLDivElement>(null);
 
-  const totalProbability = data.reduce(
-    (sum: any, item: any) => sum + item.percentage,
-    0
-  );
-
-  const getSliceAngle = (probability: number) =>
-    (probability / totalProbability) * 360;
+  const totalProbability = items.reduce((sum, item) => sum + item.percentage, 0);
+  const segmentCount = items.length;
+  const segmentAngle = 360 / segmentCount;
+  const outerRadius = 50;
+  const innerRadius = 25;
 
   const spinWheel = async () => {
     if (user.apes <= 0) {
-      return alert("You need to purchae apes");
+      return alert("You need to purchase apes");
     }
+    
     let price = Number(item.price);
     let minusPrice = user.apes - price;
-    await supabase.from("user").update({ apes: minusPrice }).eq("id", user.id);
-    setUser({ ...user, apes: minusPrice });
+    
+    try {
+      await supabase.from("user").update({ apes: minusPrice }).eq("id", user.id);
+      setUser({ ...user, apes: minusPrice });
+    } catch (error) {
+      console.error("Error updating user balance:", error);
+      return;
+    }
+
     if (isSpinning) return;
 
     setIsSpinning(true);
@@ -46,9 +72,9 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
 
     const random = Math.random() * totalProbability;
     let cumulativeProbability = 0;
-    let selectedItem = data[0];
+    let selectedItem = items[0];
 
-    for (const item of data) {
+    for (const item of items) {
       cumulativeProbability += item.percentage;
       if (random <= cumulativeProbability) {
         selectedItem = item;
@@ -56,14 +82,14 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       }
     }
 
-    let itemIndex = data.findIndex((item: any) => item.id === selectedItem.id);
+    let itemIndex = items.findIndex((item) => item.id === selectedItem.id);
     let itemAngleSum = 0;
 
     for (let i = 0; i < itemIndex; i++) {
-      itemAngleSum += getSliceAngle(data[i].percentage);
+      itemAngleSum += segmentAngle;
     }
 
-    itemAngleSum += getSliceAngle(selectedItem.percentage) / 2;
+    itemAngleSum += segmentAngle / 2;
 
     const spinAngle = 4320 + (360 - itemAngleSum);
     const newRotation = rotation + spinAngle;
@@ -74,20 +100,28 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       setWinner(selectedItem);
       setShowWinnerDialog(true);
       setIsSpinning(false);
-    }, 5000); // Reduced spin time for testing
+    }, 5000);
   };
 
   useEffect(() => {
     async function addResult() {
-      let prices = Number(winner?.price);
-      let plusPrice = user.apes - prices;
-      await supabase.from("user").update({ apes: plusPrice }).eq("id", user.id);
-      setUser({ ...user, apes: plusPrice });
+      if (!winner) return;
+      
+      let prices = Number(winner.price);
+      let plusPrice = user.apes + prices;
+      
+      try {
+        await supabase.from("user").update({ apes: plusPrice }).eq("id", user.id);
+        setUser({ ...user, apes: plusPrice });
+      } catch (error) {
+        console.error("Error updating user balance with winnings:", error);
+      }
     }
+    
     if (winner) {
       addResult();
     }
-  }, [winner]);
+  });
 
   const resetWheel = () => {
     setShowWinnerDialog(false);
@@ -95,164 +129,111 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
   };
 
   return (
-    <div className="w-full bg-[#ff914d]/10  py-4 sm:py-8">
+    <div className="w-full bg-[#ff914d]/10 ">
       <div className="w-full">
-        <div
-          className="flex flex-col items-center justify-center"
-          style={{ height: "58vh" }}
-        >
+        <div className="flex flex-col items-center justify-center"
+        //  style={{ height: '58vh' }}
+         >
           {/* Wheel Container */}
-          <div className="relative w-full h-[47.5vw] sm:h-[42.5vw] md:h-[37.5vw] max-w-[1265px] max-h-[450px] mb-4 sm:mb-8 overflow-hidden">
+          <div className="relative w-full flex justify-center overflow-hidden h-[30vw] " >
             {/* Background Pattern */}
             <div
-              className="absolute inset-0 overflow-hidden"
+              className="absolute inset-0 z-0"
               style={{
                 backgroundImage: `url(${img.src})`,
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-                backgroundRepeat: "no-repeat",
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
               }}
             />
 
             {/* Pointer */}
-            <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 z-30">
+            <div className="absolute top-0 left-1/2 transform -translate-x-1/2 z-30">
               <div
-                className="w-4 h-6 sm:w-6 sm:h-10 bg-[#f74e14]"
+                className="w-4 h-6 sm:w-6 sm:h-8 md:w-8 md:h-10 lg:w-10 lg:h-12 bg-[#f74e14]"
                 style={{
-                  clipPath: "polygon(0 0, 100% 0, 50% 100%)",
-                  filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.2))",
+                  clipPath: 'polygon(0 100%, 100% 100%, 50% 0)',
+                  // filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
+                  transform: 'rotate(180deg)'
                 }}
               />
             </div>
 
-            {/* Main Wheel */}
-            <div
-              ref={wheelRef}
-              className="absolute -bottom-[47.5vw] sm:-bottom-[42.5vw] md:-bottom-[37.5vw] left-1/2 w-[125vw] sm:w-[115vw] md:w-[105vw] h-[125vw] sm:h-[115vw] md:h-[105vw] max-w-[1100px] max-h-[1100px] rounded-full"
-              style={{
-                transform: `translate(-50%, 25%) rotate(${rotation}deg)`,
-                transition: isSpinning
-                  ? "transform 5s cubic-bezier(0.1, 0.2, 0.1, 1)"
-                  : "none",
-                boxShadow: "0 0 40px rgba(247, 78, 20, 0.2)",
-              }}
-            >
-              {/* Center Circle */}
-              <div className="absolute w-1/3 h-1/3 bg-white rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 border-4 border-[#f74e14]" />
-
-              {/* Wheel Segments */}
-              {data.map((item: any, index: number) => {
-                let startAngle = 0;
-                for (let i = 0; i < index; i++) {
-                  startAngle += getSliceAngle(data[i].percentage);
-                }
-
-                const angle = getSliceAngle(item.percentage);
-                const endAngle = startAngle + angle;
-
-                const startRad = (startAngle * Math.PI) / 180;
-                const endRad = (endAngle * Math.PI) / 180;
-
-                const outerX1 = 50 + 50 * Math.cos(startRad);
-                const outerY1 = 50 + 50 * Math.sin(startRad);
-                const outerX2 = 50 + 50 * Math.cos(endRad);
-                const outerY2 = 50 + 50 * Math.sin(endRad);
-
-                const innerRadius = 25;
-                const innerX1 = 50 + innerRadius * Math.cos(endRad);
-                const innerY1 = 50 + innerRadius * Math.sin(endRad);
-                const innerX2 = 50 + innerRadius * Math.cos(startRad);
-                const innerY2 = 50 + innerRadius * Math.sin(startRad);
-
-                const largeArcFlag = angle > 180 ? 1 : 0;
-
-                const pathData = `
-                  M${outerX1},${outerY1}
-                  A50,50 0 ${largeArcFlag},1 ${outerX2},${outerY2}
-                  L${innerX1},${innerY1}
-                  A${innerRadius},${innerRadius} 0 ${largeArcFlag},0 ${innerX2},${innerY2}
-                  Z
-                `;
-
-                const labelAngle = startAngle + angle / 2;
-                const labelRad = (labelAngle * Math.PI) / 180;
-                const labelDistance = 37;
-                const labelX = 50 + labelDistance * Math.cos(labelRad);
-                const labelY = 50 + labelDistance * Math.sin(labelRad);
-
-                return (
-                  <div key={item.id} className="absolute inset-0">
-                    <svg width="100%" height="100%" viewBox="0 0 100 100">
+            {/* Main Wheel - Single SVG with all segments */}
+            <div className="relative left-1/2 bottom-[14vw] transform -translate-x-1/2 translate-y-1/2">
+              <svg
+                ref={wheelRef as any}
+                className="w-[120vw] h-[90vw] max-w-[100vw] z-10"
+                style={{
+                  transform: `rotate(${rotation}deg)` ,
+                  transition: isSpinning
+                    ? "transform 5s cubic-bezier(0.1, 0.2, 0.1, 1)"
+                    : "none",
+                  // boxShadow: "0 0 40px rgba(247, 78, 20, 0.2)",
+                }}
+                viewBox="0 0 100 100"
+              >
+                {Array.from({ length: segmentCount }).map((_, i) => {
+                  const startAngle = i * segmentAngle;
+                  const endAngle = startAngle + segmentAngle;
+                  const largeArcFlag = segmentAngle > 180 ? 1 : 0;
+                  const startRad = (startAngle * Math.PI) / 180;
+                  const endRad = (endAngle * Math.PI) / 180;
+                  const outerX1 = 50 + outerRadius * Math.cos(startRad);
+                  const outerY1 = 50 + outerRadius * Math.sin(startRad);
+                  const outerX2 = 50 + outerRadius * Math.cos(endRad);
+                  const outerY2 = 50 + outerRadius * Math.sin(endRad);
+                  const innerX1 = 50 + innerRadius * Math.cos(endRad);
+                  const innerY1 = 50 + innerRadius * Math.sin(endRad);
+                  const innerX2 = 50 + innerRadius * Math.cos(startRad);
+                  const innerY2 = 50 + innerRadius * Math.sin(startRad);
+                  const pathData =
+                    `M${outerX1},${outerY1}` +
+                    ` A${outerRadius},${outerRadius} 0 ${largeArcFlag},1 ${outerX2},${outerY2}` +
+                    ` L${innerX1},${innerY1}` +
+                    ` A${innerRadius},${innerRadius} 0 ${largeArcFlag},0 ${innerX2},${innerY2}` +
+                    ' Z';
+                  // Image position and rotation
+                  const midAngle = startAngle + segmentAngle / 2;
+                  const midRad = (midAngle * Math.PI) / 180;
+                  const imgRadius = 37;
+                  const imgX = 50 + imgRadius * Math.cos(midRad);
+                  const imgY = 50 + imgRadius * Math.sin(midRad);
+                  return (
+                    <g key={i}>
                       <path
                         d={pathData}
                         fill="#ff914d"
                         stroke="#f74e14"
                         strokeWidth="0.5"
+                        // filter="drop-shadow(0px 0px 8px #f74e14)"
                       />
-                    </svg>
-
-                    <div
-                      className="absolute w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 flex items-center justify-center bg-white/80 rounded-lg shadow-lg border border-[#f74e14]/20"
-                      style={{
-                        left: `${labelX}%`,
-                        top: `${labelY}%`,
-                        transform: `translate(-50%, -50%) rotate(${-rotation}deg)`,
-                      }}
-                    >
-                      <img
-                        src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${item.image}`}
-                        alt={item.name}
-                        className="w-12 h-12 sm:w-16 sm:h-16 md:w-20 md:h-20 object-contain p-1 sm:p-2"
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* Divider Lines */}
-              <svg
-                className="absolute inset-0"
-                width="100%"
-                height="100%"
-                viewBox="0 0 0 0"
-              >
-                {data?.map((_: any, index: number) => {
-                  let dividerAngle = 0;
-                  for (let i = 0; i <= index; i++) {
-                    dividerAngle += getSliceAngle(data[i].percentage);
-                  }
-
-                  const dividerRad = (dividerAngle * Math.PI) / 180;
-                  const startX = 50 + 25 * Math.cos(dividerRad);
-                  const startY = 50 + 25 * Math.sin(dividerRad);
-                  const endX = 50 + 50 * Math.cos(dividerRad);
-                  const endY = 50 + 50 * Math.sin(dividerRad);
-
-                  return (
-                    <line
-                      key={`divider-${index}`}
-                      x1={startX}
-                      y1={startY}
-                      x2={endX}
-                      y2={endY}
-                      stroke="#f74e14"
-                      strokeWidth="2"
-                    />
+                      {/* Image at segment midpoint, facing outward */}
+                      {items[i] && (
+                        <image
+                          href={items[i].image.src}
+                          x={imgX - 5}
+                          y={imgY - 5}
+                          width="10"
+                          height="10"
+                          transform={`rotate(${midAngle + 90}, ${imgX}, ${imgY})`}
+                          // style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))' }}
+                        />
+                      )}
+                    </g>
                   );
                 })}
               </svg>
             </div>
           </div>
-
-          {/* Buttons */}
         </div>
-        <div className="flex flex-col items-center gap-3 sm:gap-4">
+        <div className="flex flex-col items-center gap-3 sm:gap-4 mt-10">
           <button
             onClick={spinWheel}
             disabled={isSpinning}
-            className="px-2 sm:px-4  py-3 sm:py-3 bg-[#f74e14] hover:bg-[#e63900] text-white rounded-xl font-bold text-sm sm:text-sm md:text-sm transition-all shadow-lg whitespace-nowrap"
+            className="px-4 sm:px-5 py-2 sm:py-1 bg-[#f74e14] hover:bg-[#e63900] text-white rounded-sm font-bold text-sm sm:text-sm md:text-sm transition-all shadow-lg whitespace-nowrap"
           >
-            SPIN FOR 850 OGX
+            SPIN FOR {item.price} OGX
           </button>
 
           <button className="text-[#f74e14] hover:text-[#e63900] font-bold text-base sm:text-lg">
@@ -265,23 +246,19 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       {showWinnerDialog && winner && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl p-4 sm:p-6 w-[90%] max-w-lg border-2 border-[#f74e14]">
+            <b className="flex justify-end" style={{ color: 'black', cursor: 'pointer' }}>
+              <p onClick={resetWheel}>X</p>
+            </b>
             <div className="text-center">
-              <h2 className="text-xl sm:text-2xl font-bold mb-4 text-[#f74e14]">
-                Congratulations!
-              </h2>
+              <h2 className="text-xl sm:text-2xl font-bold mb-4 text-[#f74e14]">Congratulations!</h2>
               <div className="flex items-center justify-center mb-4 sm:mb-6">
-                <img
-                  src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${winner.image}`}
-                  alt={winner.name}
-                  className="w-24 h-24 sm:w-32 sm:h-32 object-contain"
+                <Image src={winner.image.src} alt={winner.name} className="w-24 h-24 sm:w-32 sm:h-32 object-contain" 
+                width={300}
+                height={300}
                 />
               </div>
-              <p className="text-lg sm:text-xl mb-2 text-gray-800">
-                {winner.name}
-              </p>
-              <p className="text-sm text-gray-600 mb-4 sm:mb-6">
-                Price: {winner.price}
-              </p>
+              <p className="text-lg sm:text-xl mb-2 text-gray-800">{winner.name}</p>
+              <p className="text-sm text-gray-600 mb-4 sm:mb-6">Price: {winner.price}</p>
               <div className="flex justify-center gap-3 sm:gap-4">
                 <button
                   onClick={resetWheel}
@@ -289,8 +266,17 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
                 >
                   Spin Again
                 </button>
-                <button className="px-4 sm:px-6 py-2 bg-[#f74e14] text-white rounded-lg hover:bg-[#e63900] transition-colors text-sm sm:text-base font-medium">
-                  Claim Prize
+                <button
+                  onClick={() => {
+                    const message = winner
+                      ? `I just won ${winner.name} on the OGX Spin Wheel!`
+                      : "Check out this awesome OGX Spin Wheel!";
+                    const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(message)}&url=${encodeURIComponent(window.location.href)}&hashtags=OGX,Giveaway`;
+                    window.open(url, '_blank', 'width=550,height=420');
+                  }}
+                  className="px-4 sm:px-6 py-2 bg-[#f74e14] text-white rounded-lg hover:bg-[#e63900] transition-colors text-sm sm:text-base font-medium"
+                >
+                  Share on X
                 </button>
               </div>
             </div>

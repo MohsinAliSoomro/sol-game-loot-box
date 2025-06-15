@@ -20,6 +20,7 @@ export default function TopNav() {
                 redirectTo: `https://spin2win.vibingapes.com/`,
             },
         });
+        console.log({ data, error });
     };
 
     useEffect(() => {
@@ -60,7 +61,7 @@ export default function TopNav() {
             console.error("Error saving user:", error);
         }
     };
-    //@ts-ignore
+//@ts-ignore
     useEffectOnce(() => {
         const onLoad = async () => {
             try {
@@ -70,6 +71,7 @@ export default function TopNav() {
                 setUser({ ...user, ...userGet.data });
                 setIsLogin(response.data.session ? true : false);
             } catch (error) {
+                console.log({ error });
                 alert("Error connecting to wallet");
             }
         };
@@ -134,7 +136,7 @@ export default function TopNav() {
                         href="/"
                         className="text-base font-bold hover:text-gray-300 transition-colors w-full text-center py-2 md:py-0"
                     >
-                        OGX Lootbox
+                        Spinloot
                     </Link>
                     <Link
                         href="/live-draw"
@@ -153,12 +155,13 @@ export default function TopNav() {
 
             {/* Auth section */}
             <div className={`${mobileMenuOpen ? 'flex' : 'hidden'} md:flex w-full md:w-1/4 flex-col items-center md:items-end mt-4 md:mt-0`}>
-                {isLogin ? (
+                {true ? (
                     <div className="flex flex-col items-center md:items-end gap-4">
                         <div className="flex items-center gap-4 w-full">
-                            <div className="border border-foreground flex-1 flex justify-between gap-6 rounded-lg px-6 md:px-10 pt-4 pb-2 relative h-16">
-                                <span className="absolute -top-2 left-4 md:left-16 bg-background px-2 text-lg">My Account</span>
-                                <div className="text-xs pt-2">
+                            <div className="border border-foreground flex-1 flex justify-between flex-col  rounded-lg px-6 md:px-10   relative  ">
+                                <div className="w-32 relative bottom-3 text-center bg-orange-500  bg-background left-[20%]">My Account</div>
+                              <div className="items flex justify-between">
+                              <div className="text-xs pt-2 pb-2">
                                     <p>OGX</p>
                                     <p className="text-center">{user?.apes || 0}</p>
                                 </div>
@@ -170,57 +173,55 @@ export default function TopNav() {
                                     <p>USD</p>
                                     <p className="text-center">0</p>
                                 </div>
+                              </div>
                             </div>
-                            <button
-                                onClick={logout}
-                                className="Btn h-16 flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white px-4 rounded-lg transition-all duration-300"
-                            >
-                                <div className="sign">
-                                    <svg
-                                        viewBox="0 0 512 512"
-                                        className="w-4 h-4 fill-current"
-                                    >
-                                        <path d="M377.9 105.9L500.7 228.7c7.2 7.2 11.3 17.1 11.3 27.3s-4.1 20.1-11.3 27.3L377.9 406.1c-6.4 6.4-15 9.9-24 9.9c-18.7 0-33.9-15.2-33.9-33.9l0-62.1-128 0c-17.7 0-32-14.3-32-32l0-64c0-17.7 14.3-32 32-32l128 0 0-62.1c0-18.7 15.2-33.9 33.9-33.9c9 0 17.6 3.6 24 9.9zM160 96L96 96c-17.7 0-32 14.3-32 32l0 256c0 17.7 14.3 32 32 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-64 0c-53 0-96-43-96-96L0 128C0 75 43 32 96 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32z" />
-                                    </svg>
-                                </div>
-                                <span className="text text-sm font-medium">Logout</span>
-                            </button>
+                      
                         </div>
 
-                        <div className="flex flex-wrap justify-center md:justify-end gap-2 text-xs" style={{marginRight:'62px'}}>
-                            {/* <button
+                        <div className="flex  justify-center md:justify-end gap-2 text-xs" >
+                        <button
                                 onClick={() => setUser({ ...user, cart: true })}
                                 className="hover:text-gray-300 transition-colors"
                             >
                                 Reward
                             </button>
-                            <span>|</span> */}
+                            <span>|</span>
                             <button
                                 onClick={() => setUser({ ...user, purchase: true })}
                                 className="hover:text-gray-300 transition-colors"
-                            >
+                                >
                                 Deposit
                             </button>
                             <span>|</span>
                             <button
                                 onClick={() => setUser({ ...user, withdraw: true })}
                                 className="hover:text-gray-300 transition-colors"
-                            >
+                                >
                                 Withdraw
                             </button>
+                          
                             <span>|</span>
-                            <Link
-                                className="hover:text-gray-300 transition-colors"
-                                href={"/affiliate"}
+
+                                <button
+                                onClick={logout}
+                                className="flex justify-around"
                             >
-                                Affiliate
-                            </Link>
+                               
+                                Logout
+                            {/* <svg
+                                        viewBox="0 0 512 512"
+                                        className="w-3 h-3 fill-current"
+                                        // style={{fontSize:'10px',}}
+                                    >
+                                        <path d="M377.9 105.9L500.7 228.7c7.2 7.2 11.3 17.1 11.3 27.3s-4.1 20.1-11.3 27.3L377.9 406.1c-6.4 6.4-15 9.9-24 9.9c-18.7 0-33.9-15.2-33.9-33.9l0-62.1-128 0c-17.7 0-32-14.3-32-32l0-64c0-17.7 14.3-32 32-32l128 0 0-62.1c0-18.7 15.2-33.9 33.9-33.9c9 0 17.6 3.6 24 9.9zM160 96L96 96c-17.7 0-32 14.3-32 32l0 256c0 17.7 14.3 32 32 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-64 0c-53 0-96-43-96-96L0 128C0 75 43 32 96 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32z" />
+                                    </svg> */}
+                            </button>
                         </div>
                     </div>
                 ) : (
                     <button
                         onClick={handleOpenModal}
-                        className="bg-foreground text-background px-8 py-2 rounded-full hover:bg-opacity-90 transition-colors w-full md:w-auto"
+                        className=" text-background px-8 py-2 rounded-full hover:bg-opacity-90 transition-colors w-full md:w-auto bg-orange-500"
                     >
                         Login
                     </button>
@@ -231,9 +232,9 @@ export default function TopNav() {
             {open && (
                 <div
                     style={{ zIndex: 9999 }}
-                    className=" fixed top-0 left-0 backdrop-blur-md bg-black/60 z-50 flex justify-center items-center h-screen w-screen"
+                    className=" fixed top-0 left-0 backdrop-blur-md bg-black/60 z-50 flex justify-center items-center h-screen w-screen "
                 >
-                    <div className="bg-background w-full md:w-[400px] rounded-2xl p-6 relative shadow-xl border border-foreground/20 mx-4 overflow-hidden">
+                    <div className="bg-background bg-orange-500 w-full md:w-[400px] rounded-2xl p-6 relative shadow-xl border border-foreground/20 mx-4 overflow-hidden">
                         {/* Background pattern */}
                         <div className="absolute inset-0 opacity-10" style={{
                             backgroundImage: `url('/lv-pattern.png')`,

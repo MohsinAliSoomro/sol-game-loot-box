@@ -3,6 +3,7 @@ import { supabase } from "@/service/supabase";
 import { useRequest } from "ahooks";
 import Loader from "../Components/Loader";
 import { useState } from "react";
+import Image from "next/image";
 
 async function getLeaderboard() {
     return await supabase
@@ -15,31 +16,31 @@ async function getLeaderboard() {
 const mockData = [
     {
         id: 1,
-        username: "Degener8s",
+        username: "user1",
         wageredCredits: 3025336.1,
         avatar: "/degener8s.png"
     },
     {
         id: 2,
-        username: "DemDan",
+        username: "user2",
         wageredCredits: 363371.5,
         avatar: "/demdan.png"
     },
     {
         id: 3,
-        username: "GreenHorse",
+        username: "user3",
         wageredCredits: 199350.5,
         avatar: "/greenhorse.png"
     },
     {
         id: 4,
-        username: "Kick-Itsjayz",
+        username: "user4",
         wageredCredits: 187556,
         avatar: "/kick-itsjayz.png"
     },
     {
         id: 5,
-        username: "degendonnie.sol",
+        username: "user5",
         wageredCredits: 148648,
         avatar: "/degendonnie.png"
     }
@@ -72,20 +73,18 @@ export default function Leaderboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12  min-h-screen">
             {/* Header and Time Filters */}
             <div className="text-center mb-8">
-                <h1 className="text-3xl md:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#f74e14] to-[#ff9a3c] mb-6">
-                    Leaderboard
-                </h1>
-                <div className="flex flex-wrap justify-center gap-3 mb-8">
+
+                <div className="flex flex-wrap justify-center gap-3 mb-28">
                     {timeFilterButtons.map((button) => (
                         <button
                             key={button.id}
                             onClick={() => setTimeFilter(button.id)}
                             className={`px-6 py-2 rounded-lg font-bold text-sm transition-all whitespace-nowrap 
-                                ${
-                                    timeFilter === button.id 
-                                    ? 'bg-[#f74e14] text-white shadow-lg' 
+                                ${timeFilter === button.id
+                                    ? 'bg-[#f74e14] text-white shadow-lg'
                                     : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                                }`}
+
+                                } w-56`}
                         >
                             {button.label}
                         </button>
@@ -104,11 +103,14 @@ export default function Leaderboard() {
                         </div>
                         <div className="flex flex-col items-center">
                             <div className="w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden mb-3 border-4 border-[#C0C0C0] shadow-lg">
-                                <img src={mockData[1].avatar} alt={mockData[1].username} className="w-full h-full object-cover" />
+                                <Image src={mockData[1].avatar} alt={mockData[1].username} className="w-full h-full object-cover"
+                                    width={300}
+                                    height={300}
+                                />
                             </div>
                             <h3 className="text-lg font-bold text-white mb-2">{mockData[1].username}</h3>
                             <div className="bg-[#00FFD5] rounded-full px-4 py-1 w-full text-center shadow-md">
-                                <span className="font-medium text-xs text-gray-900">Wagered: </span>
+                                <span className="font-medium text-xs text-gray-900">Spent </span>
                                 <span className="font-bold text-gray-900">{formatNumber(mockData[1].wageredCredits)}</span>
                             </div>
                         </div>
@@ -124,11 +126,14 @@ export default function Leaderboard() {
                         </div>
                         <div className="flex flex-col items-center">
                             <div className="w-24 h-24 md:w-28 md:h-28 rounded-full overflow-hidden mb-3 border-4 border-[#FFD700] shadow-xl">
-                                <img src={mockData[0].avatar} alt={mockData[0].username} className="w-full h-full object-cover" />
+                                <Image src={mockData[0].avatar} alt={mockData[0].username} className="w-full h-full object-cover"
+                                    width={300}
+                                    height={300}
+                                />
                             </div>
                             <h3 className="text-xl font-bold text-white mb-2">{mockData[0].username}</h3>
                             <div className="bg-[#00FFD5] rounded-full px-4 py-1 w-full text-center shadow-md">
-                                <span className="font-medium text-xs text-gray-900">Wagered: </span>
+                                <span className="font-medium text-xs text-gray-900">Spent </span>
                                 <span className="font-bold text-gray-900">{formatNumber(mockData[0].wageredCredits)}</span>
                             </div>
                         </div>
@@ -144,11 +149,14 @@ export default function Leaderboard() {
                         </div>
                         <div className="flex flex-col items-center">
                             <div className="w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden mb-3 border-4 border-[#CD7F32] shadow-lg">
-                                <img src={mockData[2].avatar} alt={mockData[2].username} className="w-full h-full object-cover" />
+                                <Image src={mockData[2].avatar} alt={mockData[2].username} className="w-full h-full object-cover"
+                                    width={300}
+                                    height={300}
+                                />
                             </div>
                             <h3 className="text-lg font-bold text-white mb-2">{mockData[2].username}</h3>
                             <div className="bg-[#00FFD5] rounded-full px-4 py-1 w-full text-center shadow-md">
-                                <span className="font-medium text-xs text-gray-900">Wagered: </span>
+                                <span className="font-medium text-xs text-gray-900">Spent </span>
                                 <span className="font-bold text-gray-900">{formatNumber(mockData[2].wageredCredits)}</span>
                             </div>
                         </div>
@@ -168,16 +176,18 @@ export default function Leaderboard() {
                             </div>
                             <div className="flex items-center gap-4">
                                 <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#00FFD5]">
-                                    <img
+                                    <Image
                                         src={user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`}
                                         alt={user.username}
                                         className="w-full h-full object-cover"
+                                        width={300}
+                                        height={300}
                                     />
                                 </div>
                                 <span className="font-bold text-white">{user.username}</span>
                             </div>
                             <div className="bg-gray-700 rounded-full px-4 py-1">
-                                <span className="text-gray-300 text-sm">Wagered: </span>
+                                <span className="text-gray-300 text-sm">Spent </span>
                                 <span className="text-white font-bold">{formatNumber(user.wageredCredits)}</span>
                             </div>
                         </div>

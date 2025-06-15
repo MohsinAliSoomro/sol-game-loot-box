@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 // import Image from "next/image";
 import Model from "../Components/Model";
 import Loader from "../Components/Loader";
+import Image from "next/image";
 
 const getProducts = async () => {
     const response = await supabase.from("tickets").select();
@@ -31,8 +32,8 @@ export default function LiveDraw() {
 
     return (
         <div className="max-w-7xl mx-auto px-4 py-8 overflow-hidden">
-            <div className="flex items-center mb-8">
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-[#f74e14] to-[#ff914d] bg-clip-text text-transparent">Future Jackpots</h1>
+            <div className="flex items-center justify-center mb-8">
+                <h1 className="text-3xl font-bold bg-white bg-clip-text text-transparent">Feature Jackpots</h1>
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-12">
@@ -41,7 +42,7 @@ export default function LiveDraw() {
                     data?.data?.map((loot, index) => (
                         <div
                             key={loot.title}
-                            className="bg-[#121212]/70 backdrop-blur-sm rounded-2xl border border-[#f74e14]/20 overflow-hidden shadow-xl flex flex-col relative h-[400px]"
+                            className="bg-white backdrop-blur-sm rounded-2xl border border-[#f74e14]/20 overflow-hidden shadow-xl flex flex-col relative h-[400px]"
                         >
                             {/* Background pattern */}
                             <div className="absolute inset-0 opacity-5" style={{
@@ -53,9 +54,9 @@ export default function LiveDraw() {
                             {/* Content */}
                             <div className="p-4 flex-1 flex flex-col items-center justify-center relative z-10">
                                 <div className="w-40 h-40 mb-4 relative">
-                                    <div className="absolute inset-0 rounded-full bg-gradient-to-r from-[#f74e14]/20 to-[#ff914d]/20 blur-md"></div>
-                                    <img
-                                        src={loot.image}
+                                    <div className="absolute inset-0 rounded-ful bg-gradient-to-r from-[#f74e14]/20 to-[#ff914d]/20 "></div>
+                                    <Image
+                                        src={'/'+loot.image}
                                         alt={loot.name}
                                         width={160}
                                         height={160}
@@ -63,7 +64,7 @@ export default function LiveDraw() {
                                     />
                                 </div>
                                 
-                                <h2 className="font-bold text-xl text-center mb-2 text-white">{loot.title}</h2>
+                                <h2 className="font-bold text-xl text-center mb-2 text-[#ff914d]">{loot.title}</h2>
                                 
                                 <p className="text-[#ff914d] text-sm text-center mb-6">
                                     {loot.description?.substring(0, 80)}
@@ -73,14 +74,14 @@ export default function LiveDraw() {
                                 <div className="flex items-center justify-center gap-4 mt-auto">
                                     <div className="text-center">
                                         <span className="block text-xs text-[#ff914d]">PRICE</span>
-                                        <span className="text-white font-medium">{loot.price} OGX</span>
+                                        <span className="text-[#ff914d] font-medium">{loot.price} OGX</span>
                                     </div>
                                     
                                     <div className="h-10 border-r border-[#f74e14]/20"></div>
                                     
                                     <div className="text-center">
                                         <span className="block text-xs text-[#ff914d]">ENDS IN</span>
-                                        <span className="text-white font-medium">2d 4h</span>
+                                        <span className="text-[#ff914d] font-medium">2d 4h</span>
                                     </div>
                                 </div>
                             </div>
