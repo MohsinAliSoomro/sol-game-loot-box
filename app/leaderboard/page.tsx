@@ -95,7 +95,7 @@ export default function Leaderboard() {
             {/* Top 3 Winners - Podium */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 items-end">
                 {/* 2nd Place */}
-                <div className="flex flex-col items-center order-1 md:order-1">
+                <div className="flex flex-col items-center order-2 md:order-1">
                     {/* <div className="bg-gradient-to-b from-[#C0C0C0] to-[#A0A0A0] w-8 h-16 md:w-10 md:h-20 rounded-t-lg mb-2 shadow-md"></div> */}
                     <div className="relative bg-gray-800 rounded-xl p-6 w-full max-w-xs shadow-lg border border-[#C0C0C0]/20">
                         <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-[#C0C0C0] px-4 py-1 rounded-md font-bold text-gray-900 text-xs shadow-md">
@@ -118,7 +118,7 @@ export default function Leaderboard() {
                 </div>
 
                 {/* 1st Place */}
-                <div className="flex flex-col items-center order-2 md:order-2">
+                <div className="flex flex-col items-center order-1 md:order-2">
                     {/* <div className="bg-gradient-to-b from-[#FFD700] to-[#D4AF37] w-10 h-24 md:w-12 md:h-28 rounded-t-lg mb-2 shadow-lg"></div> */}
                     <div className="relative bg-gray-800 rounded-xl p-6 w-full max-w-xs shadow-xl -mt-4 border border-[#FFD700]/20">
                         <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-[#FFD700] px-4 py-1 rounded-md font-bold text-gray-900 text-xs shadow-md">
