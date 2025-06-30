@@ -16,7 +16,7 @@ export default function WithdrawHistory() {
         if (user.walletAddress) {
             run(user.walletAddress);
         }
-    }, [user]);
+    }, [user,run]);
 
     if (loading) return <div>Loading...</div>;
     return (

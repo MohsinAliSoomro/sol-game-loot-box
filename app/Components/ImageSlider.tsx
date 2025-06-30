@@ -31,9 +31,11 @@ export default function ImageSlider() {
                     <Image
                         src={image}
                         alt={`Slide ${index + 1}`}
-                        fill
                         className="object-cover"
                         priority={index === 0}
+                        fill
+                        // width={300}
+                        // height={300}
                     />
                 </div>
             ))}

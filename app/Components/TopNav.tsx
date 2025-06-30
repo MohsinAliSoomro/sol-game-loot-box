@@ -155,12 +155,13 @@ export default function TopNav() {
 
             {/* Auth section */}
             <div className={`${mobileMenuOpen ? 'flex' : 'hidden'} md:flex w-full md:w-1/4 flex-col items-center md:items-end mt-4 md:mt-0`}>
-                {isLogin ? (
+                {true ? (
                     <div className="flex flex-col items-center md:items-end gap-4">
                         <div className="flex items-center gap-4 w-full">
-                            <div className="border border-foreground flex-1 flex justify-between gap-6 rounded-lg px-6 md:px-10 pt-4 pb-2 relative h-16">
-                                <span className="absolute -top-2 left-4 md:left-16 bg-background px-2 text-lg">My Account</span>
-                                <div className="text-xs pt-2">
+                            <div className="border border-foreground flex-1 flex justify-between flex-col  rounded-lg px-6 md:px-10   relative  ">
+                                <div className="w-32 relative bottom-3 text-center bg-orange-500  bg-background left-[20%]">My Account</div>
+                              <div className="items flex justify-between">
+                              <div className="text-xs pt-2 pb-2">
                                     <p>OGX</p>
                                     <p className="text-center">{user?.apes || 0}</p>
                                 </div>
@@ -172,12 +173,19 @@ export default function TopNav() {
                                     <p>USD</p>
                                     <p className="text-center">0</p>
                                 </div>
+                              </div>
                             </div>
                       
                         </div>
 
                         <div className="flex  justify-center md:justify-end gap-2 text-xs" >
-                           
+                        <button
+                                onClick={() => setUser({ ...user, cart: true })}
+                                className="hover:text-gray-300 transition-colors"
+                            >
+                                Reward
+                            </button>
+                            <span>|</span>
                             <button
                                 onClick={() => setUser({ ...user, purchase: true })}
                                 className="hover:text-gray-300 transition-colors"
@@ -191,14 +199,8 @@ export default function TopNav() {
                                 >
                                 Withdraw
                             </button>
+                          
                             <span>|</span>
-                            <Link
-                                className="hover:text-gray-300 transition-colors"
-                                href={"/affiliate"}
-                                >
-                                Affiliate
-                            </Link>
-                                <span>|</span>
 
                                 <button
                                 onClick={logout}
@@ -219,7 +221,7 @@ export default function TopNav() {
                 ) : (
                     <button
                         onClick={handleOpenModal}
-                        className="bg-foreground text-background px-8 py-2 rounded-full hover:bg-opacity-90 transition-colors w-full md:w-auto"
+                        className=" text-background px-8 py-2 rounded-full hover:bg-opacity-90 transition-colors w-full md:w-auto bg-orange-500"
                     >
                         Login
                     </button>
@@ -230,9 +232,9 @@ export default function TopNav() {
             {open && (
                 <div
                     style={{ zIndex: 9999 }}
-                    className=" fixed top-0 left-0 backdrop-blur-md bg-black/60 z-50 flex justify-center items-center h-screen w-screen"
+                    className=" fixed top-0 left-0 backdrop-blur-md bg-black/60 z-50 flex justify-center items-center h-screen w-screen "
                 >
-                    <div className="bg-background w-full md:w-[400px] rounded-2xl p-6 relative shadow-xl border border-foreground/20 mx-4 overflow-hidden">
+                    <div className="bg-background bg-orange-500 w-full md:w-[400px] rounded-2xl p-6 relative shadow-xl border border-foreground/20 mx-4 overflow-hidden">
                         {/* Background pattern */}
                         <div className="absolute inset-0 opacity-10" style={{
                             backgroundImage: `url('/lv-pattern.png')`,

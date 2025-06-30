@@ -47,7 +47,7 @@ export default function WithdrawModal() {
     useEffect(() => {
         fetchSolBalance();
         run(user?.walletAddress);
-    }, [user]);
+    }, [user,run]);
 
     const updaetUserApes = async () => {
         const minus = state.apes - form.withdrawBalance;

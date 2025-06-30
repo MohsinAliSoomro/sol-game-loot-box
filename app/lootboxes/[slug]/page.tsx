@@ -65,7 +65,7 @@ export default function Details() {
     setOpenModal(!openModal);
   };
 
-  const sendSolanaTokens = async (product:any) => {
+  const sendSolanaTokens = async (product: any) => {
     if (user.apes <= 0) {
       return alert("You need to purchase OGX");
     }
@@ -85,10 +85,10 @@ export default function Details() {
   if (error) {
     return (
       <div className="min-h-screen bg-orange-500">
-       <div className="nav-top z-50 relative">
-            <TopNav />
+        <div className="nav-top z-50 relative">
+          <TopNav />
 
-            </div>
+        </div>
         <div className="flex items-center justify-center h-[calc(100vh-64px)] text-white text-xl">
           Error loading data...
         </div>
@@ -112,13 +112,13 @@ export default function Details() {
   return (
     <div className="overflow-hidden bg-orange-500 text-white">
       <div className="nav-top z-50 relative">
-                <TopNav />
-    
-                </div>
+        <TopNav />
+
+      </div>
 
       <div className="flex flex-col gap-2">
         <div className="flex justify-center items-center">
-        <WheelSpinner data={products?.data} item={newData} user={user} setUser={setUser}/>
+          <WheelSpinner data={products?.data} item={newData} user={user} setUser={setUser} />
 
         </div>
 
@@ -128,51 +128,54 @@ export default function Details() {
         <div className="w-full">
           <div className="w-full px-4">
             <div className="overflow-x-auto py- scrollbar-hide">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 flex-col">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 flex-col">
                 {products?.data?.map((loot, index) => (
-                 
-                 <>
-                  <div
-                    key={index}
-                    className="w-full bg-white border border-orange-300  rounded-lg shadow-md text-orange-800 flex flex-col items-center relative
-                              transition-all duration-300 hover:shadow-lg group  p-3"
-                  >
-                    <div className="box-header flex justify-between w-52 items-center mb-">
-                   <div className="box-badge   ">
-                   <div className="font-bold text-center mx-auto text-lg mb-2 text-orange-800 flex justify-center items-center space-x-1">
-                      <span className="mt-1 bg-gradient-to-r from-orange-500 to-orange-700 bg-clip-text text-transparent">
-                        {loot.price}
-                      </span>
-                      <div className="relative w-6 h-6">
-                        <Image
-                          src={"/logo.png"}
-                          fill
-                          alt="OGX"
-                          className="rounded-full object-cover "
-                        />
+
+                  <>
+                    <div
+                      key={index}
+                      className="w-full bg-white border border-orange-300  rounded-lg shadow-md text-orange-800 flex flex-col items-center relative
+                              transition-all duration-300 hover:shadow-lg group  p-0 sm:p-3"
+                    >
+                      <div className="box-header flex justify-between w-[80%]  items-center mb-">
+                        <div className="box-badge   ">
+                          <div className="font-bold text-center mx-auto text-lg mb-2 text-orange-800 flex justify-center items-center space-x-1">
+                            <span className="mt-1 bg-gradient-to-r from-orange-500 to-orange-700 bg-clip-text text-transparent">
+                              {loot.price}
+                            </span>
+                            <div className="relative w-6 h-6">
+                              <Image
+                                src={"/logo.png"}
+                                alt="OGX"
+                                className="rounded-full object-cover "
+                                width={300}
+                                height={300}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="box-badge ">
+                          <p>0.5%</p>
+                        </div>
                       </div>
-                    </div>
-                   </div>
-                   <div className="box-badge ">
-<p>0.5%</p>
-                   </div>
-                  </div>
-                    <div className="relative w-24 h-24 mt-8 group-hover:scale-105 transition-transform duration-300 ml-0">
-                      <img
-                        src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${loot.image}`}
-                        alt={loot.name}
-                        className="object-contain drop-shadow-md "
-                        // sizes="(max-width: 768px) 100vw, 300px"
-                      />
-                    </div>
+                      <div className="relative w-24 h-24 mt-0 sm:mt-8  group-hover:scale-105 transition-transform duration-300 ml-0">
+                        <Image
+                          src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${loot.image}`}
+                          alt={loot.name}
+                          width={300}
+                          height={300}
+                          className="object-contain drop-shadow-md"
+                        />
 
-                    <span className="font-bold text-center mx-auto text-orange-700 mt-8  text-lg tracking-tight">
-                      {loot.name}
-                    </span>
+                      </div>
 
-                  
+                      <span className="font-bold text-center mx-auto text-orange-700 mt-1 sm:mt-8  text-lg tracking-tight">
+                        {loot.name}
+                      </span>
 
-                    {/* <button
+
+
+                      {/* <button
                       onClick={() => sendSolanaTokens(loot)}
                       className="text-sm rounded-full px-3 py-1 absolute -bottom-3 left-3 right-3 shadow-lg
                                 bg-gradient-to-r from-orange-500 to-orange-700 border border-orange-300 text-white
@@ -181,9 +184,9 @@ export default function Details() {
                     >
                       Ope
                     </button> */}
-                 
-                  </div>
-                 </>
+
+                    </div>
+                  </>
 
                 ))}
               </div>
