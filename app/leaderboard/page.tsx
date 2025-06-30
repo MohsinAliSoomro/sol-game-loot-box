@@ -3,6 +3,7 @@ import { supabase } from "@/service/supabase";
 import { useRequest } from "ahooks";
 import Loader from "../Components/Loader";
 import { useState } from "react";
+import Image from "next/image";
 
 async function getLeaderboard() {
     return await supabase
@@ -15,31 +16,31 @@ async function getLeaderboard() {
 const mockData = [
     {
         id: 1,
-        username: "Degener8s",
+        username: "user1",
         wageredCredits: 3025336.1,
         avatar: "/degener8s.png"
     },
     {
         id: 2,
-        username: "DemDan",
+        username: "user2",
         wageredCredits: 363371.5,
         avatar: "/demdan.png"
     },
     {
         id: 3,
-        username: "GreenHorse",
+        username: "user3",
         wageredCredits: 199350.5,
         avatar: "/greenhorse.png"
     },
     {
         id: 4,
-        username: "Kick-Itsjayz",
+        username: "user4",
         wageredCredits: 187556,
         avatar: "/kick-itsjayz.png"
     },
     {
         id: 5,
-        username: "degendonnie.sol",
+        username: "user5",
         wageredCredits: 148648,
         avatar: "/degendonnie.png"
     }
@@ -72,16 +73,15 @@ export default function Leaderboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12  min-h-screen">
             {/* Header and Time Filters */}
             <div className="text-center mb-8">
-              
+
                 <div className="flex flex-wrap justify-center gap-3 mb-28">
                     {timeFilterButtons.map((button) => (
                         <button
                             key={button.id}
                             onClick={() => setTimeFilter(button.id)}
                             className={`px-6 py-2 rounded-lg font-bold text-sm transition-all whitespace-nowrap 
-                                ${
-                                    timeFilter === button.id 
-                                    ? 'bg-[#f74e14] text-white shadow-lg' 
+                                ${timeFilter === button.id
+                                    ? 'bg-[#f74e14] text-white shadow-lg'
                                     : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
 
                                 } w-56`}
@@ -95,7 +95,7 @@ export default function Leaderboard() {
             {/* Top 3 Winners - Podium */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 items-end">
                 {/* 2nd Place */}
-                <div className="flex flex-col items-center order-1 md:order-1">
+                <div className="flex flex-col items-center order-2 md:order-1">
                     {/* <div className="bg-gradient-to-b from-[#C0C0C0] to-[#A0A0A0] w-8 h-16 md:w-10 md:h-20 rounded-t-lg mb-2 shadow-md"></div> */}
                     <div className="relative bg-gray-800 rounded-xl p-6 w-full max-w-xs shadow-lg border border-[#C0C0C0]/20">
                         <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-[#C0C0C0] px-4 py-1 rounded-md font-bold text-gray-900 text-xs shadow-md">
@@ -103,7 +103,10 @@ export default function Leaderboard() {
                         </div>
                         <div className="flex flex-col items-center">
                             <div className="w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden mb-3 border-4 border-[#C0C0C0] shadow-lg">
-                                <img src={mockData[1].avatar} alt={mockData[1].username} className="w-full h-full object-cover" />
+                                <Image src={mockData[1].avatar} alt={mockData[1].username} className="w-full h-full object-cover"
+                                    width={300}
+                                    height={300}
+                                />
                             </div>
                             <h3 className="text-lg font-bold text-white mb-2">{mockData[1].username}</h3>
                             <div className="bg-[#00FFD5] rounded-full px-4 py-1 w-full text-center shadow-md">
@@ -115,7 +118,7 @@ export default function Leaderboard() {
                 </div>
 
                 {/* 1st Place */}
-                <div className="flex flex-col items-center order-2 md:order-2">
+                <div className="flex flex-col items-center order-1 md:order-2">
                     {/* <div className="bg-gradient-to-b from-[#FFD700] to-[#D4AF37] w-10 h-24 md:w-12 md:h-28 rounded-t-lg mb-2 shadow-lg"></div> */}
                     <div className="relative bg-gray-800 rounded-xl p-6 w-full max-w-xs shadow-xl -mt-4 border border-[#FFD700]/20">
                         <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-[#FFD700] px-4 py-1 rounded-md font-bold text-gray-900 text-xs shadow-md">
@@ -123,7 +126,10 @@ export default function Leaderboard() {
                         </div>
                         <div className="flex flex-col items-center">
                             <div className="w-24 h-24 md:w-28 md:h-28 rounded-full overflow-hidden mb-3 border-4 border-[#FFD700] shadow-xl">
-                                <img src={mockData[0].avatar} alt={mockData[0].username} className="w-full h-full object-cover" />
+                                <Image src={mockData[0].avatar} alt={mockData[0].username} className="w-full h-full object-cover"
+                                    width={300}
+                                    height={300}
+                                />
                             </div>
                             <h3 className="text-xl font-bold text-white mb-2">{mockData[0].username}</h3>
                             <div className="bg-[#00FFD5] rounded-full px-4 py-1 w-full text-center shadow-md">
@@ -143,7 +149,10 @@ export default function Leaderboard() {
                         </div>
                         <div className="flex flex-col items-center">
                             <div className="w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden mb-3 border-4 border-[#CD7F32] shadow-lg">
-                                <img src={mockData[2].avatar} alt={mockData[2].username} className="w-full h-full object-cover" />
+                                <Image src={mockData[2].avatar} alt={mockData[2].username} className="w-full h-full object-cover"
+                                    width={300}
+                                    height={300}
+                                />
                             </div>
                             <h3 className="text-lg font-bold text-white mb-2">{mockData[2].username}</h3>
                             <div className="bg-[#00FFD5] rounded-full px-4 py-1 w-full text-center shadow-md">
@@ -167,10 +176,12 @@ export default function Leaderboard() {
                             </div>
                             <div className="flex items-center gap-4">
                                 <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#00FFD5]">
-                                    <img
+                                    <Image
                                         src={user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`}
                                         alt={user.username}
                                         className="w-full h-full object-cover"
+                                        width={300}
+                                        height={300}
                                     />
                                 </div>
                                 <span className="font-bold text-white">{user.username}</span>

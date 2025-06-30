@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 // import Image from "next/image";
 import Model from "../Components/Model";
 import Loader from "../Components/Loader";
+import Image from "next/image";
 
 const getProducts = async () => {
     const response = await supabase.from("tickets").select();
@@ -54,8 +55,8 @@ export default function LiveDraw() {
                             <div className="p-4 flex-1 flex flex-col items-center justify-center relative z-10">
                                 <div className="w-40 h-40 mb-4 relative">
                                     <div className="absolute inset-0 rounded-ful bg-gradient-to-r from-[#f74e14]/20 to-[#ff914d]/20 "></div>
-                                    <img
-                                        src={loot.image}
+                                    <Image
+                                        src={'/'+loot.image}
                                         alt={loot.name}
                                         width={160}
                                         height={160}
@@ -63,7 +64,7 @@ export default function LiveDraw() {
                                     />
                                 </div>
                                 
-                                <h2 className="font-bold text-xl text-center mb-2 text-white">{loot.title}</h2>
+                                <h2 className="font-bold text-xl text-center mb-2 text-[#ff914d]">{loot.title}</h2>
                                 
                                 <p className="text-[#ff914d] text-sm text-center mb-6">
                                     {loot.description?.substring(0, 80)}
@@ -73,14 +74,14 @@ export default function LiveDraw() {
                                 <div className="flex items-center justify-center gap-4 mt-auto">
                                     <div className="text-center">
                                         <span className="block text-xs text-[#ff914d]">PRICE</span>
-                                        <span className="text-white font-medium">{loot.price} OGX</span>
+                                        <span className="text-[#ff914d] font-medium">{loot.price} OGX</span>
                                     </div>
                                     
                                     <div className="h-10 border-r border-[#f74e14]/20"></div>
                                     
                                     <div className="text-center">
                                         <span className="block text-xs text-[#ff914d]">ENDS IN</span>
-                                        <span className="text-white font-medium">2d 4h</span>
+                                        <span className="text-[#ff914d] font-medium">2d 4h</span>
                                     </div>
                                 </div>
                             </div>

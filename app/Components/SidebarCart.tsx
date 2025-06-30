@@ -32,7 +32,7 @@ export default function SidebarCart() {
         if (user) {
             run(user?.walletAddress);
         }
-    }, [user]);
+    }, [user,run]);
 
     if (!user.cart) return null;
 
@@ -97,7 +97,7 @@ export default function SidebarCart() {
                                             {/* {data?.data?.map((item, index) => (
                                                 <div key={index} className="flex items-center bg-white/10 rounded-lg p-4">
                                                     <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg">
-                                                        <img
+                                                        <Image
                                                             src={item?.image}
                                                             alt={item?.name}
                                                             className="h-full w-full object-cover object-center"

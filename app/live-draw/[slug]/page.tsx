@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import Countdown from "react-countdown";
 import { toast } from "react-toastify";
 import Loader from "../../Components/Loader";
+import Image from "next/image";
 
 const getProducts = async (id: string) => {
     const ticketPurchase = await supabase.from("ticketPurchase").select("*", { count: "exact", head: true }).eq("ticketId", id);
@@ -24,7 +25,7 @@ export default function Page() {
         if (params?.slug) {
             run(params?.slug);
         }
-    }, [params]);
+    }, [params,run]);
 
     const purchaseTicket = async () => {
         await supabase.from("ticketPurchase").insert({ ticketId: params?.slug, userId: user?.walletAddress });
@@ -92,9 +93,9 @@ export default function Page() {
                     {/* Left Section - Image */}
                     <div className="w-full md:w-4/12">
                         <div className="rounded-xl overflow-hidden border-2 border-[#f74e14]/20 shadow-lg">
-                            <img
+                            <Image
                                 //@ts-ignore
-                                src={data?.data[0].image}
+                                src={'/'+data?.data[0].image}
                                 //@ts-ignore
                                 alt={data?.data[0].name}
                                 width={200}
