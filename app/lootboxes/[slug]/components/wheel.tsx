@@ -22,7 +22,6 @@ interface WheelItem {
 
 const WheelSpinner = ({ data, item, user, setUser }: any) => {
 
-  console.log({data,item,user})
   const [rotation, setRotation] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
   const [winner, setWinner] = useState<WheelItem | null>(null);
