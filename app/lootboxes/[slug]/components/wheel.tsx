@@ -21,29 +21,16 @@ interface WheelItem {
 }
 
 const WheelSpinner = ({ data, item, user, setUser }: any) => {
-  const [items] = useState<WheelItem[]>([
-    { id: 1, name: "10% Off", image: rewardImg1, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 2, name: "Free Item", image: rewardImg2, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 3, name: "25% Off", image: rewardImg3, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 4, name: "Try Again", image: rewardImg4, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 5, name: "50% Off", image: rewardImg5, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 6, name: "Gift Card", image: rewardImg6, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 7, name: "5% Off", image: rewardImg7, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 8, name: "Free Shipping", image: rewardImg2, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 9, name: "Free Shipping", image: rewardImg3, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 10, name: "Free Shipping", image: rewardImg4, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 11, name: "Free Shipping", image: rewardImg6, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 12, name: "Free Shipping", image: rewardImg2, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-  ]);
 
+  console.log({data,item,user})
   const [rotation, setRotation] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
   const [winner, setWinner] = useState<WheelItem | null>(null);
   const [showWinnerDialog, setShowWinnerDialog] = useState(false);
   const wheelRef = useRef<HTMLDivElement>(null);
 
-  const totalProbability = items.reduce((sum, item) => sum + item.percentage, 0);
-  const segmentCount = items.length;
+  const totalProbability = data?.reduce((sum:any, item:any) => sum + item.percentage, 0);
+  const segmentCount = data?.length;
   const segmentAngle = 360 / segmentCount;
   const outerRadius = 50;
   const innerRadius = 25;
@@ -72,9 +59,9 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
 
     const random = Math.random() * totalProbability;
     let cumulativeProbability = 0;
-    let selectedItem = items[0];
+    let selectedItem = data[0];
 
-    for (const item of items) {
+    for (const item of data) {
       cumulativeProbability += item.percentage;
       if (random <= cumulativeProbability) {
         selectedItem = item;
@@ -82,7 +69,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       }
     }
 
-    let itemIndex = items.findIndex((item) => item.id === selectedItem.id);
+    let itemIndex = data?.findIndex((item:any) => item.id === selectedItem.id);
     let itemAngleSum = 0;
 
     for (let i = 0; i < itemIndex; i++) {
@@ -121,7 +108,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
     if (winner) {
       addResult();
     }
-  });
+  },[winner]);
 
   const resetWheel = () => {
     setShowWinnerDialog(false);
@@ -209,9 +196,9 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
                         // filter="drop-shadow(0px 0px 8px #f74e14)"
                       />
                       {/* Image at segment midpoint, facing outward */}
-                      {items[i] && (
+                      {data[i] && (
                         <image
-                          href={items[i].image.src}
+                          href={`${process.env.NEXT_PUBLIC_FRONT_URL}/${data[i]?.image}`}
                           x={imgX - 5}
                           y={imgY - 5}
                           width="10"
@@ -252,7 +239,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
             <div className="text-center">
               <h2 className="text-xl sm:text-2xl font-bold mb-4 text-[#f74e14]">Congratulations!</h2>
               <div className="flex items-center justify-center mb-4 sm:mb-6">
-                <Image src={winner.image.src} alt={winner.name} className="w-24 h-24 sm:w-32 sm:h-32 object-contain" 
+                <Image src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${winner.image}`} alt={winner.name} className="w-24 h-24 sm:w-32 sm:h-32 object-contain" 
                 width={300}
                 height={300}
                 />
