@@ -1,12 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
 import img from "../../../../public/lv.jpg";
-import rewardImg1 from "../../../../public/reward1.jpeg";
-import rewardImg2 from "../../../../public/reward (2).jpeg";
-import rewardImg3 from "../../../../public/reward (3).jpeg";
-import rewardImg4 from "../../../../public/reward (4).jpeg";
-import rewardImg5 from "../../../../public/reward (5).jpeg";
-import rewardImg6 from "../../../../public/reward (6).jpeg";
-import rewardImg7 from "../../../../public/reward (7).jpeg";
 import { supabase } from "@/service/supabase";
 import Image from "next/image";
 
