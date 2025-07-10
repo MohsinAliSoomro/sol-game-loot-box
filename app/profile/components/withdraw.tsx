@@ -12,11 +12,12 @@ const getWithdrawHistory = async (userId: string) => {
 export default function WithdrawHistory() {
     const [user] = useUserState();
     const { run, data, loading } = useRequest(getWithdrawHistory);
+
     useEffect(() => {
         if (user.walletAddress) {
             run(user.walletAddress);
         }
-    }, [user,run]);
+    }, [user]);
 
     if (loading) return <div>Loading...</div>;
     return (
