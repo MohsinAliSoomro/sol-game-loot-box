@@ -10,7 +10,7 @@ const getWithdrawHistory = async (userId: string) => {
     return response.data;
 };
 export default function WithdrawHistory() {
-    const [user, setUser] = useUserState();
+    const [user] = useUserState();
     const { run, data, loading } = useRequest(getWithdrawHistory);
     useEffect(() => {
         if (user.walletAddress) {
