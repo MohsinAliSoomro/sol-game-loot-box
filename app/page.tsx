@@ -7,12 +7,10 @@ import { useRequest } from "ahooks";
 import { supabase } from "@/service/supabase";
 import ImageSlider from "./Components/ImageSlider";
 import Loader from "./Components/Loader";
-
 const getProducts = async () => {
   const response = await supabase.from("products").select();
   return response;
 };
-
 const getLatestTransaction = async () => {
   const response = await supabase
     .from("prizeWin")
