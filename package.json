@@ -36,7 +36,6 @@
     "react-spin-game": "^1.0.7",
     "react-toastify": "^10.0.6",
     "react-use": "^17.5.0",
-    "sharp": "^0.34.2",
     "slugify": "^1.6.6",
     "swiper": "^11.2.6",
     "tailwind-merge": "^2.1.0",
