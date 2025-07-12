@@ -116,12 +116,12 @@ export default function Home() {
               <div className="button flex justify-center items-center">
                 <button
                   onClick={() => navigate.push("/lootboxes/" + loot.id)}
-                  className=" sm:w-44 text-sm rounded-full shadow-lg
+                  className="sm:w-44 text-sm rounded-full shadow-lg
                               bg-gradient-to-r from-orange-500 to-orange-700 border border-orange-300 text-white
                               font-medium hover:from-orange-600 hover:to-orange-800 transition-all
                               active:scale-95 flex justify-around items-center"
                 >
-                  <div className="font-bold text-center mx-auto text-sm  text-white flex justify-center items-center space-x-1 w-full">
+                  <div className="font-bold text-center mx-auto text-sm text-white flex justify-center items-center space-x-1 w-full px-4">
                     <p className="me-2">Open</p>
                     <span className="mt-1 bg-white bg-clip-text text-transparent">
                       {loot.price}
