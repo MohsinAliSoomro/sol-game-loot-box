@@ -14,14 +14,16 @@ interface WheelItem {
 }
 
 const WheelSpinner = ({ data, item, user, setUser }: any) => {
-
   const [rotation, setRotation] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
   const [winner, setWinner] = useState<WheelItem | null>(null);
   const [showWinnerDialog, setShowWinnerDialog] = useState(false);
   const wheelRef = useRef<HTMLDivElement>(null);
-
-  const totalProbability = data?.reduce((sum:any, item:any) => sum + item.percentage, 0);
+  const [isFree,setIsFree] = useState(false)
+  const totalProbability = data?.reduce(
+    (sum: any, item: any) => sum + item.percentage,
+    0
+  );
   const segmentCount = data?.length;
   const segmentAngle = 360 / segmentCount;
   const outerRadius = 50;
@@ -29,14 +31,17 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
 
   const spinWheel = async () => {
     if (user.apes <= 0) {
-      return alert("You need to purchase apes");
+      return alert("You need to purchase OGX");
     }
-    
+
     let price = Number(item.price);
     let minusPrice = user.apes - price;
-    
+
     try {
-      await supabase.from("user").update({ apes: minusPrice }).eq("id", user.id);
+      await supabase
+        .from("user")
+        .update({ apes: minusPrice })
+        .eq("id", user.id);
       setUser({ ...user, apes: minusPrice });
     } catch (error) {
       console.error("Error updating user balance:", error);
@@ -61,7 +66,46 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       }
     }
 
-    let itemIndex = data?.findIndex((item:any) => item.id === selectedItem.id);
+    let itemIndex = data?.findIndex((item: any) => item.id === selectedItem.id);
+    let itemAngleSum = 0;
+
+    for (let i = 0; i < itemIndex; i++) {
+      itemAngleSum += segmentAngle;
+    }
+
+    itemAngleSum += segmentAngle / 2;
+
+    const spinAngle = 4320 + (360 - itemAngleSum);
+    const newRotation = rotation + spinAngle;
+
+    setRotation(newRotation);
+
+    setTimeout(() => {
+      setWinner(selectedItem);
+      setShowWinnerDialog(true);
+      setIsSpinning(false);
+    }, 5000);
+  };
+
+  const handleFreeTry = () => {
+    setIsFree(true)
+    setIsSpinning(true);
+    setWinner(null);
+    setShowWinnerDialog(false);
+
+    const random = Math.random() * totalProbability;
+    let cumulativeProbability = 0;
+    let selectedItem = data[0];
+
+    for (const item of data) {
+      cumulativeProbability += item.percentage;
+      if (random <= cumulativeProbability) {
+        selectedItem = item;
+        break;
+      }
+    }
+
+    let itemIndex = data?.findIndex((item: any) => item.id === selectedItem.id);
     let itemAngleSum = 0;
 
     for (let i = 0; i < itemIndex; i++) {
@@ -85,22 +129,29 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
   useEffect(() => {
     async function addResult() {
       if (!winner) return;
-      
+      if(isFree){
+        setIsFree(true)
+        return;
+      }
       let prices = Number(winner.price);
       let plusPrice = user.apes + prices;
-      
+
       try {
-        await supabase.from("user").update({ apes: plusPrice }).eq("id", user.id);
+     
+        await supabase
+          .from("user")
+          .update({ apes: plusPrice })
+          .eq("id", user.id);
         setUser({ ...user, apes: plusPrice });
       } catch (error) {
         console.error("Error updating user balance with winnings:", error);
       }
     }
-    
+
     if (winner) {
       addResult();
     }
-  },[winner]);
+  }, [winner,isFree]);
 
   const resetWheel = () => {
     setShowWinnerDialog(false);
@@ -110,19 +161,20 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
   return (
     <div className="w-full bg-[#ff914d]/10 ">
       <div className="w-full">
-        <div className="flex flex-col items-center justify-center"
-        //  style={{ height: '58vh' }}
-         >
+        <div
+          className="flex flex-col items-center justify-center"
+          //  style={{ height: '58vh' }}
+        >
           {/* Wheel Container */}
-          <div className="relative w-full flex justify-center overflow-hidden h-[30vw] " >
+          <div className="relative w-full flex justify-center overflow-hidden h-[30vw] ">
             {/* Background Pattern */}
             <div
               className="absolute inset-0 z-0"
               style={{
                 backgroundImage: `url(${img.src})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                backgroundRepeat: 'no-repeat',
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+                backgroundRepeat: "no-repeat",
               }}
             />
 
@@ -131,9 +183,9 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
               <div
                 className="w-4 h-6 sm:w-6 sm:h-8 md:w-8 md:h-10 lg:w-10 lg:h-12 bg-[#f74e14]"
                 style={{
-                  clipPath: 'polygon(0 100%, 100% 100%, 50% 0)',
+                  clipPath: "polygon(0 100%, 100% 100%, 50% 0)",
                   // filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
-                  transform: 'rotate(180deg)'
+                  transform: "rotate(180deg)",
                 }}
               />
             </div>
@@ -144,7 +196,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
                 ref={wheelRef as any}
                 className="w-[120vw] h-[90vw] max-w-[100vw] z-10"
                 style={{
-                  transform: `rotate(${rotation}deg)` ,
+                  transform: `rotate(${rotation}deg)`,
                   transition: isSpinning
                     ? "transform 5s cubic-bezier(0.1, 0.2, 0.1, 1)"
                     : "none",
@@ -171,7 +223,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
                     ` A${outerRadius},${outerRadius} 0 ${largeArcFlag},1 ${outerX2},${outerY2}` +
                     ` L${innerX1},${innerY1}` +
                     ` A${innerRadius},${innerRadius} 0 ${largeArcFlag},0 ${innerX2},${innerY2}` +
-                    ' Z';
+                    " Z";
                   // Image position and rotation
                   const midAngle = startAngle + segmentAngle / 2;
                   const midRad = (midAngle * Math.PI) / 180;
@@ -195,7 +247,9 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
                           y={imgY - 5}
                           width="10"
                           height="10"
-                          transform={`rotate(${midAngle + 90}, ${imgX}, ${imgY})`}
+                          transform={`rotate(${
+                            midAngle + 90
+                          }, ${imgX}, ${imgY})`}
                           // style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))' }}
                         />
                       )}
@@ -215,7 +269,10 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
             SPIN FOR {item.price} OGX
           </button>
 
-          <button className="text-[#f74e14] hover:text-[#e63900] font-bold text-base sm:text-lg">
+          <button
+            onClick={handleFreeTry}
+            className="text-[#f74e14] hover:text-[#e63900] font-bold text-base sm:text-lg"
+          >
             TRY FOR FREE
           </button>
         </div>
@@ -225,19 +282,31 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       {showWinnerDialog && winner && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl p-4 sm:p-6 w-[90%] max-w-lg border-2 border-[#f74e14]">
-            <b className="flex justify-end" style={{ color: 'black', cursor: 'pointer' }}>
+            <b
+              className="flex justify-end"
+              style={{ color: "black", cursor: "pointer" }}
+            >
               <p onClick={resetWheel}>X</p>
             </b>
             <div className="text-center">
-              <h2 className="text-xl sm:text-2xl font-bold mb-4 text-[#f74e14]">Congratulations!</h2>
+              <h2 className="text-xl sm:text-2xl font-bold mb-4 text-[#f74e14]">
+                Congratulations!
+              </h2>
               <div className="flex items-center justify-center mb-4 sm:mb-6">
-                <Image src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${winner.image}`} alt={winner.name} className="w-24 h-24 sm:w-32 sm:h-32 object-contain" 
-                width={300}
-                height={300}
+                <Image
+                  src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${winner.image}`}
+                  alt={winner.name}
+                  className="w-24 h-24 sm:w-32 sm:h-32 object-contain"
+                  width={300}
+                  height={300}
                 />
               </div>
-              <p className="text-lg sm:text-xl mb-2 text-gray-800">{winner.name}</p>
-              <p className="text-sm text-gray-600 mb-4 sm:mb-6">Price: {winner.price}</p>
+              <p className="text-lg sm:text-xl mb-2 text-gray-800">
+                {winner.name}
+              </p>
+              <p className="text-sm text-gray-600 mb-4 sm:mb-6">
+                Price: {winner.price}
+              </p>
               <div className="flex justify-center gap-3 sm:gap-4">
                 <button
                   onClick={resetWheel}
@@ -250,8 +319,12 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
                     const message = winner
                       ? `I just won ${winner.name} on the OGX Spin Wheel!`
                       : "Check out this awesome OGX Spin Wheel!";
-                    const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(message)}&url=${encodeURIComponent(window.location.href)}&hashtags=OGX,Giveaway`;
-                    window.open(url, '_blank', 'width=550,height=420');
+                    const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
+                      message
+                    )}&url=${encodeURIComponent(
+                      window.location.href
+                    )}&hashtags=OGX,Giveaway`;
+                    window.open(url, "_blank", "width=550,height=420");
                   }}
                   className="px-4 sm:px-6 py-2 bg-[#f74e14] text-white rounded-lg hover:bg-[#e63900] transition-colors text-sm sm:text-base font-medium"
                 >
