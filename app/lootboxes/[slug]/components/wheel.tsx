@@ -143,6 +143,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
           .update({ apes: plusPrice })
           .eq("id", user.id);
         setUser({ ...user, apes: plusPrice });
+        
       } catch (error) {
         console.error("Error updating user balance with winnings:", error);
       }
