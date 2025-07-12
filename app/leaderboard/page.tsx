@@ -10,7 +10,7 @@ async function getLeaderboard() {
     .from("user")
     .select("*")
     .order("apes", { ascending: false })
-    .limit(10); // top 10 users
+    .limit(10); 
 }
 
 export default function Leaderboard() {
