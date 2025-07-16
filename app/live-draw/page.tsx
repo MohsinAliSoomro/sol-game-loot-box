@@ -52,8 +52,8 @@ export default function LiveDraw() {
                             }}></div>
                             
                             {/* Content */}
-                            <div className="p-4 flex-1 flex flex-col items-center justify-center relative z-10">
-                                <div className="w-40 h-40 mb-4 relative">
+                            <div className="p-1 flex-1 flex flex-col items-center justify-center relative z-10">
+                                <div className="w-56 h-48 mb-4 relative mt-4">
                                     <div className="absolute inset-0 rounded-ful bg-gradient-to-r from-[#f74e14]/20 to-[#ff914d]/20 "></div>
                                     <Image
                                         src={'/'+loot.image}
@@ -64,11 +64,11 @@ export default function LiveDraw() {
                                     />
                                 </div>
                                 
-                                <h2 className="font-bold text-xl text-center mb-2 text-[#ff914d]">{loot.title}</h2>
+                                <h2 className="font-bold text-xl text-center mb-2 text-[#ff914d] mt-5">{loot.title}</h2>
                                 
                                 <p className="text-[#ff914d] text-sm text-center mb-6">
-                                    {loot.description?.substring(0, 80)}
-                                    {loot.description?.length > 80 ? '...' : ''}
+                                    {/* {loot.description?.substring(0, 80)}
+                                    {loot.description?.length > 80 ? '...' : ''} */}
                                 </p>
                                 
                                 <div className="flex items-center justify-center gap-4 mt-auto">

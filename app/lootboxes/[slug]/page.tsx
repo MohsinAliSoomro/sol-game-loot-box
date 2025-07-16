@@ -123,9 +123,9 @@ export default function Details() {
         </div>
 
         <div className="flex justify-center items-center">
-          <p className="text-3xl font-bold w-full text-center mt-5">Loot In the Box</p>
+          <p className="text-3xl font-bold w-full text-center mt-10">Loot In the Box</p>
         </div>
-        <div className="w-full">
+        <div className="w-full mt-5">
           <div className="w-full px-4">
             <div className="overflow-x-auto py- scrollbar-hide">
               <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 flex-col">
@@ -143,11 +143,11 @@ export default function Details() {
                             <span className="mt-1 bg-gradient-to-r from-orange-500 to-orange-700 bg-clip-text text-transparent">
                               {loot.price}
                             </span>
-                            <div className="relative w-6 h-6">
+                            <div className="relative w-4 h-4">
                               <Image
                                 src={"/logo.png"}
                                 alt="OGX"
-                                className="rounded-full object-cover "
+                                className="rounded-full object-cover ring-2 ring-orange-300"
                                 width={300}
                                 height={300}
                               />
@@ -158,18 +158,18 @@ export default function Details() {
                           <p>0.5%</p>
                         </div>
                       </div>
-                      <div className="relative w-24 h-24 mt-0 sm:mt-8  group-hover:scale-105 transition-transform duration-300 ml-0">
+                      <div className="relative w-32 md:h-24 h-26 mt-0 sm:mt-8  group-hover:scale-105 transition-transform duration-300 ml-0">
                         <Image
                           src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${loot.image}`}
                           alt={loot.name}
                           width={300}
                           height={300}
-                          className="object-contain drop-shadow-md"
+                          className="object-contain drop-shadow-md relative md:bottom-8"
                         />
 
                       </div>
 
-                      <span className="font-bold text-center mx-auto text-orange-700 mt-1 sm:mt-8  text-lg tracking-tight">
+                      <span className="font-bold text-center mx-auto text-orange-700 mt-1 mt-8  text-lg tracking-tight">
                         {loot.name}
                       </span>
 
