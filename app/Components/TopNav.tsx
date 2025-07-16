@@ -6,6 +6,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useEffectOnce } from "react-use";
 
+function formatNumber(num: number | undefined) {
+  if (num === undefined || num === null) return 0;
+  if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
+  if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+  return num;
+}
+
 export default function TopNav() {
     const [user, setUser] = useUserState();
     const [open, setOpen] = useState(false);
@@ -153,54 +160,59 @@ export default function TopNav() {
                 </div>
             </div>
 
-            {/* Auth section */}
-            <div className={`${mobileMenuOpen ? 'flex' : 'hidden'} md:flex w-full md:w-1/4 flex-col items-center md:items-end mt-4 md:mt-0`}>
-                {true ? (
-                    <div className="flex flex-col items-center md:items-end gap-4">
-                        <div className="flex items-center gap-4 w-full">
-                            <div className="border border-foreground flex-1 flex justify-between flex-col  rounded-lg px-6 md:px-10   relative  ">
-                                <div className="w-32 relative bottom-3 text-center bg-orange-500  bg-background left-[20%]">My Account</div>
-                              <div className="items flex justify-between">
-                              <div className="text-xs pt-2 pb-2">
-                                    <p>OGX</p>
-                                    <p className="text-center">{user?.apes || 0}</p>
-                                </div>
-                                <div className="text-xs pt-2">
-                                    <p className="text-center">Volume</p>
-                                    <p className="text-center">100000000</p>
-                                </div>
-                                <div className="text-xs pt-2">
-                                    <p>USD</p>
-                                    <p className="text-center">0</p>
-                                </div>
-                              </div>
-                            </div>
-                      
-                        </div>
+      {/* Auth section */}
+      <div
+        className={`${
+          mobileMenuOpen ? "flex" : "hidden"
+        } md:flex w-full md:w-1/4 flex-col items-center md:items-end mt-4 md:mt-0`}
+      >
+        {isLogin? (
+          <div className="flex flex-col items-center md:items-end gap-4">
+            <div className="flex items-center gap-4 w-full">
+              <div className="border border-foreground flex-1 flex justify-between flex-col  rounded-lg px-6 md:px-10   relative  ">
+                <div className="w-32 relative bottom-3 text-center bg-orange-500  bg-background left-[20%]">
+                  My Account
+                </div>
+                <div className="items flex justify-between">
+                  <div className="text-xs pt-2 pb-2">
+                    <p>OGX</p>
+                    <p className="text-center">{formatNumber(user?.apes)}</p>
+                  </div>
+                  <div className="text-xs pt-2">
+                    <p className="text-center">Volume</p>
+                    <p className="text-center">{formatNumber(100000000)}</p>
+                  </div>
+                  <div className="text-xs pt-2">
+                    <p>SOL</p>
+                    <p className="text-center">{formatNumber(user?.apes)}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-                        <div className="flex  justify-center md:justify-end gap-2 text-xs" >
-                        <button
-                                onClick={() => setUser({ ...user, cart: true })}
-                                className="hover:text-gray-300 transition-colors"
-                            >
-                                Reward
-                            </button>
-                            <span>|</span>
-                            <button
-                                onClick={() => setUser({ ...user, purchase: true })}
-                                className="hover:text-gray-300 transition-colors"
-                                >
-                                Deposit
-                            </button>
-                            <span>|</span>
-                            <button
-                                onClick={() => setUser({ ...user, withdraw: true })}
-                                className="hover:text-gray-300 transition-colors"
-                                >
-                                Withdraw
-                            </button>
-                          
-                            <span>|</span>
+            <div className="flex  justify-center md:justify-end gap-2 text-xs">
+              <button
+                onClick={() => setUser({ ...user, cart: true })}
+                className="hover:text-gray-300 transition-colors"
+              >
+                Reward
+              </button>
+              <span>|</span>
+              <button
+                onClick={() => setUser({ ...user, purchase: true })}
+                className="hover:text-gray-300 transition-colors"
+              >
+                Deposit
+              </button>
+              <span>|</span>
+              <button
+                onClick={() => setUser({ ...user, withdraw: true })}
+                className="hover:text-gray-300 transition-colors"
+              >
+                Withdraw
+              </button>
+
+              <span>|</span>
 
                                 <button
                                 onClick={logout}
@@ -335,16 +347,16 @@ export default function TopNav() {
                             <div className="flex-grow bg-gray-700 h-px"></div>
                         </div>
 
-                        {/* Guest option */}
-                        <button
-                            onClick={handleCloseModal}
-                            className="w-full border border-gray-700 text-gray-300 py-3 px-6 rounded-lg hover:bg-gray-800 transition-colors duration-200 font-medium relative z-10"
-                        >
-                            Continue as Guest
-                        </button>
-                    </div>
-                </div>
-            )}
+            {/* Guest option */}
+            <button
+              onClick={handleCloseModal}
+              className="w-full border border-gray-700 text-gray-300 py-3 px-6 rounded-lg hover:bg-gray-800 transition-colors duration-200 font-medium relative z-10"
+            >
+              Connect Wallet
+            </button>
+          </div>
         </div>
-    );
+      )}
+    </div>
+  );
 }
