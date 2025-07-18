@@ -1,3 +1,4 @@
+'use client'
 import { supabase } from "@/service/supabase";
 import { useUserState } from "@/state/useUserState";
 import Image from "next/image";
