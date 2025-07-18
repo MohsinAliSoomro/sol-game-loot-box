@@ -19,7 +19,7 @@ const getLatestTransaction = async () => {
       `*, user (email,full_name,avatar_url,id), products(id, name, price, image)`
     )
     .order("created_at", { ascending: false })
-    .limit(8);
+    .limit(10);
   return response;
 };
 
