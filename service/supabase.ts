@@ -10,4 +10,8 @@ const publicAnon =
 
 const supabaseUrl = "https://zkltmkbmzxvfovsgotpt.supabase.co";
 // const supabaseKey = process.env.SUPABASE_KEY;
-export const supabase = createClient(supabaseUrl, publicAnon);
+export const supabase = createClient(supabaseUrl, publicAnon,{
+    global:{
+        fetch:(url,options)=>fetch(url,{...options,cache:"no-store"})
+    }
+});
