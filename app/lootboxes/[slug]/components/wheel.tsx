@@ -1,12 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
 import img from "../../../../public/lv.jpg";
-import rewardImg1 from "../../../../public/reward1.jpeg";
-import rewardImg2 from "../../../../public/reward (2).jpeg";
-import rewardImg3 from "../../../../public/reward (3).jpeg";
-import rewardImg4 from "../../../../public/reward (4).jpeg";
-import rewardImg5 from "../../../../public/reward (5).jpeg";
-import rewardImg6 from "../../../../public/reward (6).jpeg";
-import rewardImg7 from "../../../../public/reward (7).jpeg";
 import { supabase } from "@/service/supabase";
 import Image from "next/image";
 
@@ -21,21 +14,7 @@ interface WheelItem {
 }
 
 const WheelSpinner = ({ data, item, user, setUser }: any) => {
-  const [items] = useState<WheelItem[]>([
-    { id: 1, name: "10% Off", image: rewardImg1, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 2, name: "Free Item", image: rewardImg2, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 3, name: "25% Off", image: rewardImg3, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 4, name: "Try Again", image: rewardImg4, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 5, name: "50% Off", image: rewardImg5, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 6, name: "Gift Card", image: rewardImg6, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 7, name: "5% Off", image: rewardImg7, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 8, name: "Free Shipping", image: rewardImg2, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 9, name: "Free Shipping", image: rewardImg3, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 10, name: "Free Shipping", image: rewardImg4, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 11, name: "Free Shipping", image: rewardImg6, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-    { id: 12, name: "Free Shipping", image: rewardImg2, color: "bg-white", textColor: "text-black", percentage: 15, price: "850 OGX" },
-  ]);
-
+  console.log({user})
   const [rotation, setRotation] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
   const [winner, setWinner] = useState<WheelItem | null>(null);

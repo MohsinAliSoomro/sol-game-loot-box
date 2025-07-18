@@ -102,7 +102,7 @@ export default function PurchaseModal() {
         if(state.id){
             run(state.id)
         }
-    }, [state.id,run]);
+    }, [state.id]);
 
     const updaetUserApes = async (transaction:any) => {
         const plus = calculateBalance + (state.apes || 0);

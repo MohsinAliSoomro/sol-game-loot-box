@@ -25,7 +25,7 @@ export default function Page() {
         if (params?.slug) {
             run(params?.slug);
         }
-    }, [params,run]);
+    }, [params]);
 
     const purchaseTicket = async () => {
         await supabase.from("ticketPurchase").insert({ ticketId: params?.slug, userId: user?.walletAddress });

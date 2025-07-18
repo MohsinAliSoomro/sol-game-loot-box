@@ -32,7 +32,7 @@ export default function SidebarCart() {
         if (user) {
             run(user?.walletAddress);
         }
-    }, [user,run]);
+    }, [user]);
 
     if (!user.cart) return null;
 

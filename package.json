@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "force-build": "npm install --force && npm run build"
   },
   "dependencies": {
     "@metaplex-foundation/js": "^0.20.1",
