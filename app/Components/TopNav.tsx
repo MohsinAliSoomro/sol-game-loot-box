@@ -201,36 +201,6 @@ export default function TopNav() {
                 <div className="items flex justify-between">
                   <div className="text-xs pt-2 pb-2">
                     <p>OGX</p>
-                    <p className="text-center">{user?.apes || 0}</p>
-                  </div>
-                  <div className="text-xs pt-2">
-                    <p className="text-center">Volume</p>
-                    <p className="text-center">100000000</p>
-                  </div>
-                  <div className="text-xs pt-2">
-                    <p>USD</p>
-                    <p className="text-center">{user.apes || 0}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-      {/* Auth section */}
-      <div
-        className={`${
-          mobileMenuOpen ? "flex" : "hidden"
-        } md:flex w-full md:w-1/4 flex-col items-center md:items-end mt-4 md:mt-0`}
-      >
-        {isLogin? (
-          <div className="flex flex-col items-center md:items-end gap-4">
-            <div className="flex items-center gap-4 w-full">
-              <div className="border border-foreground flex-1 flex justify-between flex-col  rounded-lg px-6 md:px-10   relative  ">
-                <div className="w-32 relative bottom-3 text-center bg-orange-500  bg-background left-[20%]">
-                  My Account
-                </div>
-                <div className="items flex justify-between">
-                  <div className="text-xs pt-2 pb-2">
-                    <p>OGX</p>
                     <p className="text-center">{formatNumber(user?.apes)}</p>
                   </div>
                   <div className="text-xs pt-2">
@@ -271,13 +241,6 @@ export default function TopNav() {
 
               <button onClick={logout} className="flex justify-around">
                 Logout
-                {/* <svg
-                                        viewBox="0 0 512 512"
-                                        className="w-3 h-3 fill-current"
-                                        // style={{fontSize:'10px',}}
-                                    >
-                                        <path d="M377.9 105.9L500.7 228.7c7.2 7.2 11.3 17.1 11.3 27.3s-4.1 20.1-11.3 27.3L377.9 406.1c-6.4 6.4-15 9.9-24 9.9c-18.7 0-33.9-15.2-33.9-33.9l0-62.1-128 0c-17.7 0-32-14.3-32-32l0-64c0-17.7 14.3-32 32-32l128 0 0-62.1c0-18.7 15.2-33.9 33.9-33.9c9 0 17.6 3.6 24 9.9zM160 96L96 96c-17.7 0-32 14.3-32 32l0 256c0 17.7 14.3 32 32 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-64 0c-53 0-96-43-96-96L0 128C0 75 43 32 96 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32z" />
-                                    </svg> */}
               </button>
             </div>
           </div>
@@ -313,21 +276,6 @@ export default function TopNav() {
               onClick={handleCloseModal}
               className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-foreground/10 hover:bg-foreground/20 transition-colors duration-200 text-foreground"
             >
-              {/* <svg
-                            className="me-2"
-                                width="24px"
-                                height="24px"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                xmlns="http://www.w3.org/2000/svg"
-                            >
-                                <path
-                                    d="M14.5 9.50002L9.5 14.5M9.49998 9.5L14.5 14.5"
-                                    stroke="currentColor"
-                                    strokeWidth="1.5"
-                                    strokeLinecap="round"
-                                />
-                            </svg> */}
               <p className="ms-5">x</p>
             </button>
 
@@ -345,6 +293,7 @@ export default function TopNav() {
                 onClick={() => handleSocialLogin("google")}
                 className="flex items-center justify-center gap-3 w-full bg-white text-black py-3 px-6 rounded-lg hover:bg-gray-100 transition-colors duration-200 font-medium"
               >
+                {/* Google SVG */}
                 <svg
                   width="24px"
                   height="24px"
@@ -376,6 +325,7 @@ export default function TopNav() {
                 onClick={() => handleSocialLogin("discord")}
                 className="flex items-center justify-center gap-3 w-full bg-[#5865F2] text-white py-3 px-6 rounded-lg hover:bg-[#4752c4] transition-colors duration-200 font-medium"
               >
+                {/* Discord SVG */}
                 <svg
                   width="24px"
                   height="24px"
