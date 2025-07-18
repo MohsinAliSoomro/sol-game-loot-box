@@ -14,16 +14,18 @@ interface WheelItem {
 }
 
 const WheelSpinner = ({ data, item, user, setUser }: any) => {
+  console.log({user})
   const [rotation, setRotation] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
   const [winner, setWinner] = useState<WheelItem | null>(null);
   const [showWinnerDialog, setShowWinnerDialog] = useState(false);
   const wheelRef = useRef<HTMLDivElement>(null);
-  const [isFree,setIsFree] = useState(false)
+  const [isFree, setIsFree] = useState(false);
   const totalProbability = data?.reduce(
     (sum: any, item: any) => sum + item.percentage,
     0
   );
+  console.log({ item });
   const segmentCount = data?.length;
   const segmentAngle = 360 / segmentCount;
   const outerRadius = 50;
@@ -88,7 +90,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
   };
 
   const handleFreeTry = () => {
-    setIsFree(true)
+    setIsFree(true);
     setIsSpinning(true);
     setWinner(null);
     setShowWinnerDialog(false);
@@ -125,25 +127,27 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       setIsSpinning(false);
     }, 5000);
   };
-
+  console.log({ winner,user });
   useEffect(() => {
     async function addResult() {
       if (!winner) return;
-      if(isFree){
-        setIsFree(true)
+      if (isFree) {
+        setIsFree(true);
         return;
       }
       let prices = Number(winner.price);
       let plusPrice = user.apes + prices;
 
       try {
-     
+        await supabase.from("liveDraw").insert({
+          userId: user?.uid,
+          productId: winner?.id,
+        });
         await supabase
           .from("user")
           .update({ apes: plusPrice })
           .eq("id", user.id);
         setUser({ ...user, apes: plusPrice });
-        
       } catch (error) {
         console.error("Error updating user balance with winnings:", error);
       }
@@ -152,7 +156,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
     if (winner) {
       addResult();
     }
-  }, [winner,isFree]);
+  }, [winner, isFree]);
 
   const resetWheel = () => {
     setShowWinnerDialog(false);

@@ -65,19 +65,19 @@ export default function Details() {
     setOpenModal(!openModal);
   };
 
-  const sendSolanaTokens = async (product: any) => {
-    if (user.apes <= 0) {
-      return alert("You need to purchase OGX");
-    }
-    let price = Number(product.price);
-    let minusPrice = user.apes - price;
-    const response = await supabase
-      .from("user")
-      .update({ apes: minusPrice })
-      .eq("id", user.id);
-    setUser({ ...user, apes: minusPrice });
-    handleSpinClick();
-  };
+  // const sendSolanaTokens = async (product: any) => {
+  //   if (user.apes <= 0) {
+  //     return alert("You need to purchase OGX");
+  //   }
+  //   let price = Number(product.price);
+  //   let minusPrice = user.apes - price;
+  //   const response = await supabase
+  //     .from("user")
+  //     .update({ apes: minusPrice })
+  //     .eq("id", user.id);
+  //   setUser({ ...user, apes: minusPrice });
+  //   handleSpinClick();
+  // };
 
   if (loading) {
     return <Loader />;
@@ -96,18 +96,18 @@ export default function Details() {
     );
   }
 
-  const newProducts = products?.data?.map((i) => {
-    return {
-      option: i.name,
-      image: {
-        uri: i.image,
-        offsetX: 0,
-        offsetY: 230,
-        sizeMultiplier: 0.8,
-      },
-      percentage: i?.percentage,
-    };
-  });
+  // const newProducts = products?.data?.map((i) => {
+  //   return {
+  //     option: i.name,
+  //     image: {
+  //       uri: i.image,
+  //       offsetX: 0,
+  //       offsetY: 230,
+  //       sizeMultiplier: 0.8,
+  //     },
+  //     percentage: i?.percentage,
+  //   };
+  // });
 
   return (
     <div className="overflow-hidden bg-orange-500 text-white">

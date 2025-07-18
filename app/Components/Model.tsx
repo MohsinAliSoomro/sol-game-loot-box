@@ -1,3 +1,4 @@
+'use client'
 import { supabase } from "@/service/supabase";
 import { useUserState } from "@/state/useUserState";
 import { memo, useState } from "react";
