@@ -10,7 +10,7 @@ async function getLeaderboard() {
     .from("user")
     .select("*")
     .order("apes", { ascending: false })
-    .limit(10); 
+    .limit(10);
 }
 
 export default function Leaderboard() {
@@ -34,7 +34,10 @@ export default function Leaderboard() {
   ];
 
   const formatNumber = (num: number) => {
-    return new Intl.NumberFormat("en-US").format(num);
+    if (num === undefined || num === null) return 0;
+    if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
+    if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+    return num;
   };
   const newData: any = data?.data;
   return (
@@ -47,11 +50,10 @@ export default function Leaderboard() {
               key={button.id}
               onClick={() => setTimeFilter(button.id)}
               className={`px-6 py-2 rounded-lg font-bold text-sm transition-all whitespace-nowrap 
-                                ${
-                                  timeFilter === button.id
-                                    ? "bg-[#f74e14] text-white shadow-lg"
-                                    : "bg-gray-800 text-gray-300 hover:bg-gray-700"
-                                } w-56`}
+                                ${timeFilter === button.id
+                  ? "bg-[#f74e14] text-white shadow-lg"
+                  : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+                } w-56`}
             >
               {button.label}
             </button>
@@ -71,14 +73,16 @@ export default function Leaderboard() {
             <div className="flex flex-col items-center">
               <div className="w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden mb-3 border-4 border-[#C0C0C0] shadow-lg">
                 <Image
-                  src={newData[1].avatar_url}
+                  src={''}
                   alt={newData[1]?.full_name}
                   className="w-full h-full object-cover"
                   width={300}
                   height={300}
                 />
               </div>
-              <h3 className="text-lg font-bold text-white mb-2">
+              <h3 className={`font-bold text-white mb-2 ${
+                newData[1].full_name && newData[1].full_name.length > 11 ? "text-xs" : "text-lg"
+              }`}>
                 {newData[1].full_name}
               </h3>
               <div className="bg-[#00FFD5] rounded-full px-4 py-1 w-full text-center shadow-md">
@@ -103,14 +107,16 @@ export default function Leaderboard() {
             <div className="flex flex-col items-center">
               <div className="w-24 h-24 md:w-28 md:h-28 rounded-full overflow-hidden mb-3 border-4 border-[#FFD700] shadow-xl">
                 <Image
-                  src={newData[0].avatar_url}
+                  src={''}
                   alt={newData[0].full_name}
                   className="w-full h-full object-cover"
                   width={300}
                   height={300}
                 />
               </div>
-              <h3 className="text-xl font-bold text-white mb-2">
+              <h3 className={`font-bold text-white mb-2 ${
+                newData[0].full_name && newData[0].full_name.length > 11 ? "text-sm" : "text-xl"
+              }`}>
                 {newData[0].full_name}
               </h3>
               <div className="bg-[#00FFD5] rounded-full px-4 py-1 w-full text-center shadow-md">
@@ -135,14 +141,16 @@ export default function Leaderboard() {
             <div className="flex flex-col items-center">
               <div className="w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden mb-3 border-4 border-[#CD7F32] shadow-lg">
                 <Image
-                  src={newData[2].avatar_url}
+                  src={''}
                   alt={newData[2].full_name}
                   className="w-full h-full object-cover"
                   width={300}
                   height={300}
                 />
               </div>
-              <h3 className="text-lg font-bold text-white mb-2">
+              <h3 className={`font-bold text-white mb-2 ${
+                newData[2].full_name && newData[2].full_name.length > 11 ? "text-xs" : "text-lg"
+              }`}>
                 {newData[2].full_name}
               </h3>
               <div className="bg-[#00FFD5] rounded-full px-4 py-1 w-full text-center shadow-md">
@@ -150,7 +158,7 @@ export default function Leaderboard() {
                   Spent{" "}
                 </span>
                 <span className="font-bold text-gray-900">
-                  {formatNumber(newData[2].ages)}
+                  {formatNumber(newData[2].apes)}
                 </span>
               </div>
             </div>
@@ -170,12 +178,11 @@ export default function Leaderboard() {
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 overflow-hidden">
                 <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#00FFD5]">
                   <Image
                     src={
-                      user.avatar_url ||
-                      `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.full_name}`
+                      ''
                     }
                     alt={user.full_name}
                     className="w-full h-full object-cover"
@@ -183,7 +190,11 @@ export default function Leaderboard() {
                     height={300}
                   />
                 </div>
-                <span className="font-bold text-white">{user.full_name}</span>
+                <span className={`font-bold text-white text-wrap ${
+                  user.full_name && user.full_name.length > 11 ? "text-xs" : ""
+                }`}>
+                  {user.full_name}
+                </span>
               </div>
               <div className="bg-gray-700 rounded-full px-4 py-1">
                 <span className="text-gray-300 text-sm">Spent </span>
