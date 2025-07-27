@@ -29,11 +29,20 @@ const getProducts = async () => {
     return response;
 };
 
+// const getLatestTransaction = async () => {
+//     const response = await supabase.from("prizeWin").select("*").order("created_at", { ascending: false }).limit(8);
+//     return response;
+// };
 const getLatestTransaction = async () => {
-    const response = await supabase.from("prizeWin").select("*").order("created_at", { ascending: false }).limit(8);
-    return response;
+  const response = await supabase
+    .from("liveDraw")
+    .select(
+      `*, user (email,full_name,avatar_url,id), products(id, name, price, image)`
+    )
+    .order("created_at", { ascending: false })
+    .limit(10);
+  return response;
 };
-
 export default function Home() {
     const { data, loading, error } = useRequest(getProducts);
     const { data: transactions, loading: transactionLoading, error: transactionError } = useRequest(getLatestTransaction);
@@ -44,7 +53,7 @@ export default function Home() {
     if (loading || transactionLoading) {
         return <Loader />;
     }
-
+    console.log({transactions})
     if (error || transactionError) {
         return (
             <div className="min-h-screen bg-orange-500">
@@ -73,7 +82,7 @@ export default function Home() {
             </div>
             <div className="w-full mb-8">
                 <div className="overflow-x-auto scrollbar-hide">
-                    <div className="flex gap-4 min-w-max px-4">
+                    <div className="flex gap-4 flex-grow min-w-max px-4">
                         {transactions?.data?.map((loot, index) => (
                             <div key={index} className="w-[150px] flex-shrink-0">
                                 <p className="text-sm font-bold mb-1 truncate text-orange-700">
@@ -81,7 +90,7 @@ export default function Home() {
                                 </p>
                                 <div className="w-full aspect-square bg-white border border-orange-300 p-2 rounded-lg shadow-md text-orange-800 flex flex-col items-center relative">
                                     <Image
-                                        src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${loot.image}`}
+                                        src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${loot?.products?.image}`}
                                         alt={loot?.name}
                                         
                                         className="object-contain p-4"
@@ -89,7 +98,7 @@ export default function Home() {
                                         height={300}
                                     />
                                     <span className="font-bold text-xs text-center mx-auto text-orange-700 mt-1 truncate w-full">
-                                        {loot?.name}
+                                        {loot?.products?.name}
                                     </span>
                                 </div>
                             </div>
