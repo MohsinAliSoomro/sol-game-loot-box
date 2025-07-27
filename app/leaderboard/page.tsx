@@ -40,6 +40,7 @@ export default function Leaderboard() {
     return num;
   };
   const newData: any = data?.data;
+  console.log({newData})
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12  min-h-screen">
       {/* Header and Time Filters */}
@@ -73,7 +74,7 @@ export default function Leaderboard() {
             <div className="flex flex-col items-center">
               <div className="w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden mb-3 border-4 border-[#C0C0C0] shadow-lg">
                 <Image
-                  src={''}
+                  src={newData[1]?.avatar_url}
                   alt={newData[1]?.full_name}
                   className="w-full h-full object-cover"
                   width={300}
@@ -107,7 +108,7 @@ export default function Leaderboard() {
             <div className="flex flex-col items-center">
               <div className="w-24 h-24 md:w-28 md:h-28 rounded-full overflow-hidden mb-3 border-4 border-[#FFD700] shadow-xl">
                 <Image
-                  src={''}
+                  src={newData[0].avatar_url}
                   alt={newData[0].full_name}
                   className="w-full h-full object-cover"
                   width={300}
@@ -141,7 +142,7 @@ export default function Leaderboard() {
             <div className="flex flex-col items-center">
               <div className="w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden mb-3 border-4 border-[#CD7F32] shadow-lg">
                 <Image
-                  src={''}
+                  src={newData[2].avatar_url}
                   alt={newData[2].full_name}
                   className="w-full h-full object-cover"
                   width={300}
@@ -181,9 +182,7 @@ export default function Leaderboard() {
               <div className="flex items-center gap-4 overflow-hidden">
                 <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#00FFD5]">
                   <Image
-                    src={
-                      ''
-                    }
+                    src={user?.avatar_url}
                     alt={user.full_name}
                     className="w-full h-full object-cover"
                     width={300}
