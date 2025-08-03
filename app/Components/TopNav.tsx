@@ -356,7 +356,7 @@ export default function TopNav() {
             {/* Guest option */}
             <button
               onClick={handleCloseModal}
-              className="w-full border border-gray-700 text-gray-300 py-3 px-6 rounded-lg hover:bg-gray-800 transition-colors duration-200 font-medium relative z-10"
+              className="w-full border border-gray-700 text-white py-3 px-6 rounded-lg hover:bg-gray-800 transition-colors duration-200 font-medium relative z-10"
             >
               Connect Wallet
             </button>

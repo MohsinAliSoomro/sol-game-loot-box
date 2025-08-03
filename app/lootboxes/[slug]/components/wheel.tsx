@@ -112,13 +112,13 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       setShowWinnerDialog(true);
       setIsSpinning(false);
       // Only add the reward (no deduction)
-      const rewardAmount = Number(winnerItem?.price);
-      try {
-        await supabase.from("user").update({ apes: user.apes + rewardAmount }).eq("id", user.id);
-        setUser({ ...user, apes: user.apes + rewardAmount });
-      } catch (e) {
-        console.error("Reward update failed (free spin)", e);
-      }
+      // const rewardAmount = Number(winnerItem?.price);
+      // try {
+      //   await supabase.from("user").update({ apes: user.apes + rewardAmount }).eq("id", user.id);
+      //   setUser({ ...user, apes: user.apes + rewardAmount });
+      // } catch (e) {
+      //   console.error("Reward update failed (free spin)", e);
+      // }
       console.log(winnerItem, 'winnerItem (free)');
     }, 5000);
   };
@@ -127,7 +127,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
     setShowWinnerDialog(false);
     setWinner(null);
   };
-
+console.log(item?.price,'price item')
   return (
     <div className="w-full bg-[#ff914d]/10">
       <div className="w-full flex flex-col items-center justify-center">
@@ -234,7 +234,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
           disabled={isSpinning}
           className="mt-10 px-4 py-2 bg-[#f74e14] hover:bg-[#e63900] text-white rounded font-bold"
         >
-          SPIN FOR {item.price} OGX
+          SPIN FOR {item?.price} OGX
         </button>
         <button
           onClick={handleFreeTry}
