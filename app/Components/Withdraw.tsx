@@ -13,6 +13,7 @@ export default function WithdrawModal() {
     const [user] = useUserState();
     const { run, data, loading } = useRequest(getWithdrawHistory);
     const [form, setForm] = useState({ withdrawBalance: 0, availableBalance: 0, walletAddress: "" });
+    const [withdrawType, setWithdrawType] = useState('ogx'); // Add state for withdraw type
 
     async function fetchSolBalance() {
         try {
@@ -47,7 +48,7 @@ export default function WithdrawModal() {
     useEffect(() => {
         fetchSolBalance();
         run(user?.walletAddress);
-    }, [user]);
+    }, [user,run]);
 
     const updaetUserApes = async () => {
         const minus = state.apes - form.withdrawBalance;
@@ -118,32 +119,100 @@ export default function WithdrawModal() {
                         </div>
                         {tab === "withdraw" && (
                             <div className="p-4 md:p-5 ">
-                                <p className="text-base leading-relaxed text-gray-500 dark:text-gray-400">
-                                    With less than a month to go before the European Union enacts new consumer privacy laws for its citizens, companies around the world are updating their terms of
-                                    service agreements to comply.
+                                <p className="text-base leading-relaxed text-gray-400 mb-3">
+                                    Withdraw your tokens from your account. Choose between OGX tokens or SOL.
                                 </p>
-                                <label className="mt-6 flex">Availabe OGX</label>
-                                <input
-                                    className="w-full p-2 border border-gray-300 rounded-md"
-                                    value={state.apes}
-                                    disabled
-                                />
-                                <label className="mt-6 flex">Withdraw OGX</label>
-                                <input
-                                    value={form.withdrawBalance}
-                                    type="number"
-                                    min={0}
-                                    max={1000000}
-                                    className="w-full p-2 border border-gray-300 rounded-md"
-                                    onChange={(e) => setForm({ ...form, withdrawBalance: Number(e.target.value) })}
-                                />
-                                <label className="mt-6 flex">Wallet Address</label>
-                                <input
-                                    value={form.walletAddress}
-                                    type="text"
-                                    className="w-full p-2 border border-gray-300 rounded-md"
-                                    onChange={(e) => setForm({ ...form, walletAddress: e.target.value })}
-                                />
+                                {/* Withdraw Type Tabs */}
+                                <div className="flex space-x-4 border-b  mb-4">
+                                    <button
+                                        onClick={() => setWithdrawType('ogx')}
+                                        className={`py-2 px-4 w-1/2 text-center ${withdrawType === 'ogx' ? 'border-b-2 border-[#ff914d] text-orange-600 bg-gray-200' : 'text-orange-600 bg-transparent'}`}>
+                                        OGX Withdraw
+                                    </button>
+                                    <button
+                                        onClick={() => setWithdrawType('sol')}
+                                        className={`py-2 px-4 w-1/2 text-center ${withdrawType === 'sol' ? 'border-b-2 border-[#ff914d] text-orange-600 bg-gray-200' : 'text-orange-600 bg-transparent'}`}>
+                                        SOL Withdraw
+                                    </button>
+                                </div>
+
+                                {withdrawType === 'ogx' ? (
+                                    // OGX Withdraw Content
+                                    <>
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-orange-600 mb-2">Available OGX</label>
+                                                <input
+                                                    value={state.apes || 0}
+                                                    className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
+                                                    disabled
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-orange-600 mb-2">Withdraw OGX</label>
+                                                <input
+                                                    value={form.withdrawBalance}
+                                                    type="number"
+                                                    min={0}
+                                                    max={1000000}
+                                                    placeholder="0"
+                                                    className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800 focus:ring-[#ff914d]/50 focus:border-[#ff914d]/50"
+                                                    onChange={(e) => setForm({ ...form, withdrawBalance: Number(e.target.value) })}
+                                                />
+                                            </div>
+                                            {/* <div>
+                                                <label className="block text-sm font-medium text-orange-600 mb-2">Wallet Address</label>
+                                                <input
+                                                    value={form.walletAddress}
+                                                    type="text"
+                                                    placeholder="Enter your wallet address"
+                                                    className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800 focus:ring-[#ff914d]/50 focus:border-[#ff914d]/50"
+                                                    onChange={(e) => setForm({ ...form, walletAddress: e.target.value })}
+                                                />
+                                            </div> */}
+                                        </div>
+                                    </>
+                                ) : (
+                                    // SOL Withdraw Content
+                                    <>
+                                        {/* <p className="text-xs mb-4">
+                                            Withdraw SOL from your account. OGX tokens will be converted to SOL at the current exchange rate.
+                                        </p> */}
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-orange-600 mb-2">Available OGX</label>
+                                                <input
+                                                    value={state.apes || 0}
+                                                    className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
+                                                    disabled
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-orange-600 mb-2">Convert OGX to SOL</label>
+                                                <input
+                                                    type="number"
+                                                    placeholder="0"
+                                                    className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800 focus:ring-[#ff914d]/50 focus:border-[#ff914d]/50"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-orange-600 mb-2">Estimated SOL</label>
+                                                <input
+                                                    className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
+                                                    value="0"
+                                                    disabled
+                                                />
+                                            </div>
+                                            {/* <div>
+                                                <label className="block text-sm font-medium text-orange-600 mb-2">Wallet Address</label>
+                                                <input
+                                                    placeholder="Enter your SOL wallet address"
+                                                    className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800 focus:ring-[#ff914d]/50 focus:border-[#ff914d]/50"
+                                                />
+                                            </div> */}
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         )}
                         {tab === "history" && (
@@ -159,17 +228,18 @@ export default function WithdrawModal() {
                                                 <th
                                                     scope="col"
                                                     className="px-6 py-3 bg-gray-50 dark:bg-gray-800 w-1/3">
-                                                    Wallet
+                                                    <span className="flex justify-center">Wallet</span>
+                                                </th>
+                                            
+                                                <th
+                                                    scope="col"
+                                                    className="px-6 py-3 w-52 flex justify-center">
+                                                     <span className="">OGX</span> / <span>SOL</span>
                                                 </th>
                                                 <th
                                                     scope="col"
-                                                    className="px-6 py-3 w-1/3">
-                                                    OGX
-                                                </th>
-                                                <th
-                                                    scope="col"
-                                                    className="px-6 py-3 bg-gray-50 dark:bg-gray-800 w-1/3">
-                                                    Status
+                                                    className="px-6 py-3 bg-gray-50 dark:bg-gray-800 w-1/3 ">
+                                                    <span className="flex justify-center">Status</span>
                                                 </th>
                                             </tr>
                                         </thead>
@@ -206,9 +276,9 @@ export default function WithdrawModal() {
                                 <button
                                     data-modal-hide="default-modal"
                                     type="button"
-                                    onClick={makeTransaction}
+                                    onClick={withdrawType === 'ogx' ? makeTransaction : () => alert("SOL withdrawal functionality coming soon!")}
                                     className="px-5 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-[#f74e14] to-[#ff914d] text-white hover:opacity-90 focus:ring-2 focus:ring-[#ff914d]/50">
-                                    Withdraw
+                                    {withdrawType === 'ogx' ? 'Withdraw OGX' : 'Withdraw SOL'}
                                 </button>
                             )}
                             <button

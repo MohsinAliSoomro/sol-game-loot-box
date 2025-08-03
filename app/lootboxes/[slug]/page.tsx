@@ -128,26 +128,26 @@ export default function Details() {
         <div className="w-full mt-5">
           <div className="w-full px-4">
             <div className="overflow-x-auto py- scrollbar-hide">
-              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 flex-col">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-7 gap-5 flex-col justify-center items-center">
                 {products?.data?.map((loot, index) => (
 
                   <>
                     <div
                       key={index}
-                      className="w-full bg-white border border-orange-300  rounded-lg shadow-md text-orange-800 flex flex-col items-center relative
-                              transition-all duration-300 hover:shadow-lg group  p-0 sm:p-3"
+                      className="w-40 bg-white border border-orange-300  rounded-lg shadow-md text-orange-800 flex flex-col items-center relative
+                              transition-all duration-300 hover:shadow-lg group  p-2"
                     >
-                      <div className="box-header flex justify-between w-[80%]  items-center mb-">
+                      <div className="box-header flex justify-between w-full  items-center mb-1">
                         <div className="box-badge   ">
-                          <div className="font-bold text-center mx-auto text-lg mb-2 text-orange-800 flex justify-center items-center space-x-1">
+                          <div className="font-bold text-center mx-auto text-sm mb-1 text-orange-800 flex justify-center items-center space-x-1">
                             <span className="mt-1 bg-gradient-to-r from-orange-500 to-orange-700 bg-clip-text text-transparent">
                               {loot.price}
                             </span>
-                            <div className="relative w-4 h-4">
+                            <div className="relative w-3 h-3">
                               <Image
                                 src={"/logo.png"}
                                 alt="OGX"
-                                className="rounded-full object-cover ring-2 ring-orange-300"
+                                className="rounded-full object-cover ring-1 ring-orange-300"
                                 width={300}
                                 height={300}
                               />
@@ -155,21 +155,21 @@ export default function Details() {
                           </div>
                         </div>
                         <div className="box-badge ">
-                          <p>0.5%</p>
+                          <p className="text-xs">0.5%</p>
                         </div>
                       </div>
-                      <div className="relative w-32 md:h-24 h-26 mt-0 sm:mt-8  group-hover:scale-105 transition-transform duration-300 ml-0">
+                      <div className="relative w-20 md:h-16 h-16 mt-  group-hover:scale-105 transition-transform duration-300 ml-0">
                         <Image
                           src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${loot.image}`}
                           alt={loot.name}
-                          width={300}
-                          height={300}
-                          className="object-contain drop-shadow-md relative md:bottom-8"
+                          width={250}
+                          height={150}
+                          className="object-contain drop-shadow-md"
                         />
 
                       </div>
 
-                      <span className="font-bold text-center mx-auto text-orange-700 mt-1 mt-8  text-lg tracking-tight">
+                      <span className="font-bold text-center mx-auto text-orange-700 mt-5 text-sm tracking-tight">
                         {loot.name}
                       </span>
 
