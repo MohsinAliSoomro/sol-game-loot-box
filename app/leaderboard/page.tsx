@@ -12,7 +12,7 @@ async function getLeaderboard() {
     .order("apes", { ascending: false })
     .limit(10);
 }
-
+// code merge
 export default function Leaderboard() {
   const { data, loading, error } = useRequest(getLeaderboard);
   const [timeFilter, setTimeFilter] = useState("all");
