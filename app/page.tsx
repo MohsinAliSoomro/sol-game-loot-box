@@ -49,14 +49,12 @@ export default function Home() {
     const { data: transactions, loading: transactionLoading, error: transactionError } = useRequest(getLatestTransaction);
     const navigate = useRouter();
     const [activeTab, setActiveTab] = useState('onchain'); // Add state for active tab
-    // const [showSlider, setShowSlider] = useState(transactions?.data?.length > 0);
 
     // Check for loading and error states
     if (loading || transactionLoading) {
         return <Loader />;
     }
-    console.log({transactions})
-    console.log('Products data:', data?.data); // Debug log to see the actual data structure
+
     if (error || transactionError) {
         return (
             <div className="min-h-screen bg-orange-500">

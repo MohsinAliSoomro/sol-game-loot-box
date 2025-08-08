@@ -14,7 +14,6 @@ interface WheelItem {
 }
 
 const WheelSpinner = ({ data, item, user, setUser }: any) => {
-  console.log({user})
   const [rotation, setRotation] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
   const [winner, setWinner] = useState<WheelItem | null>(null);
@@ -85,7 +84,6 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       } catch (e) {
         console.error("Reward update failed", e);
       }
-      console.log(winnerItem, 'winnerItem')
     }, 5000);
   };
 
@@ -119,7 +117,6 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       // } catch (e) {
       //   console.error("Reward update failed (free spin)", e);
       // }
-      console.log(winnerItem, 'winnerItem (free)');
     }, 5000);
   };
 
@@ -127,7 +124,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
     setShowWinnerDialog(false);
     setWinner(null);
   };
-console.log(item?.price,'price item')
+  
   return (
     <div className="w-full bg-[#ff914d]/10">
       <div className="w-full flex flex-col items-center justify-center">

@@ -8,6 +8,7 @@ import Footer from "./Components/Footer";
 import SidebarCart from "./Components/SidebarCart";
 import PurchaseModal from "./Components/Purchase";
 import WithdrawModal from "./Components/Withdraw";
+import { SolanaWalletProvider } from "./Components/SolanaWalletProvider";
 
 // const fontSans = Princess_Sofia({
 //     subsets: ["latin"],
@@ -24,6 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     return (
         <html lang="en">
             <body className={cn("min-h-screen bg-orange-500 antialiased", myFont.className)}>
+                <SolanaWalletProvider>
                 <ThemeProvider
                     attribute="class"
                     // defaultTheme="system"
@@ -36,6 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     <PurchaseModal />
                     <WithdrawModal />
                 </ThemeProvider>
+                </SolanaWalletProvider>
             </body>
         </html>
     );

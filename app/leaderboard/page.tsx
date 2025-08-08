@@ -40,7 +40,7 @@ export default function Leaderboard() {
     return num;
   };
   const newData: any = data?.data;
-  console.log({newData})
+  
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12  min-h-screen">
       {/* Header and Time Filters */}

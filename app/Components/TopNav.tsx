@@ -1,12 +1,14 @@
 'use client'
 import { supabase } from "@/service/supabase";
 import { useUserState } from "@/state/useUserState";
+import { useWallet } from "@solana/wallet-adapter-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useEffectOnce } from "react-use";
-
+import bs58 from 'bs58'
+import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 function formatNumber(num: number | undefined) {
   if (num === undefined || num === null) return 0;
   if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
@@ -20,7 +22,7 @@ export default function TopNav() {
   const [isLogin, setIsLogin] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const router = useRouter();
-
+    const { publicKey, signMessage } = useWallet();
   const handleSocialLogin = async (provider: "google" | "discord") => {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: provider,
@@ -29,7 +31,35 @@ export default function TopNav() {
       },
     });
   };
+const handleLogin = async () => {
+    if (!publicKey || !signMessage) {
+      alert('Wallet not connected or no signMessage function');
+      return;
+    }
 
+    const message = `Login to app at ${new Date().toISOString()}`;
+    const encodedMessage = new TextEncoder().encode(message);
+    const signature = await signMessage(encodedMessage);
+
+    const res = await fetch('/api/auth/solana-login', {
+      method: 'POST',
+      body: JSON.stringify({
+        publicKey: publicKey.toBase58(),
+        signature: bs58.encode(signature),
+        message,
+      }),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const data = await res.json();
+    if (data.session) {
+      alert('Logged in!');
+    } else {
+      alert('Login failed.');
+    }
+  };
   useEffect(() => {
     const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === "INITIAL_SESSION" && session?.user) {
@@ -86,7 +116,6 @@ export default function TopNav() {
         setUser({ ...user, ...userGet.data });
         setIsLogin(response.data.session ? true : false);
       } catch (error) {
-        console.log({ error });
         alert("Error connecting to wallet");
       }
     };
@@ -355,7 +384,7 @@ export default function TopNav() {
 
             {/* Guest option */}
             <button
-              onClick={handleCloseModal}
+              onClick={handleLogin}
               className="w-full border border-gray-700 text-white py-3 px-6 rounded-lg hover:bg-gray-800 transition-colors duration-200 font-medium relative z-10"
             >
               Connect Wallet
