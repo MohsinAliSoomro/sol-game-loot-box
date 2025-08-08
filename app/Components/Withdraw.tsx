@@ -34,7 +34,7 @@ export default function WithdrawModal() {
             const data = await response.json();
             const solBalance = data.result / 1000000000; // Solana's smallest unit is lamports, so we divide by 1 billion to get SOL
 
-            console.log(`Current SOL balance: ${solBalance}`);
+            // console.log(`Current SOL balance: ${solBalance}`);
         } catch (error) {
             console.error("Error fetching SOL balance:", error);
         }
