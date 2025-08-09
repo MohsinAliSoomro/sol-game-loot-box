@@ -22,7 +22,7 @@ import { FC, ReactNode, useMemo } from 'react';
 require('@solana/wallet-adapter-react-ui/styles.css');
 
 export const SolanaWalletProvider: FC<{ children: ReactNode }> = ({ children }) => {
-  const endpoint = clusterApiUrl('devnet'); // or 'mainnet-beta'
+  const endpoint = clusterApiUrl('mainnet-beta'); // or 'mainnet-beta'
 
   const wallets = useMemo(
     () => [
