@@ -1,4 +1,4 @@
-'use client'
+"use client";
 import { supabase } from "@/service/supabase";
 import { useUserState } from "@/state/useUserState";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -7,11 +7,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useEffectOnce } from "react-use";
-import bs58 from 'bs58'
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import bs58 from "bs58";
+
 function formatNumber(num: number | undefined) {
   if (num === undefined || num === null) return 0;
-  if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
+  if (num >= 1000000)
+    return (num / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
   if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, "") + "k";
   return num;
 }
@@ -22,7 +23,8 @@ export default function TopNav() {
   const [isLogin, setIsLogin] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const router = useRouter();
-    const { publicKey, signMessage } = useWallet();
+  const { publicKey, signMessage } = useWallet();
+
   const handleSocialLogin = async (provider: "google" | "discord") => {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: provider,
@@ -31,33 +33,38 @@ export default function TopNav() {
       },
     });
   };
-const handleLogin = async () => {
+
+  const handleLogin = async () => {
     if (!publicKey || !signMessage) {
-      alert('Wallet not connected or no signMessage function');
+      alert("Wallet not connected or no signMessage function");
       return;
     }
 
     const message = `Login to app at ${new Date().toISOString()}`;
     const encodedMessage = new TextEncoder().encode(message);
     const signature = await signMessage(encodedMessage);
-
-    const res = await fetch('/api/auth/solana-login', {
-      method: 'POST',
+    const res = await fetch("/api/auth", {
+      method: "POST",
       body: JSON.stringify({
         publicKey: publicKey.toBase58(),
         signature: bs58.encode(signature),
         message,
       }),
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
     });
 
     const data = await res.json();
     if (data.session) {
-      alert('Logged in!');
+      await supabase.auth.setSession({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      });
+      setIsLogin(true);
+      setOpen(false);
     } else {
-      alert('Login failed.');
+      alert("Login failed.");
     }
   };
   useEffect(() => {
