@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useEffectOnce } from "react-use";
 import bs58 from "bs58";
-
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 function formatNumber(num: number | undefined) {
   if (num === undefined || num === null) return 0;
   if (num >= 1000000)
@@ -23,7 +23,7 @@ export default function TopNav() {
   const [isLogin, setIsLogin] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const router = useRouter();
-  const { publicKey, connect, signMessage } = useWallet();
+  const { publicKey, connect, signMessage, connected } = useWallet();
 
   const handleSocialLogin = async (provider: "google" | "discord") => {
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -35,15 +35,13 @@ export default function TopNav() {
   };
 
   const handleLogin = async () => {
-    if (!publicKey) {
-      // alert("Wallet not connected or no signMessage function");
-      connect();
+    if (!publicKey || !signMessage) {
+      alert("Wallet not connected or no signMessage function");
       return;
     }
 
     const message = `Login to app at ${new Date().toISOString()}`;
     const encodedMessage: any = new TextEncoder().encode(message);
-    //@ts-ignore
     const signature = await signMessage(encodedMessage);
     const res = await fetch("/api/auth", {
       method: "POST",
@@ -392,12 +390,16 @@ export default function TopNav() {
             </div>
 
             {/* Guest option */}
-            <button
-              onClick={handleLogin}
-              className="w-full border border-gray-700 text-white py-3 px-6 rounded-lg hover:bg-gray-800 transition-colors duration-200 font-medium relative z-10"
-            >
-              Connect Wallet
-            </button>
+            {!connected ? (
+              <WalletMultiButton />
+            ) : (
+              <button
+                onClick={handleLogin}
+                className="w-full border border-gray-700 text-white py-3 px-6 rounded-lg hover:bg-gray-800 transition-colors duration-200 font-medium relative z-10"
+              >
+                Connect Wallet
+              </button>
+            )}
           </div>
         </div>
       )}
