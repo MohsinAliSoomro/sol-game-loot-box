@@ -23,7 +23,7 @@ export default function TopNav() {
   const [isLogin, setIsLogin] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const router = useRouter();
-  const { publicKey, signMessage } = useWallet();
+  const { publicKey, connect, signMessage } = useWallet();
 
   const handleSocialLogin = async (provider: "google" | "discord") => {
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -35,13 +35,15 @@ export default function TopNav() {
   };
 
   const handleLogin = async () => {
-    if (!publicKey || !signMessage) {
-      alert("Wallet not connected or no signMessage function");
+    if (!publicKey) {
+      // alert("Wallet not connected or no signMessage function");
+      connect();
       return;
     }
 
     const message = `Login to app at ${new Date().toISOString()}`;
-    const encodedMessage = new TextEncoder().encode(message);
+    const encodedMessage: any = new TextEncoder().encode(message);
+    //@ts-ignore
     const signature = await signMessage(encodedMessage);
     const res = await fetch("/api/auth", {
       method: "POST",
