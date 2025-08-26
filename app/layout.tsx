@@ -7,7 +7,13 @@ import Footer from "./Components/Footer";
 import SidebarCart from "./Components/SidebarCart";
 import PurchaseModal from "./Components/Purchase";
 import WithdrawModal from "./Components/Withdraw";
-import { SolanaWalletProvider } from "./Components/SolanaWalletProvider";
+import dynamic from "next/dynamic";
+// import { SolanaWalletProvider } from "./Components/SolanaWalletProvider";
+// Dynamically import the component
+const SolanaWalletProvider = dynamic(
+  () => import("./Components/SolanaWalletProvider"),
+  { ssr: false } // disable SSR because wallet providers usually depend on window
+);
 
 // const fontSans = Princess_Sofia({
 //     subsets: ["latin"],

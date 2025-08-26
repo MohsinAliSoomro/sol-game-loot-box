@@ -10,14 +10,15 @@ import {
   TorusWalletAdapter,
   TrustWalletAdapter,
 } from "@solana/wallet-adapter-wallets";
-
 import { clusterApiUrl } from "@solana/web3.js";
 import { FC, ReactNode, useMemo } from "react";
 require("@solana/wallet-adapter-react-ui/styles.css");
 
-export const SolanaWalletProvider: FC<{ children: ReactNode }> = ({
+export default function SolanaWalletProvider({
   children,
-}) => {
+}: {
+  children: ReactNode;
+}) {
   const endpoint = clusterApiUrl("devnet"); // or 'mainnet-beta'
 
   const wallets = useMemo(
@@ -37,4 +38,4 @@ export const SolanaWalletProvider: FC<{ children: ReactNode }> = ({
       </WalletProvider>
     </ConnectionProvider>
   );
-};
+}

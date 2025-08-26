@@ -1,7 +1,6 @@
 // pages/api/auth/solana-login.ts
 import nacl from "tweetnacl";
 import bs58 from "bs58";
-// import { supabase } from "@/service/supabase";
 import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
 const supabase = createClient(
