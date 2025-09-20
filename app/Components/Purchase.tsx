@@ -72,8 +72,7 @@ export default function PurchaseModal() {
     availableBalance: 0,
   });
   const { run, data, loading } = useRequest(getTransactions, { manual: true });
-  const [activeTab, setActiveTab] = useState("Deposit");
-  const [DepositType, setDepositType] = useState("ogx"); // Add state for Deposit type
+  const [activeTab, setActiveTab] = useState("ogx");
 
   async function fetchSolBalance() {
     // try {
@@ -228,9 +227,9 @@ export default function PurchaseModal() {
   
   if (!state.purchase) return null;
   return (
-    <div className="fixed top-0 left-0 w-screen h-screen flex items-center justify-center bg-black/40 z-50">
-      <div className="z-50 justify-center items-center w-full max-w-2xl">
-        <div className="relative p-4 w-full">
+    <div className="fixed top-0 left-0 w-screen h-screen flex items-center justify-center bg-black/40 z-50" >
+      <div className="z-50 justify-center items-center w-full max-w-2xl bg-orange-400 rounded-lg">
+        {/* <div className="relative p-4 w-full"> */}
           <div className="relative bg-background rounded-lg shadow dark:bg-gray-700">
             <div className="flex items-center justify-between p-4 md:p-5 border-b rounded-t dark:border-gray-600">
               <h3 className="text-xl font-semibold text-gray-900 dark:text-white mx-auto -mr-5">
@@ -262,18 +261,28 @@ export default function PurchaseModal() {
 
             <div className="flex space-x-4 border-b w-full">
               <button
-                onClick={() => setActiveTab("Deposit")}
-                className={`py-2 px-4 w-1/2 text-center ${
-                  activeTab === "Deposit"
+                onClick={() => setActiveTab("ogx")}
+                className={`py-2 px-4 w-1/3 text-center ${
+                  activeTab === "ogx"
                     ? "border-b-2 border-[#ff914d] text-orange-600 bg-gray-200"
                     : "text-orange-600 bg-transparent"
                 }`}
               >
-                Deposit
+                OGX Deposit
+              </button>
+              <button
+                onClick={() => setActiveTab("sol")}
+                className={`py-2 px-4 w-1/3 text-center ${
+                  activeTab === "sol"
+                    ? "border-b-2 border-[#ff914d] text-orange-600 bg-gray-200"
+                    : "text-orange-600 bg-transparent"
+                }`}
+              >
+                SOL Deposit
               </button>
               <button
                 onClick={() => setActiveTab("history")}
-                className={`py-2 px-4 w-1/2 text-center ${
+                className={`py-2 px-4 w-1/3 text-center ${
                   activeTab === "history"
                     ? "border-b-2 border-[#ff914d] text-orange-600 bg-gray-200"
                     : "text-orange-600 bg-transparent"
@@ -284,175 +293,135 @@ export default function PurchaseModal() {
             </div>
 
             <div className="w-full">
-              {activeTab === "Deposit" && (
-                <div className="p-4 md:p-5">
-                  <p className="text-base leading-relaxed text-gray-400 mb-3">
+              {activeTab === "ogx" && (
+                <div className="p-4 md:p-5 " >
+                  <p className="text-base leading-relaxed text-orange-600 mb-3">
                     Deposit OGX tokens to your account. You can use these tokens
                     to open lootboxes and participate in the platform.
                   </p>
-                  {/* Deposit Type Tabs */}
-                  <div className="flex space-x-4 border-b  mb-4">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-orange-600 mb-2">
+                        Deposit OGX
+                      </label>
+                      <input
+                        value={form.amount}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            amount: Number(e.target.value),
+                          })
+                        }
+                        className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800 focus:ring-[#ff914d]/50 focus:border-[#ff914d]/50"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-orange-600 mb-2">
+                        Estimated OGX
+                      </label>
+                      <input
+                        className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
+                        value="0"
+                        disabled
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-orange-600 mb-2">
+                        Available OGX
+                      </label>
+                      <input
+                        value={state.apes || 0}
+                        className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
+                        disabled
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end pt-4 space-x-3 border-t border-[#ff914d]/20">
                     <button
-                      onClick={() => setDepositType("ogx")}
-                      className={`py-2 px-4 w-1/2 text-center ${
-                        DepositType === "ogx"
-                          ? "border-b-2 border-[#ff914d] text-orange-600 bg-gray-200"
-                          : "text-orange-600 bg-transparent"
-                      }`}
+                      onClick={makeTransaction}
+                      className="px-5 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-[#f74e14] to-[#ff914d] text-white hover:opacity-90 focus:ring-2 focus:ring-[#ff914d]/50"
                     >
-                      OGX Deposit
+                      Deposit OGX
                     </button>
                     <button
-                      onClick={() => setDepositType("sol")}
-                      className={`py-2 px-4 w-1/2 text-center ${
-                        DepositType === "sol"
-                          ? "border-b-2 border-[#ff914d] text-orange-600 bg-gray-200"
-                          : "text-orange-600 bg-transparent"
-                      }`}
+                      onClick={() =>
+                        setState({ ...state, purchase: false })
+                      }
+                      className="px-5 py-2.5 text-sm font-medium rounded-lg border border-[#ff914d]/20 text-gray-300 hover:bg-[#ff914d]/20 focus:ring-2 focus:ring-[#ff914d]/50"
                     >
-                      SOL Deposit
+                      Cancel
                     </button>
                   </div>
-
+                </div>
+              )}
+              {activeTab === "sol" && (
+                <div className="p-4 md:p-5">
+                  <p className="text-base leading-relaxed text-orange-600 mb-3">
+                    Deposit SOL to your account. SOL will be converted to OGX tokens at the current exchange rate.
+                  </p>
                   <div className="space-y-4">
-                    {DepositType === "ogx" ? (
-                      // OGX Deposit Content
-                      <>
-                        <div className="space-y-4">
-                          <div>
-                            <label className="block text-sm font-medium text-orange-600 mb-2">
-                              Deposit OGX
-                            </label>
-                            <input
-                              value={form.amount}
-                              onChange={(e) =>
-                                setForm({
-                                  ...form,
-                                  amount: Number(e.target.value),
-                                })
-                              }
-                              className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800 focus:ring-[#ff914d]/50 focus:border-[#ff914d]/50"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-orange-600 mb-2">
-                              Estimated OGX
-                            </label>
-                            <input
-                              className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
-                              value="0"
-                              disabled
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-orange-600 mb-2">
-                              Available OGX
-                            </label>
-                            <input
-                              value={state.apes || 0}
-                              className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
-                              disabled
-                            />
-                          </div>
-
-                          {/* <div>
-                                                        <label className="block text-sm font-medium text-orange-600 mb-2">Wallet Address</label>
-                                                        <input
-                                                            className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
-                                                            value={calculateBalance}
-                                                            disabled
-                                                        />
-                                                    </div> */}
-                        </div>
-                        <div className="flex items-center justify-end pt-4 space-x-3 border-t border-[#ff914d]/20">
-                          <button
-                            onClick={makeTransaction}
-                            className="px-5 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-[#f74e14] to-[#ff914d] text-white hover:opacity-90 focus:ring-2 focus:ring-[#ff914d]/50"
-                          >
-                            Deposit OGX
-                          </button>
-                          <button
-                            onClick={() =>
-                              setState({ ...state, purchase: false })
-                            }
-                            className="px-5 py-2.5 text-sm font-medium rounded-lg border border-[#ff914d]/20 text-gray-300 hover:bg-[#ff914d]/20 focus:ring-2 focus:ring-[#ff914d]/50"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      // SOL Deposit Content
-                      <>
-                        {/* <p className=" text-xs">
-                                                    Deposit SOL to your account. SOL will be converted to OGX tokens at the current exchange rate.
-                                                </p> */}
-                        <div className="space-y-4">
-                          <div>
-                            <label className="block text-sm font-medium text-orange-600 mb-2">
-                              Deposit SOL
-                            </label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              placeholder="0.0"
-                              min={1}
-                              value={solState.amount}
-                              onChange={(e) =>
-                                setSolState({
-                                  ...solState,
-                                  amount: Number(e.target.value),
-                                })
-                              }
-                              className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800 focus:ring-[#ff914d]/50 focus:border-[#ff914d]/50"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-orange-600 mb-2">
-                              Estimated OGX
-                            </label>
-                            <input
-                              className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
-                              value={solExchange}
-                              disabled
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-orange-600 mb-2">
-                              Available SOL
-                            </label>
-                            <input
-                              className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
-                              disabled
-                                  value={state.apes || 0}
-                            />
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-end pt-4 space-x-3 border-t border-[#ff914d]/20">
-                          <button
-                            onClick={() =>
-                              alert("SOL Deposit functionality coming soon!")
-                            }
-                            className="px-5 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-[#f74e14] to-[#ff914d] text-white hover:opacity-90 focus:ring-2 focus:ring-[#ff914d]/50"
-                          >
-                            Deposit SOL
-                          </button>
-                          <button
-                            onClick={() =>
-                              setState({ ...state, purchase: false })
-                            }
-                            className="px-5 py-2.5 text-sm font-medium rounded-lg border border-[#ff914d]/20 text-gray-300 hover:bg-[#ff914d]/20 focus:ring-2 focus:ring-[#ff914d]/50"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </>
-                    )}
+                    <div>
+                      <label className="block text-sm font-medium text-orange-600 mb-2">
+                        Deposit SOL
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.0"
+                        min={1}
+                        value={solState.amount}
+                        onChange={(e) =>
+                          setSolState({
+                            ...solState,
+                            amount: Number(e.target.value),
+                          })
+                        }
+                        className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800 focus:ring-[#ff914d]/50 focus:border-[#ff914d]/50"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-orange-600 mb-2">
+                        Estimated OGX
+                      </label>
+                      <input
+                        className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
+                        value={solExchange}
+                        disabled
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-orange-600 mb-2">
+                        Available SOL
+                      </label>
+                      <input
+                        className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
+                        disabled
+                        value={state.apes || 0}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end pt-4 space-x-3 border-t border-[#ff914d]/20">
+                    <button
+                      onClick={() =>
+                        alert("SOL Deposit functionality coming soon!")
+                      }
+                      className="px-5 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-[#f74e14] to-[#ff914d] text-white hover:opacity-90 focus:ring-2 focus:ring-[#ff914d]/50"
+                    >
+                      Deposit SOL
+                    </button>
+                    <button
+                      onClick={() =>
+                        setState({ ...state, purchase: false })
+                      }
+                      className="px-5 py-2.5 text-sm font-medium rounded-lg border border-[#ff914d]/20 text-gray-300 hover:bg-[#ff914d]/20 focus:ring-2 focus:ring-[#ff914d]/50"
+                    >
+                      Cancel
+                    </button>
                   </div>
                 </div>
               )}
               {activeTab === "history" && (
-                <div className="p-4 md:p-5 overflow-x-auto w-full min-h-[400px] flex flex-col">
+                <div className="p-4 md:p-5 overflow-x-auto w-full flex flex-col">
                   {loading ? (
                     <div className="flex justify-center items-center py-8 w-full flex-grow">
                       <div className="w-12 h-12 border-4 border-[#ff914d] border-t-transparent rounded-full animate-spin"></div>
@@ -473,7 +442,7 @@ export default function PurchaseModal() {
 
                             <th
                               scope="col"
-                              className="px-6 py-3 w-52 flex justify-center"
+                              className="px-6 py-3  flex justify-center"
                             >
                               <span className="">OGX</span> / <span>SOL</span>
                             </th>
@@ -521,7 +490,7 @@ export default function PurchaseModal() {
                       {(!data || data.data?.length === 0) && (
                         <div
                           className="flex-grow flex items-center justify-center"
-                          style={{ height: "348px" }}
+                          style={{ height: "192px" }}
                         >
                           <p className="text-gray-500 dark:text-gray-400">
                             No Deposit history found
@@ -544,7 +513,7 @@ export default function PurchaseModal() {
               )}
             </div>
           </div>
-        </div>
+        {/* </div> */}
       </div>
     </div>
   );

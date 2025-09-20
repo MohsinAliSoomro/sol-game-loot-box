@@ -18,6 +18,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
   const [isSpinning, setIsSpinning] = useState(false);
   const [winner, setWinner] = useState<WheelItem | null>(null);
   const [showWinnerDialog, setShowWinnerDialog] = useState(false);
+  const [isFreeSpin, setIsFreeSpin] = useState(false);
   const [shuffledData, setShuffledData] = useState<WheelItem[]>([]);
   const segmentCount = shuffledData.length;
   const segmentAngle = 360 / segmentCount;
@@ -54,6 +55,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       return;
     }
 
+    setIsFreeSpin(false);
     // Spin a random amount: 5-8 full spins + random offset
     const fullSpins = Math.floor(Math.random() * 4) + 5; // 5,6,7,8
     const randomOffset = Math.random() * 460;
@@ -88,6 +90,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
   };
 
   const handleFreeTry = async () => {
+    setIsFreeSpin(true);
     // Spin a random amount: 5-8 full spins + random offset
     const fullSpins = Math.floor(Math.random() * 4) + 5; // 5,6,7,8
     const randomOffset = Math.random() * 360;
@@ -124,11 +127,18 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
     setShowWinnerDialog(false);
     setWinner(null);
   };
+
+  const handleSpinAgain = () => {
+    setShowWinnerDialog(false);
+    setWinner(null);
+    // Trigger another paid spin
+    spinWheel();
+  };
   
   return (
     <div className="w-full bg-[#ff914d]/10">
       <div className="w-full flex flex-col items-center justify-center">
-        <div className="relative w-full flex justify-center overflow-hidden h-[30vw]">
+        <div className="relative w-full flex justify-center overflow-hidden md:h-[30vw] h-[40vw]">
           <div className="absolute inset-0 z-0" style={{
             backgroundImage: `url(${img.src})`,
             backgroundSize: "cover",
@@ -136,15 +146,15 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
           }} />
 
           <div className="absolute top-0 left-1/2 transform -translate-x-1/2 z-30">
-            <div className="w-6 h-8 bg-[#f74e14]" style={{
+            <div className="w-4 md:h-12 h-8 bg-[#f74e14]" style={{
               clipPath: "polygon(0 100%, 100% 100%, 50% 0)",
               transform: "rotate(180deg)"
             }} />
           </div>
 
-          <div className="relative left-1/2 bottom-[14vw] transform -translate-x-1/2 translate-y-1/2">
+          <div className="relative left-1/2 md:bottom-[13vw] bottom-[15vw] transform -translate-x-1/2 translate-y-1/2">
             <svg
-              className="w-[120vw] h-[90vw] max-w-[100vw] z-10"
+              className="w-[120vw] h-[85vw] max-w-[100vw] z-10"
               style={{
                 transform: `rotate(${rotation}deg)`,
                 transition: isSpinning ? "transform 5s cubic-bezier(0.1, 0.2, 0.1, 1)" : "none",
@@ -158,7 +168,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
                 const startRad = (startAngle * Math.PI) / 180;
                 const endRad = (endAngle * Math.PI) / 180;
                 const outerRadius = 50;
-                const innerRadius = 25;
+                const innerRadius = 26;
 
                 const outerX1 = 50 + outerRadius * Math.cos(startRad);
                 const outerY1 = 50 + outerRadius * Math.sin(startRad);
@@ -178,8 +188,8 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
 
                 const midAngle = startAngle + segmentAngle / 2;
                 const midRad = (midAngle * Math.PI) / 180;
-                const imgX = 50 + 37 * Math.cos(midRad);
-                const imgY = 50 + 37 * Math.sin(midRad);
+                const imgX = 50 + 38 * Math.cos(midRad);
+                const imgY = 50 + 38 * Math.sin(midRad);
                 // For angle text
                 const textRadius = 43;
                 const textX = 50 + textRadius * Math.cos(midRad);
@@ -190,10 +200,10 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
                     <path d={pathData} fill="#ff914d" stroke="#f74e14" strokeWidth="0.5" />
                     <image
                       href={`${process.env.NEXT_PUBLIC_FRONT_URL}/${item.image}`}
-                      x={imgX - 5}
-                      y={imgY - 5}
-                      width="10"
-                      height="10"
+                      x={imgX - 6}
+                      y={imgY - 6}
+                      width="12"
+                      height="12"
                       transform={`rotate(${midAngle + 90}, ${imgX}, ${imgY})`}
                       className=""
                     />
@@ -229,7 +239,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
         <button
           onClick={spinWheel}
           disabled={isSpinning}
-          className="mt-10 px-4 py-2 bg-[#f74e14] hover:bg-[#e63900] text-white rounded font-bold"
+          className="mt-10 px-2 py-1 bg-[#f74e14] hover:bg-[#e63900] text-white rounded font-bold"
         >
           SPIN FOR {item?.price} OGX
         </button>
@@ -260,12 +270,21 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
               <p className="text-xl mb-2 text-gray-800">{winner.name}</p>
               <p className="text-sm text-gray-600 mb-6">Price: {winner.price}</p>
               <div className="flex justify-center gap-4">
-                <button
-                  onClick={resetWheel}
-                  className="px-6 py-2 border-2 border-[#f74e14] text-[#f74e14] rounded-lg hover:bg-[#f74e14] hover:text-white"
-                >
-                  Spin Again
-                </button>
+                {!isFreeSpin ? (
+                  <button
+                    onClick={handleSpinAgain}
+                    className="px-6 py-2 border-2 border-[#f74e14] text-[#f74e14] rounded-lg hover:bg-[#f74e14] hover:text-white"
+                  >
+                    Spin Again
+                  </button>
+                ) : (
+                  <button
+                    onClick={resetWheel}
+                    className="px-6 py-2 border-2 border-[#f74e14] text-[#f74e14] rounded-lg hover:bg-[#f74e14] hover:text-white"
+                  >
+                    Close
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     const message = winner
@@ -273,7 +292,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
 One spin, one win — this is how we do it over at SpinLoots!
 Try your luck 👇`
                       : "Check out this awesome OGX Spin Wheel!";
-                    const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(message)}&url=${encodeURIComponent(window.location.href)} Stake. Spin. Win. Repeat.`;
+                    const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(message)}&url=${encodeURIComponent(window.location.href)} Stake. Spin. Win. Repeat.`;
                     window.open(url, '_blank', 'width=550,height=420');
                   }}
                   className="px-4 sm:px-6 py-2 bg-[#f74e14] text-white rounded-lg hover:bg-[#e63900] transition-colors text-sm sm:text-base font-medium"

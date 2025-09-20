@@ -3,9 +3,9 @@ import { useState, useEffect } from 'react';
 import Image from 'next/image';
 
 const images = [
-    "/background.png",
-    "/lv.jpg",
-    "/background.png", // Add more images as needed
+    "/beta.jpg",
+    "/live.jpg",
+    "/ads.jpg", // Add more images as needed
 ];
 
 export default function ImageSlider() {

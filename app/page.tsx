@@ -88,7 +88,7 @@ export default function Home() {
                             <div key={index} className="w-[150px]  flex-shrink-0 cursor-pointer"
                             onClick={() => navigate.push("/lootboxes/" + loot.id)}
                             >
-                                <div className="w-full aspect-square bg-white border border-orange-300 p-2 rounded-lg shadow-md text-orange-800 flex flex-col items-center relative h-40 overflow-hidden group">
+                                <div className="w-full aspect-square bg-white border border-orange-300 rounded-lg shadow-md text-orange-800 flex flex-col items-center relative h-40 overflow-hidden group">
                                     <div className="relative w-full h-full flex flex-col items-center">
                                         {/* Main content - slides up on hover */}
                                         <div className="absolute inset-0 flex flex-col items-center transition-transform duration-500 ease-in-out group-hover:-translate-y-full">
@@ -163,50 +163,52 @@ export default function Home() {
                         <div className="flex justify-center items-center my-8">
                             <p className="text-3xl font-bold w-full text-center">Feature OGX Lootbox</p>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 px-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 px-4">
                             {data?.data?.map((loot, index) => (
                                 <div
                                     key={index}
-                                    className=" bg-white border border-orange-300 p-3 py-4 rounded-lg shadow-md text-orange-800 flex flex-col items-center justify-center relative
-                                    transition-all duration-300 hover:shadow-lg group mt-5 md:w-56 h-56"
+                                    className="bg-white border border-orange-300 rounded-lg shadow-md text-orange-800 flex flex-col items-center justify-between relative
+                                    transition-all duration-300 hover:shadow-lg group  aspect-square w-full"
                                 >
-                                    <div className="relative w-36 h-36 mb-3 group-hover:scale-105 transition-transform duration-300">
-                                        <Image
-                                            src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${loot.image}`}
-                                            alt={loot.name}
-                                            className="object-contain drop-shadow-md"
-                                            sizes="(max-width: 768px) 100vw, 200px"
-                                            width={500}
-                                            height={300}
-                                        />
+                                    <div className="flex-1 flex flex-col items-center justify-center w-full">
+                                        <span className="font-bold text-center relative bottom-7 w-full py-2 px-3 text-xs rounded-lg shadow-lg
+                                                        bg-gradient-to-r from-orange-500 to-orange-700 border border-orange-300 text-white
+                                                      hover:from-orange-600 hover:to-orange-800 transition-all
+                                                        active:scale-95 flex justify-center items-center gap-2">
+                                            {loot.name}
+                                        </span>
+                                        <div className="relative w-24 h-24 mb-3 group-hover:scale-105 transition-transform duration-300">
+                                            <Image
+                                                src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${loot.image}`}
+                                                alt={loot.name}
+                                                className="object-contain drop-shadow-md w-full h-full"
+                                                sizes="(max-width: 768px) 120vw, 300px"
+                                                width={600}
+                                                height={400}
+                                            />
+                                        </div>
                                     </div>
 
-                                    <span className="font-bold text-center mx-auto text-orange-700 md:top-5 top-2 relative text-lg tracking-tight w-full">
-                                        {loot.name}
-                                    </span>
-
-                                    <div className="button flex justify-center items-center relative top-5">
+                                    <div className="w-full">
                                         <button
                                             onClick={() => navigate.push("/lootboxes/" + loot.id)}
-                                            className="sm:w-44 text-sm rounded-full shadow-lg
+                                            className="w-full py-2 text-xs rounded-lg shadow-lg
                                                         bg-gradient-to-r from-orange-500 to-orange-700 border border-orange-300 text-white
                                                         font-medium hover:from-orange-600 hover:to-orange-800 transition-all
-                                                        active:scale-95 flex justify-around items-center"
+                                                        active:scale-95 flex justify-center items-center gap-2 relative top-3"
                                         >
-                                            <div className="font-bold text-center mx-auto text-sm text-white flex justify-center items-center space-x-1 w-full px-4 mt-1">
-                                                <p className="me-2">Open</p>
-                                                <span className="bg-white bg-clip-text text-transparent">
-                                                    {loot.price}
-                                                </span>
-                                                <div className="relative w-3 h-3" style={{bottom:'2px'}}>
-                                                    <Image
-                                                        src={"/logo.png"}
-                                                        alt="ogx"
-                                                        className="rounded-full object-cover ring-2 ring-orange-300"
-                                                        width={300}
-                                                        height={300}
-                                                    />
-                                                </div>
+                                            <span>Open</span>
+                                            <span className="bg-white bg-clip-text text-transparent">
+                                                {loot.price}
+                                            </span>
+                                            <div className="relative w-3 h-3">
+                                                <Image
+                                                    src={"/logo.png"}
+                                                    alt="ogx"
+                                                    className="rounded-full object-cover ring-2 ring-orange-300"
+                                                    width={300}
+                                                    height={300}
+                                                />
                                             </div>
                                         </button>
                                     </div>
@@ -217,53 +219,55 @@ export default function Home() {
                 ) : (
                     // Offchain boxes content
                     <>
-                   <div className="flex justify-center items-center my-8">
+                          <div className="flex justify-center items-center my-8">
                             <p className="text-3xl font-bold w-full text-center">Feature OGX Lootbox</p>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 px-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 px-4">
                             {data?.data?.map((loot, index) => (
                                 <div
                                     key={index}
-                                    className=" bg-white border border-orange-300 p-3 py-4 rounded-lg shadow-md text-orange-800 flex flex-col items-center justify-center relative
-                                    transition-all duration-300 hover:shadow-lg group mt-5 md:w-56 h-56"
+                                    className="bg-white border border-orange-300 rounded-lg shadow-md text-orange-800 flex flex-col items-center justify-between relative
+                                    transition-all duration-300 hover:shadow-lg group  aspect-square w-full"
                                 >
-                                    <div className="relative w-36 h-36 mb-3 group-hover:scale-105 transition-transform duration-300">
-                                        <Image
-                                            src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${loot.image}`}
-                                            alt={loot.name}
-                                            className="object-contain drop-shadow-md"
-                                            sizes="(max-width: 768px) 100vw, 200px"
-                                            width={500}
-                                            height={300}
-                                        />
+                                    <div className="flex-1 flex flex-col items-center justify-center w-full">
+                                        <span className="font-bold text-center relative bottom-7 w-full py-2 px-3 text-xs rounded-lg shadow-lg
+                                                        bg-gradient-to-r from-orange-500 to-orange-700 border border-orange-300 text-white
+                                                      hover:from-orange-600 hover:to-orange-800 transition-all
+                                                        active:scale-95 flex justify-center items-center gap-2">
+                                            {loot.name}
+                                        </span>
+                                        <div className="relative w-24 h-24 mb-3 group-hover:scale-105 transition-transform duration-300">
+                                            <Image
+                                                src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${loot.image}`}
+                                                alt={loot.name}
+                                                className="object-contain drop-shadow-md w-full h-full"
+                                                sizes="(max-width: 768px) 100vw, 200px"
+                                                width={500}
+                                                height={300}
+                                            />
+                                        </div>
                                     </div>
 
-                                    <span className="font-bold text-center mx-auto text-orange-700 md:top-5 top-2 relative text-lg tracking-tight w-full">
-                                        {loot.name}
-                                    </span>
-
-                                    <div className="button flex justify-center items-center relative top-5">
+                                    <div className="w-full">
                                         <button
                                             onClick={() => navigate.push("/lootboxes/" + loot.id)}
-                                            className="sm:w-44 text-sm rounded-full shadow-lg
+                                            className="w-full py-2 text-xs rounded-lg shadow-lg
                                                         bg-gradient-to-r from-orange-500 to-orange-700 border border-orange-300 text-white
                                                         font-medium hover:from-orange-600 hover:to-orange-800 transition-all
-                                                        active:scale-95 flex justify-around items-center"
+                                                        active:scale-95 flex justify-center items-center gap-2 relative top-3"
                                         >
-                                            <div className="font-bold text-center mx-auto text-sm text-white flex justify-center items-center space-x-1 w-full px-4 mt-1">
-                                                <p className="me-2">Open</p>
-                                                <span className="bg-white bg-clip-text text-transparent">
-                                                    {loot.price}
-                                                </span>
-                                                <div className="relative w-3 h-3" style={{bottom:'2px'}}>
-                                                    <Image
-                                                        src={"/logo.png"}
-                                                        alt="ogx"
-                                                        className="rounded-full object-cover ring-2 ring-orange-300"
-                                                        width={300}
-                                                        height={300}
-                                                    />
-                                                </div>
+                                            <span>Open</span>
+                                            <span className="bg-white bg-clip-text text-transparent">
+                                                {loot.price}
+                                            </span>
+                                            <div className="relative w-3 h-3">
+                                                <Image
+                                                    src={"/logo.png"}
+                                                    alt="ogx"
+                                                    className="rounded-full object-cover ring-2 ring-orange-300"
+                                                    width={300}
+                                                    height={300}
+                                                />
                                             </div>
                                         </button>
                                     </div>
@@ -282,7 +286,7 @@ export default function Home() {
                     {data?.data?.map((loot, index) => (
                         <div
                             key={index}
-                            className="w-full bg-white border border-orange-300 p-3 py-4 rounded-lg shadow-md text-orange-800 flex flex-col items-center justify-center relative
+                            className="w-full bg-white border border-orange-300 p-3  rounded-lg shadow-md text-orange-800 flex flex-col items-center justify-center relative
                             transition-all duration-300 hover:shadow-lg group"
             >
               <div className="relative w-36 h-36 mb-3 group-hover:scale-105 transition-transform duration-300">

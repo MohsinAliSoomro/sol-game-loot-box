@@ -42,7 +42,7 @@ export default function LiveDraw() {
                     data?.data?.map((loot, index) => (
                         <div
                             key={loot.title}
-                            className="bg-white backdrop-blur-sm rounded-2xl border border-[#f74e14]/20 overflow-hidden shadow-xl flex flex-col relative h-[400px]"
+                            className="bg-white backdrop-blur-sm rounded-2xl border border-[#f74e14]/20 overflow-hidden shadow-xl flex flex-col relative h-[440px]"
                         >
                             {/* Background pattern */}
                             <div className="absolute inset-0 opacity-5" style={{
@@ -53,18 +53,19 @@ export default function LiveDraw() {
                             
                             {/* Content */}
                             <div className="p-1 flex-1 flex flex-col items-center justify-center relative z-10">
-                                <div className="w-56 h-48 mb-4 relative mt-4">
-                                    <div className="absolute inset-0 rounded-ful bg-gradient-to-r from-[#f74e14]/20 to-[#ff914d]/20 "></div>
+                                <div className="w-64 h-56 mb-4 relative mt-4">
+                                    <div className="absolute inset-0 rounded-ful bg-gradient-to-r from-[#f74e14]/20 to-[#ff914d]/20  rounded-lg"></div>
                                     <Image
                                         src={'/'+loot.image}
                                         alt={loot.name}
                                         width={160}
                                         height={160}
-                                        className="relative z-10 object-contain w-full h-full"
+                                        className=""
                                     />
                                 </div>
                                 
-                                <h2 className="font-bold text-xl text-center mb-2 text-[#ff914d] mt-5">{loot.title}</h2>
+                              <div className="content">
+                              <h2 className="font-bold text-xl text-center mb-2 text-[#ff914d] relative top-4">{loot.title}</h2>
                                 
                                 <p className="text-[#ff914d] text-sm text-center mb-6">
                                     {/* {loot.description?.substring(0, 80)}
@@ -84,6 +85,7 @@ export default function LiveDraw() {
                                         <span className="text-[#ff914d] font-medium">2d 4h</span>
                                     </div>
                                 </div>
+                              </div>
                             </div>
                             
                             {/* Bottom button */}

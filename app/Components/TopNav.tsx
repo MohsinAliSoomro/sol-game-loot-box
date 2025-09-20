@@ -149,7 +149,7 @@ export default function TopNav() {
     setOpen(false);
   };
   return (
-    <div className="flex flex-col md:flex-row justify-between items-center border-white py-4 px-2 md:px-4 border-foreground backdrop-blur-sm relative">
+    <div className="flex flex-col md:flex-row justify-between items-center border-white py-4 px-2 md:px-4 backdrop-blur-sm relative">
       {open && <div className="backdrop-blur"></div>}
       {/* Logo and Mobile Menu Button */}
       <div className="w-full md:w-1/4 flex items-center justify-between md:justify-start">
@@ -164,7 +164,7 @@ export default function TopNav() {
         </Link>
         {/* Mobile menu button */}
         <button
-          className="md:hidden text-foreground"
+          className="md:hidden text-white"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
         >
           <svg
@@ -202,19 +202,19 @@ export default function TopNav() {
         <div className="flex flex-col md:flex-row gap-4 md:gap-8 w-full md:w-auto items-center">
           <Link
             href="/"
-            className="text-base font-bold hover:text-gray-300 transition-colors w-full text-center py-2 md:py-0"
+            className="text-base font-bold text-white hover:text-gray-300 transition-colors w-full text-center py-2 md:py-0"
           >
             Spinloot
           </Link>
           <Link
             href="/live-draw"
-            className="text-base font-bold hover:text-gray-300 transition-colors w-full text-center py-2 md:py-0"
+            className="text-base font-bold text-white hover:text-gray-300 transition-colors w-full text-center py-2 md:py-0"
           >
             Jackpot
           </Link>
           <Link
             href="/leaderboard"
-            className="text-base font-bold hover:text-gray-300 transition-colors w-full text-center py-2 md:py-0"
+            className="text-base font-bold text-white hover:text-gray-300 transition-colors w-full text-center py-2 md:py-0"
           >
             Leaderboard
           </Link>
@@ -230,11 +230,11 @@ export default function TopNav() {
         {isLogin ? (
           <div className="flex flex-col items-center md:items-end gap-4">
             <div className="flex items-center gap-4 w-full">
-              <div className="border border-foreground flex-1 flex justify-between flex-col  rounded-lg px-6 md:px-10   relative  ">
-                <div className="w-32 relative bottom-3 text-center bg-orange-500  bg-background left-[20%]">
+              <div className="border border-white flex-1 flex justify-between flex-col  rounded-lg px-6 md:px-10   relative  ">
+                <div className="w-32 relative bottom-3 text-center bg-orange-500 text-white left-[20%]">
                   My Account
                 </div>
-                <div className="items flex justify-between">
+                <div className="items flex justify-between text-white">
                   <div className="text-xs pt-2 pb-2">
                     <p>OGX</p>
                     <p className="text-center">{formatNumber(user?.apes)}</p>
@@ -251,7 +251,7 @@ export default function TopNav() {
               </div>
             </div>
 
-            <div className="flex  justify-center md:justify-end gap-2 text-xs">
+            <div className="flex  justify-center md:justify-end gap-2 text-xs text-white">
               <button
                 onClick={() => setUser({ ...user, cart: true })}
                 className="hover:text-gray-300 transition-colors"
@@ -283,7 +283,7 @@ export default function TopNav() {
         ) : (
           <button
             onClick={handleOpenModal}
-            className=" text-background px-8 py-2 rounded-full hover:bg-opacity-90 transition-colors w-full md:w-auto bg-orange-500"
+            className="text-white px-8 py-2 rounded-full hover:bg-opacity-90 transition-colors w-full md:w-auto bg-orange-500"
           >
             Login
           </button>
