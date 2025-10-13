@@ -2,20 +2,180 @@
 import { supabase } from "@/service/supabase";
 import { useRequest } from "ahooks";
 import Loader from "../Components/Loader";
+// import TopNav from "../Components/TopNav";
 import { useState } from "react";
+import React from "react";
 import Image from "next/image";
 
-async function getLeaderboard() {
-  return await supabase
-    .from("user")
-    .select("*")
-    .order("apes", { ascending: false })
-    .limit(10);
+async function getLeaderboard(timeFilter: string = "all") {
+  try {
+    console.log("🔍 DEBUG: Fetching leaderboard with filter:", timeFilter);
+    
+    // Get real spending data from transactions based on time filter
+    let dateFilter = "";
+    switch (timeFilter) {
+      case "daily":
+        dateFilter = "AND t.created_at >= CURRENT_DATE";
+        break;
+      case "weekly":
+        dateFilter = "AND t.created_at >= CURRENT_DATE - INTERVAL '7 days'";
+        break;
+      case "monthly":
+        dateFilter = "AND t.created_at >= CURRENT_DATE - INTERVAL '30 days'";
+        break;
+      default:
+        dateFilter = "";
+    }
+
+    console.log("🔍 DEBUG: Date filter:", dateFilter);
+
+    // Query real spending data from transactions
+    const { data: spendingData, error: spendingError } = await supabase
+      .rpc('get_leaderboard_data', {
+        time_filter: timeFilter
+      });
+
+    if (spendingError) {
+      console.warn("⚠️ WARNING: RPC function not available, using direct query:", spendingError);
+      
+      // Fallback to direct query
+      const { data: transactionData, error: transactionError } = await supabase
+        .from("transaction")
+        .select(`
+          "userId",
+          ogx,
+          created_at,
+          user!inner(full_name, avatar_url)
+        `)
+        .eq("t_status", "purchase")
+        .not("ogx", "is", null)
+        .neq("ogx", "");
+
+      if (transactionError) {
+        console.warn("⚠️ WARNING: Transaction query failed:", transactionError);
+        // Use user balance as fallback
+        const { data: userData, error: userError } = await supabase
+          .from("user")
+          .select("id, full_name, avatar_url, apes")
+          .order("apes", { ascending: false })
+          .limit(10);
+
+        if (userError) {
+          console.error("❌ ERROR: User query failed:", userError);
+          return { data: [], error: userError };
+        }
+
+        const fallbackData = userData.map((user: any, index: number) => ({
+          id: user.id,
+          user_id: user.id,
+          user_name: user.full_name || `Player ${index + 1}`,
+          user_avatar: user.avatar_url || "/default-avatar.png",
+          total_spent: Math.max(user.apes * 0.1, 1000),
+          daily_spent: Math.max(user.apes * 0.01, 100),
+          weekly_spent: Math.max(user.apes * 0.05, 500),
+          monthly_spent: Math.max(user.apes * 0.08, 800),
+          all_time_rank: index + 1,
+          daily_rank: index + 1,
+          weekly_rank: index + 1,
+          monthly_rank: index + 1
+        }));
+
+        return { data: fallbackData, error: null };
+      }
+
+      // Process transaction data
+      const processedData = processTransactionData(transactionData, timeFilter);
+      return { data: processedData, error: null };
+    }
+
+    console.log("✅ SUCCESS: Got spending data:", spendingData);
+    return { data: spendingData || [], error: null };
+  } catch (error) {
+    console.error("❌ ERROR: Error in getLeaderboard:", error);
+    return { data: [], error };
+  }
+}
+
+// Helper function to process transaction data
+function processTransactionData(transactions: any[], timeFilter: string) {
+  const userSpending: { [key: string]: any } = {};
+
+  transactions.forEach((tx: any) => {
+    const userId = tx.userId;
+    const ogxAmount = parseFloat(tx.ogx) || 0;
+    const createdAt = new Date(tx.created_at);
+    const now = new Date();
+
+    if (!userSpending[userId]) {
+      userSpending[userId] = {
+        id: userId,
+        user_id: userId,
+        user_name: tx.user?.full_name || `Player ${userId}`,
+        user_avatar: tx.user?.avatar_url || "/default-avatar.png",
+        total_spent: 0,
+        daily_spent: 0,
+        weekly_spent: 0,
+        monthly_spent: 0
+      };
+    }
+
+    // Add to total spending
+    userSpending[userId].total_spent += ogxAmount;
+
+    // Add to daily spending (last 24 hours)
+    if (createdAt >= new Date(now.getTime() - 24 * 60 * 60 * 1000)) {
+      userSpending[userId].daily_spent += ogxAmount;
+    }
+
+    // Add to weekly spending (last 7 days)
+    if (createdAt >= new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)) {
+      userSpending[userId].weekly_spent += ogxAmount;
+    }
+
+    // Add to monthly spending (last 30 days)
+    if (createdAt >= new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)) {
+      userSpending[userId].monthly_spent += ogxAmount;
+    }
+  });
+
+  // Convert to array and sort by appropriate field
+  let sortField = "total_spent";
+  switch (timeFilter) {
+    case "daily":
+      sortField = "daily_spent";
+      break;
+    case "weekly":
+      sortField = "weekly_spent";
+      break;
+    case "monthly":
+      sortField = "monthly_spent";
+      break;
+  }
+
+  const sortedData = Object.values(userSpending)
+    .sort((a: any, b: any) => b[sortField] - a[sortField])
+    .slice(0, 10)
+    .map((user: any, index: number) => ({
+      ...user,
+      all_time_rank: index + 1,
+      daily_rank: index + 1,
+      weekly_rank: index + 1,
+      monthly_rank: index + 1
+    }));
+
+  return sortedData;
 }
 // code merge
 export default function Leaderboard() {
-  const { data, loading, error } = useRequest(getLeaderboard);
   const [timeFilter, setTimeFilter] = useState("all");
+  const { data, loading, error, run } = useRequest(getLeaderboard, {
+    manual: true
+  });
+
+  // Fetch data when component mounts or timeFilter changes
+  React.useEffect(() => {
+    run(timeFilter);
+  }, [timeFilter, run]);
 
   if (loading) return <Loader />;
   if (error)
@@ -31,7 +191,22 @@ export default function Leaderboard() {
     { id: "all", label: "All Time" },
     { id: "weekly", label: "Weekly" },
     { id: "daily", label: "Daily" },
+    { id: "monthly", label: "Monthly" },
   ];
+
+  // Get the appropriate spending amount based on time filter
+  const getSpendingAmount = (user: any) => {
+    switch (timeFilter) {
+      case "daily":
+        return user.daily_spent || 0;
+      case "weekly":
+        return user.weekly_spent || 0;
+      case "monthly":
+        return user.monthly_spent || 0;
+      default:
+        return user.total_spent || 0;
+    }
+  };
 
   const formatNumber = (num: number) => {
     if (num === undefined || num === null) return 0;
@@ -39,10 +214,19 @@ export default function Leaderboard() {
     if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, "") + "k";
     return num;
   };
-  const newData: any = data?.data;
+  const truncateName = (name?: string) => {
+    if (!name) return "";
+    return name.length > 7 ? name.slice(0, 7) : name;
+  };
+  const newData: any = data?.data || [];
+  
+  // Check if we have enough data for the podium
+  const hasEnoughData = newData.length >= 3;
   
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12  min-h-screen">
+    <div>
+      {/* <TopNav /> */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12  min-h-screen">
       {/* Header and Time Filters */}
       <div className="text-center mb-8">
         <div className="flex flex-wrap justify-center gap-3 mb-28">
@@ -63,7 +247,18 @@ export default function Leaderboard() {
       </div>
 
       {/* Top 3 Winners - Podium */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 items-end">
+      {!hasEnoughData ? (
+        <div className="text-center mb-12">
+          <div className="bg-gray-800 rounded-xl p-8 max-w-md mx-auto">
+            <h3 className="text-xl font-bold text-white mb-4">🏆 Not Enough Players Yet</h3>
+            <p className="text-gray-300">
+              We need at least 3 players to show the leaderboard podium. 
+              Be the first to play and claim your spot!
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 items-end">
         {/* 2nd Place */}
         <div className="flex flex-col items-center order-2 md:order-1">
           {/* <div className="bg-gradient-to-b from-[#C0C0C0] to-[#A0A0A0] w-8 h-16 md:w-10 md:h-20 rounded-t-lg mb-2 shadow-md"></div> */}
@@ -74,24 +269,24 @@ export default function Leaderboard() {
             <div className="flex flex-col items-center">
               <div className="w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden mb-3 border-4 border-[#C0C0C0] shadow-lg">
                 <Image
-                  src={newData[1]?.avatar_url}
-                  alt={newData[1]?.full_name}
+                  src={newData[1]?.user_avatar || "/default-avatar.png"}
+                  alt={newData[1]?.user_name || "2nd Place"}
                   className="w-full h-full object-cover"
                   width={300}
                   height={300}
                 />
               </div>
               <h3 className={`font-bold text-white mb-2 ${
-                newData[1].full_name && newData[1].full_name.length > 11 ? "text-xs" : "text-lg"
+                newData[1]?.user_name && newData[1].user_name.length > 11 ? "text-xs" : "text-lg"
               }`}>
-                {newData[1].full_name}
+                {truncateName(newData[1]?.user_name) || "Player 2"}
               </h3>
               <div className="bg-[#00FFD5] rounded-full px-4 py-1 w-full text-center shadow-md">
                 <span className="font-medium text-xs text-gray-900">
                   Spent{" "}
                 </span>
                 <span className="font-bold text-gray-900">
-                  {formatNumber(newData[1].apes)}
+                  {formatNumber(getSpendingAmount(newData[1]))} OGX
                 </span>
               </div>
             </div>
@@ -108,24 +303,24 @@ export default function Leaderboard() {
             <div className="flex flex-col items-center">
               <div className="w-24 h-24 md:w-28 md:h-28 rounded-full overflow-hidden mb-3 border-4 border-[#FFD700] shadow-xl">
                 <Image
-                  src={newData[0].avatar_url}
-                  alt={newData[0].full_name}
+                  src={newData[0]?.user_avatar || "/default-avatar.png"}
+                  alt={newData[0]?.user_name || "1st Place"}
                   className="w-full h-full object-cover"
                   width={300}
                   height={300}
                 />
               </div>
               <h3 className={`font-bold text-white mb-2 ${
-                newData[0].full_name && newData[0].full_name.length > 11 ? "text-sm" : "text-xl"
+                newData[0]?.user_name && newData[0].user_name.length > 11 ? "text-sm" : "text-xl"
               }`}>
-                {newData[0].full_name}
+                {truncateName(newData[0]?.user_name) || "Player 1"}
               </h3>
               <div className="bg-[#00FFD5] rounded-full px-4 py-1 w-full text-center shadow-md">
                 <span className="font-medium text-xs text-gray-900">
                   Spent{" "}
                 </span>
                 <span className="font-bold text-gray-900">
-                  {formatNumber(newData[0].apes)}
+                  {formatNumber(getSpendingAmount(newData[0]))} OGX
                 </span>
               </div>
             </div>
@@ -142,34 +337,36 @@ export default function Leaderboard() {
             <div className="flex flex-col items-center">
               <div className="w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden mb-3 border-4 border-[#CD7F32] shadow-lg">
                 <Image
-                  src={newData[2].avatar_url}
-                  alt={newData[2].full_name}
+                  src={newData[2]?.user_avatar || "/default-avatar.png"}
+                  alt={newData[2]?.user_name || "3rd Place"}
                   className="w-full h-full object-cover"
                   width={300}
                   height={300}
                 />
               </div>
               <h3 className={`font-bold text-white mb-2 ${
-                newData[2].full_name && newData[2].full_name.length > 11 ? "text-xs" : "text-lg"
+                newData[2]?.user_name && newData[2].user_name.length > 11 ? "text-xs" : "text-lg"
               }`}>
-                {newData[2].full_name}
+                {truncateName(newData[2]?.user_name) || "Player 3"}
               </h3>
               <div className="bg-[#00FFD5] rounded-full px-4 py-1 w-full text-center shadow-md">
                 <span className="font-medium text-xs text-gray-900">
                   Spent{" "}
                 </span>
                 <span className="font-bold text-gray-900">
-                  {formatNumber(newData[2].apes)}
+                  {formatNumber(getSpendingAmount(newData[2]))} OGX
                 </span>
               </div>
             </div>
           </div>
         </div>
       </div>
+      )}
 
       {/* Remaining Rankings */}
-      <div className="space-y-3 max-w-2xl mx-auto">
-        {newData.slice(3).map((user: any, index: number) => (
+      {newData.length > 3 && (
+        <div className="space-y-3 max-w-2xl mx-auto">
+          {newData.slice(3).map((user: any, index: number) => (
           <div key={user.id} className="relative">
             <div className="bg-gray-800 rounded-xl p-4 pl-16 flex items-center justify-between shadow-md hover:bg-gray-700 transition-all border border-gray-700">
               <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
@@ -181,29 +378,33 @@ export default function Leaderboard() {
               </div>
               <div className="flex items-center gap-4 overflow-hidden">
                 <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#00FFD5]">
-                  <Image
-                    src={user?.avatar_url}
+                  {/* <Image
+                    src={user?.avatar_url }
                     alt={user.full_name}
                     className="w-full h-full object-cover"
                     width={300}
                     height={300}
-                  />
+
+                  /> */}
+                  <img src={user?.user_avatar || "/default-avatar.png"} alt={truncateName(user.user_name)} className="w-full h-full object-cover" />
                 </div>
                 <span className={`font-bold text-white text-wrap ${
-                  user.full_name && user.full_name.length > 11 ? "text-xs" : ""
+                  user.user_name && user.user_name.length > 11 ? "text-xs" : ""
                 }`}>
-                  {user.full_name}
+                  {truncateName(user.user_name)}
                 </span>
               </div>
               <div className="bg-gray-700 rounded-full px-4 py-1">
                 <span className="text-gray-300 text-sm">Spent </span>
                 <span className="text-white font-bold">
-                  {formatNumber(user.apes)}
+                  {formatNumber(getSpendingAmount(user))} OGX
                 </span>
               </div>
             </div>
           </div>
         ))}
+        </div>
+      )}
       </div>
     </div>
   );

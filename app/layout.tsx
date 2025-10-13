@@ -25,7 +25,11 @@ export const metadata: Metadata = {
   title: "Spinloot",
   description: "Welcome to Spinloot",
   icons: {
-    icon: "public/1.png",
+    icon: [
+      { url: "public/favicon.ico", sizes: "any" },
+    ],
+    shortcut: "public/favicon.ico",
+    apple: "/apple-touch-icon.png",
   },
 };
 
@@ -36,6 +40,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+      <link rel="icon" href="/favicon.ico" />
+
       <body
         className={cn(
           "min-h-screen bg-orange-500 antialiased",
@@ -57,6 +64,8 @@ export default function RootLayout({
           </ThemeProvider>
         </SolanaWalletProvider>
       </body>
+      </head>
+   
     </html>
   );
 }

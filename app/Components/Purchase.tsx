@@ -1,6 +1,6 @@
 "use client";
 import { useUserState } from "@/state/useUserState";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   Connection,
   PublicKey,
@@ -11,6 +11,9 @@ import {
 } from "@solana/web3.js";
 import { supabase } from "@/service/supabase";
 import { useRequest } from "ahooks";
+import { solanaProgramService, OGX_MINT, SOL_MINT } from "@/lib/solana-program";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { CONFIG, convertSOLToOGX } from "@/lib/config";
 
 const getTransactions = async (userId: string) => {
   const response = await supabase
@@ -61,40 +64,42 @@ function truncate(str: string, maxLength: number) {
 
 export default function PurchaseModal() {
   const [state, setState] = useUserState();
+  const { publicKey, signTransaction, connected } = useWallet();
   const [form, setForm] = useState({
     amount: 1,
     balance: 100,
     availableBalance: 0,
   });
+  const [depositMode, setDepositMode] = useState<"SOL" | "OGX">("SOL");
+
   const [solState, setSolState] = useState({
-    amount: 1,
+    amount: 0.01,
     balance: 100,
     availableBalance: 0,
   });
+  
+  const [ogxState, setOgxState] = useState({
+    amount: 0.01, // default OGX deposit
+    balance: 0,
+    availableBalance: 0,
+  });
+  
+  
   const { run, data, loading } = useRequest(getTransactions, { manual: true });
   const [activeTab, setActiveTab] = useState("ogx");
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  async function fetchSolBalance() {
-    // try {
-    //     const response = await fetch(`https://api.solana.com`, {
-    //         method: "POST",
-    //         headers: {
-    //             "Content-Type": "application/json",
-    //         },
-    //         body: JSON.stringify({
-    //             jsonrpc: "2.0",
-    //             id: 1,
-    //             method: "getBalance",
-    //             params: [""],
-    //         }),
-    //     });
-    //     const data = await response.json();
-    //     const solBalance = data.result / 1000000000;
-    //     console.log(`Current SOL balance: ${solBalance}`);
-    // } catch (error) {
-    //     console.error("Error fetching SOL balance:", error);
-    // }
-  }
+  const fetchSolBalance = useCallback(async () => {
+    if (!publicKey) return;
+    
+    try {
+      const balance = await solanaProgramService.getSOLBalance(publicKey);
+      setSolState(prev => ({ ...prev, availableBalance: balance }));
+      console.log(`Current SOL balance: ${balance}`);
+    } catch (error) {
+      console.error("Error fetching SOL balance:", error);
+    }
+  }, [publicKey]);
 
   const fetchDepositHistory = async () => {
     // try {
@@ -142,88 +147,206 @@ export default function PurchaseModal() {
       t_status: "purchase",
     });
     run(state.id);
+    
+    // Update user spending in state after successful transaction
+    const newSpending = (state.totalSpending || 0) + calculateBalance;
+    setState({ ...state, totalSpending: newSpending });
   };
   
   const makeTransaction = async () => {
+    if (!publicKey || !signTransaction) {
+      alert("Please connect your wallet first");
+      return;
+    }
+
+    if (!solState.amount || solState.amount <= 0) {
+      alert("Please enter a valid amount");
+      return;
+    }
+
+    if (isProcessing) {
+      alert("Transaction already in progress. Please wait.");
+      return;
+    }
+
+    setIsProcessing(true);
+    
     try {
-      // Ensure the wallet is connected
-      let walletAddress = "";
-      //@ts-ignore
-      walletAddress = await connectWallet();
-      if (!walletAddress) return;
+      // For SOL purchases, we deposit SOL and get OGX credits in database
+      console.log(`Depositing ${solState.amount} SOL to get OGX credits`);
+      
+      // Use depositSOL function to deposit SOL (which gives you OGX credits)
+      const signature = await solanaProgramService.depositSOL(
+        publicKey,
+        solState.amount,
+        { publicKey, signTransaction }
+      );
 
-      // Create connection to testnet
-      const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
+      // Only update database if transaction was successful
+      if (signature) {
+        try {
+          // Calculate OGX amount from SOL deposit (1 SOL = 1000 OGX)
+          const ogxAmount = convertSOLToOGX(solState.amount);
+          
+          // Update user balance with the OGX credits earned from SOL deposit
+          const plus = ogxAmount + (state.apes || 0);
+          
+          console.log("Updating user balance:", { userId: state.id, newBalance: plus, ogxAmount });
+          
+          // Update user balance and wallet address
+          const { error: userError } = await supabase.from("user").update({ 
+            apes: plus,
+            walletAddress: publicKey.toString() // Ensure wallet address is stored
+          }).eq("id", state.id);
+          
+          if (userError) {
+            console.error("Error updating user balance:", userError);
+            throw userError;
+          }
+          
+          console.log("Saving transaction:", { 
+            transactionId: signature, 
+            ogx: ogxAmount, 
+            userId: state.id
+          });
+          
+          // Save transaction
+          const { error: transactionError } = await supabase.from("transaction").insert({
+            transactionId: signature,
+            ogx: ogxAmount,
+            userId: state.id,
+          });
 
-      // Test the connection
-      try {
-        const blockHeight = await connection.getBlockHeight();
-        console.log("Connected to Solana testnet. Current block height:", blockHeight);
-      } catch (error) {
-        console.error("Failed to connect to Solana testnet:", error);
-        throw new Error("Network connection failed");
+          if (transactionError) {
+            console.error("Error saving transaction:", transactionError);
+            throw transactionError;
+          }
+
+          console.log("Database update successful");
+          
+          // Update user spending in state after successful transaction
+          const newSpending = (state.totalSpending || 0) + ogxAmount;
+          setState({ ...state, apes: plus, totalSpending: newSpending });
+          
+          alert(`Purchase successful! You bought ${ogxAmount} OGX tokens for ${solState.amount} SOL. Transaction: ${signature}`);
+          
+          // Refresh balance
+          await fetchSolBalance();
+        } catch (dbError) {
+          console.error("Database error:", dbError);
+          alert(`Transaction successful on blockchain but failed to update database. Please contact support with transaction ID: ${signature}`);
+        }
       }
-
-      let recipientAddress = "CRt41RoAZ4R9M7QHx5vyKB2Jee3NvDSmhoSak8GfMwtY";
-
-      const fromPubkey = new PublicKey(walletAddress);
-      const toPubkey = new PublicKey(recipientAddress);
-
-      // Get recent blockhash
-      const { blockhash, lastValidBlockHeight } =
-        await connection.getLatestBlockhash();
-
-      // Create a new transaction
-      let transaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: fromPubkey,
-          toPubkey: toPubkey,
-          lamports: 0.1 * LAMPORTS_PER_SOL, // Convert SOL to lamports
-        })
-      );
-      // Set the blockhash and fee payer
-      transaction.recentBlockhash = blockhash;
-      transaction.lastValidBlockHeight = lastValidBlockHeight;
-      transaction.feePayer = fromPubkey;
-
-      //@ts-ignore
-      const signedTransaction = await window.solana.signTransaction(
-        transaction
-      );
-
-      // Send the transaction
-      const signature = await connection.sendRawTransaction(
-        signedTransaction.serialize()
-      );
-
-      // Confirm the transaction
-      const confirmation = await connection.confirmTransaction({
-        signature,
-        blockhash,
-        lastValidBlockHeight,
-      });
-
-      await updaetUserApes(signature);
-      alert("Transaction sent and confirmed ");
-      // dave into database transaction and add apes into user wallet
+      
       return signature;
     } catch (error) {
       console.error("Error making transaction:", error);
-      //@ts-ignore
-      alert(
-        `Error making transaction ===> ${JSON.stringify(
-          error
-        )}`
-      );
-      if (error instanceof Error) {
-        console.error(error.message);
+      if (error instanceof Error && error.message.includes("already been processed")) {
+        alert("This transaction has already been processed. Please check your wallet or try again with a different amount.");
+      } else if (error instanceof Error && error.message.includes("already in progress")) {
+        alert("Transaction already in progress. Please wait for it to complete.");
+      } else if (error instanceof Error && error.message.includes("simulation failed")) {
+        alert("Transaction simulation failed. This might be due to insufficient balance or network issues. Please try again.");
+      } else if (error instanceof Error && error.message.includes("Insufficient SOL balance")) {
+        alert(error.message);
+      } else if (error instanceof Error && error.message.includes("Blockhash not found")) {
+        alert("Network issue detected. Please try again in a moment.");
+      } else {
+        alert(`Error making transaction: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
+    } finally {
+      setIsProcessing(false);
     }
   };
   
   const solExchange = useMemo(()=>{
-    return solState.amount * 1000
+    return convertSOLToOGX(solState.amount)
   },[solState.amount])
+
+  const makeSOLDeposit = async () => {
+    if (!publicKey || !signTransaction) {
+      alert("Please connect your wallet first");
+      return;
+    }
+
+    if (!solState.amount || solState.amount <= 0) {
+      alert("Please enter a valid SOL amount");
+      return;
+    }
+
+    if (isProcessing) {
+      alert("Transaction already in progress. Please wait.");
+      return;
+    }
+
+    setIsProcessing(true);
+    
+    try {
+      // Deposit SOL and convert to OGX tokens
+      const signature = await solanaProgramService.depositSOL(
+        publicKey,
+        solState.amount,
+        { publicKey, signTransaction }
+      );
+
+      // Update user balance with OGX equivalent
+      const ogxAmount = convertSOLToOGX(solState.amount);
+      const plus = ogxAmount + (state.apes || 0);
+      
+      // Update user balance and wallet address
+      await supabase.from("user").update({ 
+        apes: plus,
+        walletAddress: publicKey.toString() // Ensure wallet address is stored
+      }).eq("id", state.id);
+      
+      // Save transaction
+      await supabase.from("transaction").insert({
+        transactionId: signature,
+        ogx: ogxAmount,
+        userId: state.id,
+        t_status: "purchase",
+        walletAddress: publicKey.toString(), // Store wallet address in transaction too
+      });
+
+      // Update user spending in state after successful transaction
+      const newSpending = (state.totalSpending || 0) + ogxAmount;
+      setState({ ...state, apes: plus, totalSpending: newSpending });
+      
+      alert(`SOL deposit successful! You received ${ogxAmount} OGX. Transaction: ${signature}`);
+      
+      // Refresh balance and transaction history
+      await fetchSolBalance();
+      run(state.id);
+      
+      return signature;
+    } catch (error) {
+      console.error("Error making SOL deposit:", error);
+      if (error instanceof Error && error.message.includes("already been processed")) {
+        alert("This transaction has already been processed. Please check your wallet or try again with a different amount.");
+      } else if (error instanceof Error && error.message.includes("already in progress")) {
+        alert("Transaction already in progress. Please wait for it to complete.");
+      } else if (error instanceof Error && error.message.includes("simulation failed")) {
+        alert("Transaction simulation failed. This might be due to insufficient balance or network issues. Please try again.");
+      } else if (error instanceof Error && error.message.includes("Insufficient SOL balance")) {
+        alert(error.message);
+      } else if (error instanceof Error && error.message.includes("Blockhash not found")) {
+        alert("Network issue detected. Please try again in a moment.");
+      } else {
+        alert(`Error making SOL deposit: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (state.id) {
+      run(state.id);
+    }
+    if (publicKey) {
+      fetchSolBalance();
+    }
+  }, [state.id, run, publicKey, fetchSolBalance]);
   
   if (!state.purchase) return null;
   return (
@@ -233,7 +356,7 @@ export default function PurchaseModal() {
           <div className="relative bg-background rounded-lg shadow dark:bg-gray-700">
             <div className="flex items-center justify-between p-4 md:p-5 border-b rounded-t dark:border-gray-600">
               <h3 className="text-xl font-semibold text-gray-900 dark:text-white mx-auto -mr-5">
-                Deposit OGX
+                Buy OGX Tokens
               </h3>
               <button
                 onClick={() => setState({ ...state, purchase: false })}
@@ -268,7 +391,7 @@ export default function PurchaseModal() {
                     : "text-orange-600 bg-transparent"
                 }`}
               >
-                OGX Deposit
+                Buy OGX
               </button>
               <button
                 onClick={() => setActiveTab("sol")}
@@ -296,19 +419,22 @@ export default function PurchaseModal() {
               {activeTab === "ogx" && (
                 <div className="p-4 md:p-5 " >
                   <p className="text-base leading-relaxed text-orange-600 mb-3">
-                    Deposit OGX tokens to your account. You can use these tokens
-                    to open lootboxes and participate in the platform.
+                    Purchase OGX tokens with SOL. Enter the amount of SOL you want to spend, and you&apos;ll receive OGX tokens at the current exchange rate.
                   </p>
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-orange-600 mb-2">
-                        Deposit OGX
+                        SOL Amount to Spend
                       </label>
                       <input
-                        value={form.amount}
+                        type="number"
+                        step="0.01"
+                        placeholder="0.0"
+                        min="0.01"
+                        value={solState.amount}
                         onChange={(e) =>
-                          setForm({
-                            ...form,
+                          setSolState({
+                            ...solState,
                             amount: Number(e.target.value),
                           })
                         }
@@ -317,11 +443,11 @@ export default function PurchaseModal() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-orange-600 mb-2">
-                        Estimated OGX
+                        OGX Tokens You&apos;ll Receive
                       </label>
                       <input
                         className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
-                        value="0"
+                        value={convertSOLToOGX(solState.amount)}
                         disabled
                       />
                     </div>
@@ -339,9 +465,10 @@ export default function PurchaseModal() {
                   <div className="flex items-center justify-end pt-4 space-x-3 border-t border-[#ff914d]/20">
                     <button
                       onClick={makeTransaction}
-                      className="px-5 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-[#f74e14] to-[#ff914d] text-white hover:opacity-90 focus:ring-2 focus:ring-[#ff914d]/50"
+                      disabled={isProcessing || !connected}
+                      className="px-5 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-[#f74e14] to-[#ff914d] text-white hover:opacity-90 focus:ring-2 focus:ring-[#ff914d]/50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Deposit OGX
+                      {isProcessing ? "Processing..." : "Buy OGX with SOL"}
                     </button>
                     <button
                       onClick={() =>
@@ -368,7 +495,7 @@ export default function PurchaseModal() {
                         type="number"
                         step="0.01"
                         placeholder="0.0"
-                        min={1}
+                        min="0.01"
                         value={solState.amount}
                         onChange={(e) =>
                           setSolState({
@@ -396,18 +523,17 @@ export default function PurchaseModal() {
                       <input
                         className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
                         disabled
-                        value={state.apes || 0}
+                        value={solState.availableBalance.toFixed(4)}
                       />
                     </div>
                   </div>
                   <div className="flex items-center justify-end pt-4 space-x-3 border-t border-[#ff914d]/20">
                     <button
-                      onClick={() =>
-                        alert("SOL Deposit functionality coming soon!")
-                      }
-                      className="px-5 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-[#f74e14] to-[#ff914d] text-white hover:opacity-90 focus:ring-2 focus:ring-[#ff914d]/50"
+                      onClick={makeSOLDeposit}
+                      disabled={isProcessing || !connected}
+                      className="px-5 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-[#f74e14] to-[#ff914d] text-white hover:opacity-90 focus:ring-2 focus:ring-[#ff914d]/50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Deposit SOL
+                      {isProcessing ? "Processing..." : "Deposit SOL"}
                     </button>
                     <button
                       onClick={() =>

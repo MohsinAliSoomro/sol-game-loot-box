@@ -7,7 +7,6 @@ import { useRequest } from "ahooks";
 import { supabase } from "@/service/supabase";
 import ImageSlider from "./Components/ImageSlider";
 import Loader from "./Components/Loader";
-import { useState } from "react";
 
 // Types for the API responses
 interface Product {
@@ -34,21 +33,25 @@ const getProducts = async () => {
 //     const response = await supabase.from("prizeWin").select("*").order("created_at", { ascending: false }).limit(8);
 //     return response;
 // };
+
 const getLatestTransaction = async () => {
   const response = await supabase
-    .from("liveDraw")
-    .select(
-      `*, user (email,full_name,avatar_url,id), products(id, name, price, image)`
-    )
+    .from("prizeWin")
+    .select("*")
     .order("created_at", { ascending: false })
-    .limit(10);
+    .limit(20);
   return response;
 };
 export default function Home() {
-    const { data, loading, error } = useRequest(getProducts);
+    const { data: productsData, loading, error } = useRequest(getProducts);
     const { data: transactions, loading: transactionLoading, error: transactionError } = useRequest(getLatestTransaction);
     const navigate = useRouter();
-    const [activeTab, setActiveTab] = useState('onchain'); // Add state for active tab
+    
+    // Helper function to get product image by product_id
+    const getProductImage = (productId: number) => {
+        const product = productsData?.data?.find((p: any) => p.id === productId);
+        return `${process.env.NEXT_PUBLIC_FRONT_URL}/${product?.image}`;
+    };
 
     // Check for loading and error states
     if (loading || transactionLoading) {
@@ -68,7 +71,7 @@ export default function Home() {
             </div>
         );
     }
-
+console.log(transactions?.data,'transactions')
     return (
         <div className="overflow-hidden bg-orange-500 text-white">
             <div className="nav-top z-50 relative">
@@ -84,40 +87,60 @@ export default function Home() {
             <div className="w-full mb-8"  >
                 <div className="overflow-x-auto scrollbar-hide ">
                     <div className="flex gap-4 flex-grow min-w-max px-4 h-56" >
-                        {transactions?.data?.map((loot, index) => (
-                            <div key={index} className="w-[150px]  flex-shrink-0 cursor-pointer"
-                            onClick={() => navigate.push("/lootboxes/" + loot.id)}
+                        {transactions?.data?.map((win, index) => (
+                            
+                            <div key={index} className="w-[150px] flex-shrink-0 cursor-pointer"
+                            onClick={() => navigate.push("/lootboxes/" + (win?.product_id))}
                             >
-                                <div className="w-full aspect-square bg-white border border-orange-300 rounded-lg shadow-md text-orange-800 flex flex-col items-center relative h-40 overflow-hidden group">
+                                <div className="w-full aspect-square bg-white border border-orange-300 rounded-lg shadow-md text-orange-800 flex flex-col items-center relative overflow-hidden group">
                                     <div className="relative w-full h-full flex flex-col items-center">
                                         {/* Main content - slides up on hover */}
                                         <div className="absolute inset-0 flex flex-col items-center transition-transform duration-500 ease-in-out group-hover:-translate-y-full">
-                                            <p className="text-sm font-bold truncate text-orange-700 mt-">
-                                                {loot?.winner?.slice(0, 10) || "Unknown"}
+                                            <p className="text-sm font-bold truncate text-orange-700 mt-2">
+                                                {win?.name?.slice(0, 10) || "Unknown"}
                                             </p>
                                             <div className="relative w-full h-24 overflow-hidden">
                                                 <Image
-                                                    src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${loot?.products?.image}`}
-                                                    alt={loot?.name}
+                                                    src={getProductImage(win?.product_id) && win?.image}
+                                                    alt={win?.name || 'Reward'}
                                                     className="object-contain w-full h-full"
                                                     width={100}
                                                     height={100}
                                                 />
                                             </div>
-                                            <span className="font-bold text-xs text-center mx-auto text-orange-700 mb-1 truncate w-full">
-                                                {loot?.products?.name}
+                                            <span className="font-bold text-sm mt-1 text-center mx-auto text-orange-700 mb-1 truncate w-full">
+                                                {win?.name || 'Reward'}
                                             </span>
+                                            {/* Show SOL amount badge */}
+                                            {/* {win?.sol && (
+                                                <div className="absolute top-1 right-1 bg-green-500 text-white text-xs px-1 py-0.5 rounded">
+                                                    {win.sol} SOL
+                                                </div>
+                                            )} */}
                                         </div>
                                         {/* Secondary content - revealed on hover */}
                                         <div className="absolute inset-0 flex flex-col items-center transition-transform duration-500 ease-in-out translate-y-full group-hover:translate-y-0">
-                                            <div className="relative w-full h-24 mt-2 overflow-hidden">
+                                            <div className="relative w-full h-24 mt-5 overflow-hidden">
                                                 <Image
-                                                    src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${loot?.products?.image}`}
-                                                    alt={loot?.name}
-                                                    className="object-contain mt-3 w-full h-full "
+                                                    src={getProductImage(win?.product_id)}
+                                                    alt={win?.name || 'Reward'}
+                                                    className="object-contain mt-3 w-full h-full"
                                                     width={100}
                                                     height={100}
                                                 />
+                                            </div>
+                                            {/* Show reward details on hover */}
+                                            <div className="text-center mt-2">
+                                                {/* {win?.sol && (
+                                                    <p className="text-xs font-bold text-green-600">
+                                                        {win.sol} SOL Won
+                                                    </p>
+                                                )} */}
+                                                {/* {win?.created_at && (
+                                                    <p className="text-xs text-gray-500">
+                                                        {new Date(win.created_at).toLocaleDateString()}
+                                                    </p>
+                                                )} */}
                                             </div>
                                         </div>
                                     </div>
@@ -128,154 +151,61 @@ export default function Home() {
                 </div>
             </div>
 
-            {/* Tabs Section */}
-            
-            {/* Tab Navigation */}
-            <div className="flex justify-center mb-6 bg-orange-500">
-                <div className="flex bg-white/20 rounded-lg p-1 backdrop-blur-sm">
-                    <button
-                        onClick={() => setActiveTab('onchain')}
-                        className={`px-6 py-3 rounded-md font-semibold transition-all duration-300 md:w-72  ${
-                            activeTab === 'onchain'
-                                ? 'bg-white text-orange-600 shadow-lg'
-                                : 'text-white hover:bg-white/10'
-                        }`}
-                    >
-                        Onchain Boxes
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('offchain')}
-                        className={`px-6 py-3 rounded-md font-semibold transition-all duration-300 md:w-72 ${
-                            activeTab === 'offchain'
-                                ? 'bg-white text-orange-600 shadow-lg'
-                                : 'text-white hover:bg-white/10'
-                        }`}
-                    >
-                        Offchain Boxes
-                    </button>
-                </div>
+            {/* Feature OGX Lootbox Section */}
+            <div className="flex justify-center items-center my-8">
+                <p className="text-3xl font-bold w-full text-center">Feature OGX Lootbox</p>
             </div>
-            {/* Tab Content */}
-            <div className="w-full mb-40">
-                {activeTab === 'onchain' ? (
-                    // Onchain boxes content
-                    <>
-                        <div className="flex justify-center items-center my-8">
-                            <p className="text-3xl font-bold w-full text-center">Feature OGX Lootbox</p>
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 px-4 mb-40">
+                {productsData?.data?.map((loot, index) => (
+                    <div
+                        key={index}
+                        className="bg-white border border-orange-300 rounded-lg shadow-md text-orange-800 flex flex-col items-center justify-between relative
+                        transition-all duration-300 hover:shadow-lg group  aspect-square w-full mt-5"
+                    >
+                        <div className="flex-1 flex flex-col items-center justify-center w-full">
+                            <span className="font-bold text-center relative bottom-7 w-full py-2 px-3 text-xs rounded-lg shadow-lg
+                                            bg-gradient-to-r from-orange-500 to-orange-700 border border-orange-300 text-white
+                                          hover:from-orange-600 hover:to-orange-800 transition-all
+                                            active:scale-95 flex justify-center items-center gap-2">
+                                {loot.name}
+                            </span>
+                            <div className="relative w-24 h-24 mb-3 group-hover:scale-105 transition-transform duration-300">
+                                <Image
+                                    src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${loot.image}`}
+                                    alt={loot.name}
+                                    className="object-contain drop-shadow-md w-full h-full"
+                                    sizes="(max-width: 768px) 100vw, 200px"
+                                    width={500}
+                                    height={300}
+                                />
+                            </div>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 px-4">
-                            {data?.data?.map((loot, index) => (
-                                <div
-                                    key={index}
-                                    className="bg-white border border-orange-300 rounded-lg shadow-md text-orange-800 flex flex-col items-center justify-between relative
-                                    transition-all duration-300 hover:shadow-lg group  aspect-square w-full"
-                                >
-                                    <div className="flex-1 flex flex-col items-center justify-center w-full">
-                                        <span className="font-bold text-center relative bottom-7 w-full py-2 px-3 text-xs rounded-lg shadow-lg
-                                                        bg-gradient-to-r from-orange-500 to-orange-700 border border-orange-300 text-white
-                                                      hover:from-orange-600 hover:to-orange-800 transition-all
-                                                        active:scale-95 flex justify-center items-center gap-2">
-                                            {loot.name}
-                                        </span>
-                                        <div className="relative w-24 h-24 mb-3 group-hover:scale-105 transition-transform duration-300">
-                                            <Image
-                                                src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${loot.image}`}
-                                                alt={loot.name}
-                                                className="object-contain drop-shadow-md w-full h-full"
-                                                sizes="(max-width: 768px) 120vw, 300px"
-                                                width={600}
-                                                height={400}
-                                            />
-                                        </div>
-                                    </div>
 
-                                    <div className="w-full">
-                                        <button
-                                            onClick={() => navigate.push("/lootboxes/" + loot.id)}
-                                            className="w-full py-2 text-xs rounded-lg shadow-lg
-                                                        bg-gradient-to-r from-orange-500 to-orange-700 border border-orange-300 text-white
-                                                        font-medium hover:from-orange-600 hover:to-orange-800 transition-all
-                                                        active:scale-95 flex justify-center items-center gap-2 relative top-3"
-                                        >
-                                            <span>Open</span>
-                                            <span className="bg-white bg-clip-text text-transparent">
-                                                {loot.price}
-                                            </span>
-                                            <div className="relative w-3 h-3">
-                                                <Image
-                                                    src={"/logo.png"}
-                                                    alt="ogx"
-                                                    className="rounded-full object-cover ring-2 ring-orange-300"
-                                                    width={300}
-                                                    height={300}
-                                                />
-                                            </div>
-                                        </button>
-                                    </div>
+                        <div className="w-full">
+                            <button
+                                onClick={() => navigate.push("/lootboxes/" + loot.id)}
+                                className="w-full py-2 text-xs rounded-lg shadow-lg
+                                            bg-gradient-to-r from-orange-500 to-orange-700 border border-orange-300 text-white
+                                            font-medium hover:from-orange-600 hover:to-orange-800 transition-all
+                                            active:scale-95 flex justify-center items-center gap-2 relative top-3"
+                            >
+                                <span>Open</span>
+                                <span className="bg-white bg-clip-text text-transparent">
+                                    {loot.price}
+                                </span>
+                                <div className="relative w-3 h-3">
+                                    <Image
+                                        src={"/logo.png"}
+                                        alt="ogx"
+                                        className="rounded-full object-cover ring-2 ring-orange-300"
+                                        width={300}
+                                        height={300}
+                                    />
                                 </div>
-                            ))}
+                            </button>
                         </div>
-                    </>
-                ) : (
-                    // Offchain boxes content
-                    <>
-                          <div className="flex justify-center items-center my-8">
-                            <p className="text-3xl font-bold w-full text-center">Feature OGX Lootbox</p>
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 px-4">
-                            {data?.data?.map((loot, index) => (
-                                <div
-                                    key={index}
-                                    className="bg-white border border-orange-300 rounded-lg shadow-md text-orange-800 flex flex-col items-center justify-between relative
-                                    transition-all duration-300 hover:shadow-lg group  aspect-square w-full"
-                                >
-                                    <div className="flex-1 flex flex-col items-center justify-center w-full">
-                                        <span className="font-bold text-center relative bottom-7 w-full py-2 px-3 text-xs rounded-lg shadow-lg
-                                                        bg-gradient-to-r from-orange-500 to-orange-700 border border-orange-300 text-white
-                                                      hover:from-orange-600 hover:to-orange-800 transition-all
-                                                        active:scale-95 flex justify-center items-center gap-2">
-                                            {loot.name}
-                                        </span>
-                                        <div className="relative w-24 h-24 mb-3 group-hover:scale-105 transition-transform duration-300">
-                                            <Image
-                                                src={`${process.env.NEXT_PUBLIC_FRONT_URL}/${loot.image}`}
-                                                alt={loot.name}
-                                                className="object-contain drop-shadow-md w-full h-full"
-                                                sizes="(max-width: 768px) 100vw, 200px"
-                                                width={500}
-                                                height={300}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="w-full">
-                                        <button
-                                            onClick={() => navigate.push("/lootboxes/" + loot.id)}
-                                            className="w-full py-2 text-xs rounded-lg shadow-lg
-                                                        bg-gradient-to-r from-orange-500 to-orange-700 border border-orange-300 text-white
-                                                        font-medium hover:from-orange-600 hover:to-orange-800 transition-all
-                                                        active:scale-95 flex justify-center items-center gap-2 relative top-3"
-                                        >
-                                            <span>Open</span>
-                                            <span className="bg-white bg-clip-text text-transparent">
-                                                {loot.price}
-                                            </span>
-                                            <div className="relative w-3 h-3">
-                                                <Image
-                                                    src={"/logo.png"}
-                                                    alt="ogx"
-                                                    className="rounded-full object-cover ring-2 ring-orange-300"
-                                                    width={300}
-                                                    height={300}
-                                                />
-                                            </div>
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </>
-                )}
+                    </div>
+                ))}
             </div>
             {/* <div className="flex justify-center items-center my-8">
                 <p className="text-3xl font-bold w-full text-center">Feature OGX Lootbox</p>

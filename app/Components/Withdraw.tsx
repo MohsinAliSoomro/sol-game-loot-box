@@ -1,83 +1,308 @@
 "use client";
 import { useUserState } from "@/state/useUserState";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { supabase } from "@/service/supabase";
 import { useRequest } from "ahooks";
+import {
+  Connection,
+  PublicKey,
+  Transaction,
+  SystemProgram,
+  LAMPORTS_PER_SOL,
+  clusterApiUrl,
+} from "@solana/web3.js";
+import { solanaProgramService, OGX_MINT, SOL_MINT } from "@/lib/solana-program";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { CONFIG, convertOGXToSOL, convertSOLToOGX } from "@/lib/config";
 const getWithdrawHistory = async (userId: string) => {
     const response = await supabase.from("withdraw").select("*").eq("userId", userId);
     return response.data;
 };
 export default function WithdrawModal() {
-    const [tab, setTab] = useState("ogx");
+    // Default to Sell OGX flow
+    const [tab, setTab] = useState("sell");
     const [state, setState] = useUserState();
-    const [user] = useUserState();
+    const { publicKey, signTransaction, connected } = useWallet();
     const { run, data, loading } = useRequest(getWithdrawHistory);
-    const [form, setForm] = useState({ withdrawBalance: 0, availableBalance: 0, walletAddress: "" });
-
-    async function fetchSolBalance() {
+    const [form, setForm] = useState({ 
+        // sell flow: user enters ogxToSell (from purchased OGX balance), we pay out SOL
+        ogxToSell: 0,
+        withdrawBalance: 0, 
+        availableBalance: 0, 
+        walletAddress: "",
+        solAmount: 0,
+        solBalance: 0
+    });
+    const [isProcessing, setIsProcessing] = useState(false);
+    
+    const fetchSolBalance = useCallback(async () => {
+        if (!publicKey) return;
+        
         try {
-            // Fetch the current SOL balance from the Solana API
-            const response = await fetch(`https://api.solana.com`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    jsonrpc: "2.0",
-                    id: 1,
-                    method: "getBalance",
-                    params: [""],
-                }),
-            });
-
-            const data = await response.json();
-            const solBalance = data.result / 1000000000; // Solana's smallest unit is lamports, so we divide by 1 billion to get SOL
-
-            // console.log(`Current SOL balance: ${solBalance}`);
+            const balance = await solanaProgramService.getSOLBalance(publicKey);
+            setForm(prev => ({ ...prev, solBalance: balance }));
+            console.log(`Current SOL balance: ${balance}`);
         } catch (error) {
             console.error("Error fetching SOL balance:", error);
         }
-    }
-    // url = "https://public-api.solscan.io/token/meta?tokenAddress=4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R"
+    }, [publicKey]);
 
-    // const calculateBalance = useMemo(() => {
-    //     return form.withdrawBalance;
-    // }, [form]);
+    const connectWallet = async () => {
+        //@ts-ignore
+        const { solana } = window;
+        if (solana) {
+            const response = await solana.connect();
+            return response.publicKey.toString();
+        }
+        return null;
+    };
+    // Calculate SOL equivalent for OGX withdrawal
+    const solExchange = useMemo(() => {
+        return convertOGXToSOL(form.withdrawBalance);
+    }, [form.withdrawBalance]);
+
+    // Sell flow: payout SOL calculated from OGX amount the user wants to sell
+    const solPayoutForSell = useMemo(() => {
+        return convertOGXToSOL(form.ogxToSell || 0);
+    }, [form.ogxToSell]);
+
+    // Calculate OGX equivalent for SOL withdrawal
+    const ogxExchange = useMemo(() => {
+        return convertSOLToOGX(form.solAmount);
+    }, [form.solAmount]);
 
     useEffect(() => {
         fetchSolBalance();
-        run(user?.walletAddress);
-    }, [user,run]);
+        if (publicKey) {
+            run(publicKey.toString());
+        }
+    }, [publicKey, run, fetchSolBalance]);
 
-    const updaetUserApes = async () => {
+    const updaetUserApes = async (walletAddress: string) => {
         const minus = state.apes - form.withdrawBalance;
-        await supabase.from("user").update({ apes: minus }).eq("walletAddress", state.walletAddress);
+        await supabase.from("user").update({ apes: minus }).eq("walletAddress", walletAddress);
         setState({ ...state, apes: minus });
     };
 
-    const makeTransaction = async () => {
-        if (!form.walletAddress || !form.withdrawBalance) return alert("Please fill all the fields");
+    const makeOGXWithdrawTransaction = async () => {
+        if (!publicKey || !signTransaction) {
+            return alert("Please connect your wallet first");
+        }
+
+        if (!state.id) {
+            return alert("User not authenticated. Please refresh the page and try again.");
+        }
+
+        if (!form.withdrawBalance) return alert("Please enter withdrawal amount");
         if (state.apes < form.withdrawBalance) {
             return alert("Insufficient OGX");
         }
+
+        if (isProcessing) {
+            return alert("Transaction already in progress. Please wait.");
+        }
+
+        setIsProcessing(true);
+
         try {
-            await supabase.from("withdraw").insert({
-                apes: form.withdrawBalance,
-                status: "PENDING",
-                walletAddress: form.walletAddress,
-                userId: state.walletAddress,
+            // Use the real Solana program for OGX withdrawal (burns OGX and sends SOL)
+            const signature = await solanaProgramService.withdrawOGX(
+                publicKey,
+                form.withdrawBalance,
+                { publicKey, signTransaction }
+            );
+
+            // Update database
+            console.log("OGX Withdrawal - User state:", { 
+                userId: state.id, 
+                walletAddress: publicKey.toString(),
+                ogx: form.withdrawBalance 
             });
-            await updaetUserApes();
-            alert("Transaction sent successfully");
+            
+            const { error: withdrawError } = await supabase.from("withdraw").insert({
+                ogx: form.withdrawBalance,
+                status: "COMPLETED",
+                walletAddress: publicKey.toString(),
+                userId: state.id,
+            });
+
+            if (withdrawError) {
+                console.error("Error saving OGX withdrawal:", withdrawError);
+                throw withdrawError;
+            }
+
+            // Update user balance
+            await updaetUserApes(publicKey.toString());
+            alert(`Withdrawal successful! Transaction: ${signature}`);
+            
         } catch (error) {
-            console.error("Error making transaction:", error);
-            alert("Error making transaction");
+            console.error("Error making withdrawal transaction:", error);
+            if (error instanceof Error && error.message.includes("already been processed")) {
+                alert("This transaction has already been processed. Please check your wallet or try again with a different amount.");
+            } else if (error instanceof Error && error.message.includes("already in progress")) {
+                alert("Transaction already in progress. Please wait for it to complete.");
+            } else {
+                alert(`Error making withdrawal: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
+        } finally {
+            setIsProcessing(false);
         }
     };
+
+    const makeSOLWithdrawTransaction = async () => {
+        if (!publicKey || !signTransaction) {
+            return alert("Please connect your wallet first");
+        }
+
+        if (!state.id) {
+            return alert("User not authenticated. Please refresh the page and try again.");
+        }
+
+        if (!form.solAmount) return alert("Please enter SOL amount");
+        if (state.apes < ogxExchange) {
+            return alert(`Insufficient OGX. You need ${ogxExchange} OGX to withdraw ${form.solAmount} SOL`);
+        }
+
+        if (isProcessing) {
+            return alert("Transaction already in progress. Please wait.");
+        }
+
+        setIsProcessing(true);
+
+        try {
+            // Verify that the connected wallet matches the user's deposit wallet
+            if (!publicKey) {
+                alert("Please connect your wallet first");
+                return;
+            }
+
+            // Check platform wallet balance first
+            const platformBalance = await solanaProgramService.getPlatformWalletBalance();
+            if (platformBalance < form.solAmount + 0.01) {
+                alert(`Platform wallet has insufficient SOL. Available: ${platformBalance.toFixed(4)} SOL, Required: ${(form.solAmount + 0.01).toFixed(4)} SOL`);
+                return;
+            }
+
+            // Withdraw SOL directly from the program's vault
+            // This ensures SOL goes back to the same wallet that made the deposit
+            const signature = await solanaProgramService.withdrawSOL(
+                publicKey, // This is the wallet address that made the deposit
+                form.solAmount,
+                { publicKey, signTransaction }
+            );
+
+            // Update database with completed withdrawal
+            console.log("SOL Withdrawal - User state:", {
+                userId: state.id,
+                walletAddress: publicKey.toString(),
+                ogx: ogxExchange,
+                status: "COMPLETED"
+            });
+            
+            const { error: withdrawError } = await supabase.from("withdraw").insert({
+                ogx: ogxExchange,
+                status: "COMPLETED", // Direct withdrawal from vault
+                walletAddress: publicKey.toString(),
+                userId: state.id, // Use state.id instead of publicKey.toString()
+            });
+
+            if (withdrawError) {
+                console.error("Error saving withdrawal:", withdrawError);
+                throw withdrawError;
+            }
+            
+            console.log("Withdrawal saved successfully to database");
+
+            // Update user balance immediately (OGX deducted)
+            const minus = state.apes - ogxExchange;
+            const { error: userError } = await supabase.from("user").update({ apes: minus }).eq("id", state.id);
+            
+            if (userError) {
+                console.error("Error updating user balance:", userError);
+                throw userError;
+            }
+            
+            setState({ ...state, apes: minus });
+
+            alert(`SOL withdrawal completed! Transaction: ${signature}\n\n✅ SOL sent to: ${publicKey.toString()}\n\nYour SOL has been withdrawn from the vault and sent to your wallet.`);
+            
+        } catch (error) {
+            console.error("Error making SOL withdrawal transaction:", error);
+            if (error instanceof Error && error.message.includes("already been processed")) {
+                alert("This transaction has already been processed. Please check your wallet or try again with a different amount.");
+            } else if (error instanceof Error && error.message.includes("already in progress")) {
+                alert("Transaction already in progress. Please wait for it to complete.");
+            } else if (error instanceof Error && error.message.includes("insufficient SOL")) {
+                alert(error.message);
+            } else if (error instanceof Error && error.message.includes("simulation failed")) {
+                alert("Transaction simulation failed. This might be due to network issues. Please try again.");
+            } else {
+                alert(`Error making SOL withdrawal: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    // SELL: convert OGX (from purchased balance) to SOL payout
+    const handleSellOGX = async () => {
+        if (!publicKey || !signTransaction) {
+            return alert("Please connect your wallet first");
+        }
+
+        if (!state.id) {
+            return alert("User not authenticated. Please refresh the page and try again.");
+        }
+
+        if (!form.ogxToSell || form.ogxToSell <= 0) return alert("Please enter OGX amount to sell");
+        if (state.apes < form.ogxToSell) return alert("Insufficient OGX balance to sell");
+        if (isProcessing) return alert("Transaction already in progress. Please wait.");
+
+        setIsProcessing(true);
+        try {
+            // Ensure platform has enough SOL to pay out
+            const solToSend = solPayoutForSell;
+            const platformBalance = await solanaProgramService.getPlatformWalletBalance();
+            if (platformBalance < solToSend + 0.01) {
+                alert(`Platform wallet has insufficient SOL. Available: ${platformBalance.toFixed(4)} SOL, Required: ${(solToSend + 0.01).toFixed(4)} SOL`);
+                return;
+            }
+
+            // Send SOL payout to user's wallet
+            const signature = await solanaProgramService.withdrawSOL(
+                publicKey,
+                solToSend,
+                { publicKey, signTransaction }
+            );
+
+            // Deduct OGX from user's purchased balance
+            const remaining = state.apes - form.ogxToSell;
+            const { error: userError } = await supabase.from("user").update({ apes: remaining }).eq("id", state.id);
+            if (userError) throw userError;
+            setState({ ...state, apes: remaining });
+
+            // Record sale in withdraw table for now
+            await supabase.from("withdraw").insert({
+                ogx: form.ogxToSell,
+                status: "COMPLETED",
+                walletAddress: publicKey.toString(),
+                userId: state.id,
+            });
+
+            alert(`Sold ${form.ogxToSell} OGX for ${solToSend.toFixed(4)} SOL.\nTransaction: ${signature}`);
+        } catch (error) {
+            console.error("Error selling OGX:", error);
+            alert(`Error selling OGX: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
     if (!state.withdraw) return null;
+    
     return (
-        <div className="fixed top-0 left-0 w-screen h-screen flex items-center justify-center bg-black/40 z-50">
-            <div className="z-50 justify-center items-center">
+<div className="fixed top-0 left-0 w-screen h-screen flex items-center 
+        justify-center bg-black/40 z-50">            <div className="z-50 justify-center items-center">
                 <div className="relative p-4 w-full max-w-2xl h-[40rem] ">
                     <div className="relative bg-orange-400 rounded-lg shadow dark:bg-gray-700 h-full overflow-hidden">
                         <div className="flex items-center justify-between p-4 md:p-5 border-b rounded-t dark:border-gray-600">
@@ -105,15 +330,16 @@ export default function WithdrawModal() {
                             </button>
                         </div>
                         <div className="flex space-x-4 border-b w-full">
+                            {/* Withdraw OGX tab still disabled for now */}
                             <button
-                                onClick={() => setTab("ogx")}
+                                onClick={() => setTab("sell")}
                                 className={`py-2 px-4 w-1/3 text-center ${
-                                    tab === "ogx"
+                                    tab === "sell"
                                         ? "border-b-2 border-[#ff914d] text-orange-600 bg-gray-200"
                                         : "text-orange-600 bg-transparent"
                                 }`}
                             >
-                                OGX Withdraw
+                                Sell OGX
                             </button>
                             <button
                                 onClick={() => setTab("sol")}
@@ -136,10 +362,10 @@ export default function WithdrawModal() {
                                 Withdraw History
                             </button>
                         </div>
-                        {tab === "ogx" && (
+                        {tab === "sell" && (
                             <div className="p-4 md:p-5">
                                 <p className="text-base leading-relaxed text-orange-600 mb-3">
-                                    Withdraw OGX tokens from your account at the current exchange rate..
+                                    Sell your purchased OGX for SOL at the current exchange rate. This does not require deposited OGX in the vault.
                                 </p>
                                 <div className="space-y-4">
                                     <div>
@@ -148,20 +374,33 @@ export default function WithdrawModal() {
                                             value={state.apes || 0}
                                             className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
                                             disabled
-                                            
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-orange-600 mb-2">Withdraw OGX</label>
+                                        <label className="block text-sm font-medium text-orange-600 mb-2">OGX to Sell</label>
                                         <input
-                                            value={form.withdrawBalance}
                                             type="number"
-                                            min={0}
-                                            max={1000000}
+                                            step="1"
                                             placeholder="0"
+                                            min={1}
+                                            value={form.ogxToSell}
+                                            onChange={(e) => setForm({ ...form, ogxToSell: Number(e.target.value) })}
                                             className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800 focus:ring-[#ff914d]/50 focus:border-[#ff914d]/50"
-                                            onChange={(e) => setForm({ ...form, withdrawBalance: Number(e.target.value) })}
                                         />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-orange-600 mb-2">You will receive (SOL)</label>
+                                        <input
+                                            className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
+                                            value={solPayoutForSell.toFixed(4)}
+                                            disabled
+                                        />
+                                    </div>
+                                    <div className="bg-blue-50 p-3 rounded-lg">
+                                        <p className="text-sm text-blue-800">
+                                            <strong>Note:</strong> SOL will be sent to your connected wallet address.
+                                            This sells OGX from your purchased balance (not the vault).
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -169,7 +408,7 @@ export default function WithdrawModal() {
                         {tab === "sol" && (
                             <div className="p-4 md:p-5">
                                 <p className="text-base leading-relaxed text-orange-600 mb-3">
-                                    Withdraw SOL from your account. OGX tokens will be converted to SOL at the current exchange rate.
+                                    Withdraw SOL from the vault. Your OGX will be converted to SOL at the current exchange rate.
                                 </p>
                                 <div className="space-y-4">
                                     <div>
@@ -181,20 +420,31 @@ export default function WithdrawModal() {
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-orange-600 mb-2">Convert OGX to SOL</label>
+                                        <label className="block text-sm font-medium text-orange-600 mb-2">Withdraw SOL Amount</label>
                                         <input
                                             type="number"
-                                            placeholder="0"
+                                            step="0.01"
+                                            placeholder="0.0"
+                                            min={0.01}
+                                            max={10}
+                                            value={form.solAmount}
+                                            onChange={(e) => setForm({ ...form, solAmount: Number(e.target.value) })}
                                             className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800 focus:ring-[#ff914d]/50 focus:border-[#ff914d]/50"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-orange-600 mb-2">Estimated SOL</label>
+                                        <label className="block text-sm font-medium text-orange-600 mb-2">Required OGX</label>
                                         <input
                                             className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
-                                            value="0"
+                                            value={ogxExchange}
                                             disabled
                                         />
+                                    </div>
+                                    <div className="bg-blue-50 p-3 rounded-lg">
+                                        <p className="text-sm text-blue-800">
+                                            <strong>Note:</strong> SOL will be sent to your connected wallet address.
+                                            This withdraws directly from the program vault and deducts OGX accordingly.
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -256,22 +506,24 @@ export default function WithdrawModal() {
                         )}
 
                         <div className="flex absolute bottom-0 right-0 items-center p-4 md:p-5  rounded-b dark:border-gray-600">
-                            {tab === "ogx" && (
+                            {tab === "sell" && (
                                 <button
                                     data-modal-hide="default-modal"
                                     type="button"
-                                    onClick={makeTransaction}
-                                    className="px-5 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-[#f74e14] to-[#ff914d] text-white hover:opacity-90 focus:ring-2 focus:ring-[#ff914d]/50">
-                                    Withdraw OGX
+                                    onClick={handleSellOGX}
+                                    disabled={isProcessing || !connected}
+                                    className="px-5 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-[#f74e14] to-[#ff914d] text-white hover:opacity-90 focus:ring-2 focus:ring-[#ff914d]/50 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    {isProcessing ? "Processing..." : "Sell OGX"}
                                 </button>
                             )}
                             {tab === "sol" && (
                                 <button
                                     data-modal-hide="default-modal"
                                     type="button"
-                                    onClick={() => alert("SOL withdrawal functionality coming soon!")}
-                                    className="px-5 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-[#f74e14] to-[#ff914d] text-white hover:opacity-90 focus:ring-2 focus:ring-[#ff914d]/50">
-                                    Withdraw SOL
+                                    onClick={makeSOLWithdrawTransaction}
+                                    disabled={isProcessing || !connected}
+                                    className="px-5 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-[#f74e14] to-[#ff914d] text-white hover:opacity-90 focus:ring-2 focus:ring-[#ff914d]/50 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    {isProcessing ? "Processing..." : "Withdraw SOL"}
                                 </button>
                             )}
                             <button

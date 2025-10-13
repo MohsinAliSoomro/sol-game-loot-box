@@ -16,4 +16,5 @@ export const useUserState = createGlobalState({
     cart: false,
     purchase: false,
     withdraw: false,
+    totalSpending: 0, // Total amount spent by user (from transaction history)
 });

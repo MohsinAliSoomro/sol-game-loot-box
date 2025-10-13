@@ -1,4 +1,5 @@
 "use client";
+
 import {
   ConnectionProvider,
   WalletProvider,
@@ -14,12 +15,9 @@ import { clusterApiUrl } from "@solana/web3.js";
 import { FC, ReactNode, useMemo } from "react";
 require("@solana/wallet-adapter-react-ui/styles.css");
 
-export default function SolanaWalletProvider({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  const endpoint = clusterApiUrl("devnet"); // or 'mainnet-beta'
+const SolanaWalletProvider: FC<{ children: ReactNode }> = ({ children }) => {
+  const endpoint =
+    process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl("devnet");
 
   const wallets = useMemo(
     () => [
@@ -33,9 +31,18 @@ export default function SolanaWalletProvider({
 
   return (
     <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect>
+      <WalletProvider
+        wallets={wallets}
+        autoConnect={true}
+        onError={(error) => {
+          console.error("Wallet error:", error);
+          alert("Wallet connection failed. Please try again.");
+        }}
+      >
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
   );
-}
+};
+
+export default SolanaWalletProvider;

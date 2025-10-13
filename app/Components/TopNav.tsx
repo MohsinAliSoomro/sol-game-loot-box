@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useEffectOnce } from "react-use";
+// @ts-ignore
 import bs58 from "bs58";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 function formatNumber(num: number | undefined) {
@@ -21,9 +22,10 @@ export default function TopNav() {
   const [user, setUser] = useUserState();
   const [open, setOpen] = useState(false);
   const [isLogin, setIsLogin] = useState(false);
+  const [totalVolumeOGX, setTotalVolumeOGX] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const router = useRouter();
-  const { publicKey, connect, signMessage, connected } = useWallet();
+  const { publicKey, connect, signMessage, connected, disconnect } = useWallet();
 
   const handleSocialLogin = async (provider: "google" | "discord") => {
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -35,8 +37,8 @@ export default function TopNav() {
   };
 
   const handleLogin = async () => {
-    if (!publicKey || !signMessage) {
-      alert("Wallet not connected or no signMessage function");
+    if (!connected || !publicKey || !signMessage) {
+      alert("Please connect your wallet first");
       return;
     }
 
@@ -115,26 +117,108 @@ export default function TopNav() {
       try {
         const response = await supabase.auth.getSession();
         const userId = response.data.session?.user.id;
-        const userGet = await supabase
-          .from("user")
-          .select()
-          .eq("id", userId)
-          .single();
-        setUser({ ...user, ...userGet.data });
-        setIsLogin(response.data.session ? true : false);
+        if (userId) {
+          const userGet = await supabase
+            .from("user")
+            .select()
+            .eq("id", userId)
+            .single();
+          setUser({ ...user, ...userGet.data });
+          // Load user's spending volume (sum of OGX from transactions)
+          try {
+            const { data: txs } = await supabase
+              .from('transaction')
+              .select('ogx')
+              .eq('userId', userId);
+            const volume = (txs || []).reduce((sum: number, t: any) => sum + (Number(t?.ogx) || 0), 0);
+            setTotalVolumeOGX(volume);
+          } catch (volErr) {
+            console.warn('Failed to load user volume:', volErr);
+          }
+        }
+        // Only set login state based on Supabase session if wallet is not connected
+        // If wallet is connected, let the wallet connection effect handle the login state
+        if (!connected) {
+          setIsLogin(response.data.session ? true : false);
+        }
       } catch (error) {
-        alert("Error connecting to wallet");
+        console.error("Error loading user data:", error);
       }
     };
     onLoad();
-    return () => onLoad();
   });
+
+  // Load user data when wallet connects
+  useEffect(() => {
+    const loadUserData = async () => {
+      if (connected && publicKey) {
+        try {
+          // Try to find user by wallet address
+          const { data: userData, error } = await supabase
+            .from("user")
+            .select()
+            .eq("walletAddress", publicKey.toBase58())
+            .single();
+          
+          if (userData && !error) {
+            console.log("Found user by wallet address:", userData);
+            setUser(prevUser => ({ ...prevUser, ...userData }));
+            // Also load volume for this wallet's user
+            try {
+              const { data: txs } = await supabase
+                .from('transaction')
+                .select('ogx')
+                .eq('userId', userData.id);
+              const volume = (txs || []).reduce((sum: number, t: any) => sum + (Number(t?.ogx) || 0), 0);
+              setTotalVolumeOGX(volume);
+            } catch (volErr) {
+              console.warn('Failed to load user volume:', volErr);
+            }
+          } else {
+            console.log("No user found with wallet address, creating new user");
+            // Create a new user record with wallet address
+            const newUser = {
+              walletAddress: publicKey.toBase58(),
+              apes: 0,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            };
+            
+            const { data: insertedUser, error: insertError } = await supabase
+              .from("user")
+              .insert(newUser)
+              .select()
+              .single();
+            
+            if (insertedUser && !insertError) {
+              console.log("Created new user:", insertedUser);
+              setUser(prevUser => ({ ...prevUser, ...insertedUser }));
+              setTotalVolumeOGX(0);
+            }
+          }
+        } catch (error) {
+          console.error("Error loading/creating user data:", error);
+        }
+      }
+    };
+
+    loadUserData();
+  }, [connected, publicKey, setUser]);
 
   const logout = async () => {
     try {
+      // Disconnect wallet if connected
+      try {
+        // @ts-ignore - some adapters may not implement disconnect
+        await disconnect?.();
+      } catch (e) {
+        console.warn("Wallet disconnect failed or not supported:", e);
+      }
+
       await supabase.auth.signOut();
       router.push("/");
       setIsLogin(false);
+      setOpen(false);
     } catch (error) {
       console.log("error", { error });
     }
@@ -148,12 +232,29 @@ export default function TopNav() {
   const handleCloseModal = () => {
     setOpen(false);
   };
+  useEffect(() => {
+    if (connected) {
+      console.log("Wallet connected, setting isLogin to true");
+      setIsLogin(true);
+      setOpen(false); // Close modal when wallet connects
+    } else {
+      console.log("Wallet disconnected, setting isLogin to false");
+      setIsLogin(false);
+    }
+  }, [connected]);
+  
+  console.log(isLogin,'isLogin',connected,'connected');
+  
+  // Derived balances
+  const userOGX = Number(user?.apes || 0);
+  const userSOL = userOGX / 1000; // 1 SOL = 1000 OGX
+  
   return (
     <div className="flex flex-col md:flex-row justify-between items-center border-white py-4 px-2 md:px-4 backdrop-blur-sm relative">
       {open && <div className="backdrop-blur"></div>}
       {/* Logo and Mobile Menu Button */}
       <div className="w-full md:w-1/4 flex items-center justify-between md:justify-start">
-        <Link href={"/"} className="flex items-center">
+        <Link href={"/"} className="relative inline-block">
           <Image
             src={"/logo.png"}
             alt="logo"
@@ -161,6 +262,7 @@ export default function TopNav() {
             height={400}
             className="w-full h-16 md:h-24"
           />
+          <span className="absolute -top-1 -right-1 md:-top-2 md:-right-2 bg-red-600 text-white text-[10px] md:text-[11px] leading-none px-1 md:mt-4 mt-0  py-0.5 rounded">BETA</span>
         </Link>
         {/* Mobile menu button */}
         <button
@@ -241,11 +343,11 @@ export default function TopNav() {
                   </div>
                   <div className="text-xs pt-2">
                     <p className="text-center">Volume</p>
-                    <p className="text-center">{formatNumber(100000000)}</p>
+                    <p className="text-center">{formatNumber(totalVolumeOGX)}</p>
                   </div>
                   <div className="text-xs pt-2">
                     <p>SOL</p>
-                    <p className="text-center">{formatNumber(user?.apes)}</p>
+                    <p className="text-center">{userSOL.toFixed(3)}</p>
                   </div>
                 </div>
               </div>
@@ -389,16 +491,23 @@ export default function TopNav() {
               <div className="flex-grow bg-gray-700 h-px"></div>
             </div>
 
-            {/* Guest option */}
+            {/* Wallet connection */}
             {!connected ? (
-              <WalletMultiButton />
+              <div className="space-y-3">
+                <WalletMultiButton />
+                <p className="text-xs text-gray-400 text-center">
+                  Connect your wallet to access the app
+                </p>
+              </div>
             ) : (
-              <button
-                onClick={handleLogin}
-                className="w-full border border-gray-700 text-white py-3 px-6 rounded-lg hover:bg-gray-800 transition-colors duration-200 font-medium relative z-10"
-              >
-                Connect Wallet
-              </button>
+              <div className="space-y-3">
+                <div className="text-center text-sm text-green-400 mb-2">
+                  ✓ Wallet Connected: {publicKey?.toBase58().slice(0, 8)}...
+                </div>
+                <div className="w-full border border-green-600 text-green-400 py-3 px-6 rounded-lg bg-green-900/20 transition-colors duration-200 font-medium relative z-10 text-center">
+                  ✓ Successfully Connected!
+                </div>
+              </div>
             )}
           </div>
         </div>
