@@ -1,6 +1,6 @@
 "use client";
 import { useUserState } from "@/state/useUserState";
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   Connection,
   PublicKey,
@@ -88,6 +88,8 @@ export default function PurchaseModal() {
   const { run, data, loading } = useRequest(getTransactions, { manual: true });
   const [activeTab, setActiveTab] = useState("ogx");
   const [isProcessing, setIsProcessing] = useState(false);
+  const lastTransactionTime = useRef<number>(0);
+  const TRANSACTION_COOLDOWN = 3000; // 3 seconds cooldown between transactions
 
   const fetchSolBalance = useCallback(async () => {
     if (!publicKey) return;
@@ -119,14 +121,17 @@ export default function PurchaseModal() {
   }, [form]);
 
   useEffect(() => {
-    if (state.id) {
-      run(state.id);
+    // Use uid if available (primary field), otherwise fallback to id
+    const userId = state.uid || state.id;
+    if (userId) {
+      run(userId);
     }
-  }, [state.id, run]);
+  }, [state.uid, state.id, run]);
 
   const updaetUserApes = async (transaction: any) => {
     const plus = calculateBalance + (state.apes || 0);
-    await supabase.from("user").update({ apes: plus }).eq("id", state.id);
+    const userId = state.uid || state.id;
+    await supabase.from("user").update({ apes: plus }).eq("uid", userId);
     await saveTransaction(transaction);
     setState({ ...state, apes: plus });
   };
@@ -140,13 +145,14 @@ export default function PurchaseModal() {
     }
   };
   const saveTransaction = async (transaction: any) => {
+    const userId = state.uid || state.id;
     await supabase.from("transaction").insert({
       transactionId: transaction,
       ogx: calculateBalance,
-      userId: state.id,
+      userId: userId,
       t_status: "purchase",
     });
-    run(state.id);
+    run(userId);
     
     // Update user spending in state after successful transaction
     const newSpending = (state.totalSpending || 0) + calculateBalance;
@@ -169,6 +175,16 @@ export default function PurchaseModal() {
       return;
     }
 
+    // Prevent rapid double-clicks (transactions within cooldown period)
+    const now = Date.now();
+    const timeSinceLastTx = now - lastTransactionTime.current;
+    if (timeSinceLastTx < TRANSACTION_COOLDOWN) {
+      const waitTime = Math.ceil((TRANSACTION_COOLDOWN - timeSinceLastTx) / 1000);
+      alert(`Please wait ${waitTime} seconds before making another transaction.`);
+      return;
+    }
+
+    lastTransactionTime.current = now;
     setIsProcessing(true);
     
     try {
@@ -191,13 +207,14 @@ export default function PurchaseModal() {
           // Update user balance with the OGX credits earned from SOL deposit
           const plus = ogxAmount + (state.apes || 0);
           
-          console.log("Updating user balance:", { userId: state.id, newBalance: plus, ogxAmount });
+          const userId = state.uid || state.id;
+          console.log("Updating user balance:", { userId: userId, newBalance: plus, ogxAmount });
           
           // Update user balance and wallet address
           const { error: userError } = await supabase.from("user").update({ 
             apes: plus,
             walletAddress: publicKey.toString() // Ensure wallet address is stored
-          }).eq("id", state.id);
+          }).eq("uid", userId);
           
           if (userError) {
             console.error("Error updating user balance:", userError);
@@ -207,14 +224,14 @@ export default function PurchaseModal() {
           console.log("Saving transaction:", { 
             transactionId: signature, 
             ogx: ogxAmount, 
-            userId: state.id
+            userId: userId
           });
           
           // Save transaction
           const { error: transactionError } = await supabase.from("transaction").insert({
             transactionId: signature,
             ogx: ogxAmount,
-            userId: state.id,
+            userId: userId,
           });
 
           if (transactionError) {
@@ -241,8 +258,16 @@ export default function PurchaseModal() {
       return signature;
     } catch (error) {
       console.error("Error making transaction:", error);
-      if (error instanceof Error && error.message.includes("already been processed")) {
-        alert("This transaction has already been processed. Please check your wallet or try again with a different amount.");
+      
+      if (error instanceof Error && error.message === "TRANSACTION_ALREADY_PROCESSED") {
+        // Transaction was already processed - tell user there's a server issue
+        alert(
+          "server error try again in few seconds"
+        );
+      } else if (error instanceof Error && error.message.includes("already been processed")) {
+        alert(
+          "server error try again in few seconds"
+        );
       } else if (error instanceof Error && error.message.includes("already in progress")) {
         alert("Transaction already in progress. Please wait for it to complete.");
       } else if (error instanceof Error && error.message.includes("simulation failed")) {
@@ -292,18 +317,19 @@ export default function PurchaseModal() {
       // Update user balance with OGX equivalent
       const ogxAmount = convertSOLToOGX(solState.amount);
       const plus = ogxAmount + (state.apes || 0);
+      const userId = state.uid || state.id;
       
       // Update user balance and wallet address
       await supabase.from("user").update({ 
         apes: plus,
         walletAddress: publicKey.toString() // Ensure wallet address is stored
-      }).eq("id", state.id);
+      }).eq("uid", userId);
       
       // Save transaction
       await supabase.from("transaction").insert({
         transactionId: signature,
         ogx: ogxAmount,
-        userId: state.id,
+        userId: userId,
         t_status: "purchase",
         walletAddress: publicKey.toString(), // Store wallet address in transaction too
       });
@@ -321,8 +347,10 @@ export default function PurchaseModal() {
       return signature;
     } catch (error) {
       console.error("Error making SOL deposit:", error);
-      if (error instanceof Error && error.message.includes("already been processed")) {
-        alert("This transaction has already been processed. Please check your wallet or try again with a different amount.");
+      if (error instanceof Error && error.message === "TRANSACTION_ALREADY_PROCESSED") {
+        alert("server error try again in few seconds");
+      } else if (error instanceof Error && error.message.includes("already been processed")) {
+        alert("server error try again in few seconds");
       } else if (error instanceof Error && error.message.includes("already in progress")) {
         alert("Transaction already in progress. Please wait for it to complete.");
       } else if (error instanceof Error && error.message.includes("simulation failed")) {
@@ -340,13 +368,14 @@ export default function PurchaseModal() {
   };
 
   useEffect(() => {
-    if (state.id) {
-      run(state.id);
+    const userId = state.uid || state.id;
+    if (userId) {
+      run(userId);
     }
     if (publicKey) {
       fetchSolBalance();
     }
-  }, [state.id, run, publicKey, fetchSolBalance]);
+  }, [state.uid, state.id, run, publicKey, fetchSolBalance]);
   
   if (!state.purchase) return null;
   return (

@@ -336,22 +336,25 @@ export class SolanaProgramService {
 
       console.log(`📤 Sending SOL deposit transaction (blockhash: ${blockhash.substring(0, 8)}...${blockhash.substring(-8)})`);
 
-      // Sign and send the transaction with retry logic
+      // Sign and send the transaction WITHOUT retry logic
+      // (retrying a signed transaction will cause "already processed" errors)
       const signedTransaction = await wallet.signTransaction(finalTransaction);
       
-        const signature = await this.retryRpcCall(
-          () => this.connection.sendRawTransaction(signedTransaction.serialize(), {
-            skipPreflight: false,
-            preflightCommitment: "confirmed",
-          })
-        );
+      // Send transaction without retry - retrying will cause "already processed" errors
+      const signature = await this.connection.sendRawTransaction(signedTransaction.serialize(), {
+        skipPreflight: false,
+        preflightCommitment: "confirmed",
+        maxRetries: 0, // Don't retry - will cause "already processed" errors
+      });
 
-        // Confirm the transaction
-        const confirmation = await this.connection.confirmTransaction({
-          signature,
-          blockhash,
-          lastValidBlockHeight,
-        }, "confirmed");
+        // Confirm the transaction with retry (safe to retry confirmation)
+        const confirmation = await this.retryRpcCall(
+          () => this.connection.confirmTransaction({
+            signature,
+            blockhash,
+            lastValidBlockHeight,
+          }, "confirmed")
+        );
 
         if (confirmation.value.err) {
           throw new Error(`Transaction failed: ${confirmation.value.err}`);
@@ -363,26 +366,16 @@ export class SolanaProgramService {
       console.error("Error depositing SOL to vault:", error);
       
       // Handle specific error types
-      if (error.message.includes("already been processed")) {
-        // Transaction may have already succeeded - check if we can verify this
-        console.log("🔍 Transaction 'already processed' - checking if it actually succeeded...");
+      if (error.message.includes("already been processed") || 
+          error.message.includes("This transaction has already been processed") ||
+          error.message.includes("Transaction simulation failed: This transaction has already been processed")) {
+        // Transaction was already processed - this usually means it succeeded on first attempt
+        console.log("⚠️ Transaction 'already processed' - this means it likely succeeded the first time");
+        console.log("💡 User should refresh and check their balance");
+        console.log("🔄 This is likely a race condition - the transaction was already sent");
         
-        try {
-          // Try to get latest deposits from recent transactions
-          const recentTxs = await this.connection.getSignaturesForAddress(user, { limit: 5 });
-          console.log("📋 Recent transactions:", recentTxs.length);
-          
-          // If we have recent transactions, the deposit might have been successful
-          if (recentTxs.length > 0 && recentTxs[0].confirmationStatus === 'confirmed') {
-            console.log("✅ Recent transaction found and confirmed - deposit may have succeeded");
-            throw new Error("Transaction completed successfully. Check your OGX balance!");
-          }
-        } catch (balanceError) {
-          const err = balanceError as unknown as Error;
-          console.log("❌ Could not verify transaction status:", (err && err.message) ? err.message : balanceError);
-        }
-        
-        throw new Error("Transaction already completed. Check if your balance was updated.");
+        // Don't throw an error - instead provide a special error code
+        throw new Error("TRANSACTION_ALREADY_PROCESSED");
       } else if (error.message.includes("Blockhash not found")) {
         throw new Error("Transaction expired. Please try again.");
       } else if (error.message.includes("insufficient funds")) {
@@ -483,14 +476,14 @@ export class SolanaProgramService {
       console.log("=== SENDING OGX WITHDRAWAL TRANSACTION ===");
       console.log(`Transaction size: ${finalTransaction.serialize({ requireAllSignatures: false }).length} bytes`);
 
-      // Sign and send the transaction with retry
+      // Sign and send the transaction WITHOUT retry
+      // (retrying a signed transaction will cause "already processed" errors)
       const signedTransaction = await wallet.signTransaction(finalTransaction);
-      const signature = await this.retryRpcCall(
-        () => this.connection.sendRawTransaction(signedTransaction.serialize(), {
-          skipPreflight: false,
-          preflightCommitment: "confirmed",
-        })
-      );
+      const signature = await this.connection.sendRawTransaction(signedTransaction.serialize(), {
+        skipPreflight: false,
+        preflightCommitment: "confirmed",
+        maxRetries: 0, // Don't retry - will cause "already processed" errors
+      });
 
       console.log("=== OGX WITHDRAWAL TRANSACTION SENT ===");
       console.log(`Signature: ${signature}`);
@@ -621,14 +614,14 @@ export class SolanaProgramService {
       console.log(`Blockhash: ${blockhash}`);
       console.log(`Fee payer: ${user.toString()}`);
 
-      // Sign and send the transaction with retry
+      // Sign and send the transaction WITHOUT retry
+      // (retrying a signed transaction will cause "already processed" errors)
       const signedTransaction = await wallet.signTransaction(finalTransaction);
-      const signature = await this.retryRpcCall(
-        () => this.connection.sendRawTransaction(signedTransaction.serialize(), {
-          skipPreflight: false,
-          preflightCommitment: "confirmed",
-        })
-      );
+      const signature = await this.connection.sendRawTransaction(signedTransaction.serialize(), {
+        skipPreflight: false,
+        preflightCommitment: "confirmed",
+        maxRetries: 0, // Don't retry - will cause "already processed" errors
+      });
 
       console.log(`=== TRANSACTION SENT ===`);
       console.log(`Signature: ${signature}`);
@@ -1107,14 +1100,14 @@ export class SolanaProgramService {
       console.log(`📤 Sending deposit transaction for ${ogxAmount} OGX`);
       console.log(`🆔 Transaction ID: ${transactionId}`);
 
-      // Sign and send the transaction with retry
+      // Sign and send the transaction WITHOUT retry
+      // (retrying a signed transaction will cause "already processed" errors)
       const signedTransaction = await wallet.signTransaction(finalTransaction);
-      const signature = await this.retryRpcCall(
-        () => this.connection.sendRawTransaction(signedTransaction.serialize(), {
-          skipPreflight: false,
-          preflightCommitment: "confirmed",
-        })
-      );
+      const signature = await this.connection.sendRawTransaction(signedTransaction.serialize(), {
+        skipPreflight: false,
+        preflightCommitment: "confirmed",
+        maxRetries: 0, // Don't retry - will cause "already processed" errors
+      });
 
       console.log("=== OGX DEPOSIT TRANSACTION SENT ===");
       console.log(`Signature: ${signature}`);
@@ -1186,64 +1179,149 @@ export class SolanaProgramService {
   }
 
   /**
-   * Withdraw NFT from vault to user's wallet
+   * Claim any NFT from vault to user's wallet (unrestricted)
+   * No ownership requirements - any user can claim any NFT
    */
   async withdrawNFT(user: PublicKey, mint: PublicKey, wallet: any): Promise<string> {
     const transactionId = this.generateTransactionId(user, mint.toString());
     
-    console.log("=== NFT WITHDRAWAL START ===");
+    console.log("=== NFT CLAIM START (Unrestricted) ===");
     console.log(`User: ${user.toString()}`);
     console.log(`NFT Mint: ${mint.toString()}`);
     console.log(`Transaction ID: ${transactionId}`);
     
     // Check if this transaction is already pending
     if (this.pendingTransactions.has(transactionId)) {
-      throw new Error("NFT withdrawal already in progress. Please wait.");
+      throw new Error("NFT claim already in progress. Please wait.");
     }
 
     this.pendingTransactions.add(transactionId);
 
     try {
-      // Get PDAs for NFT withdrawal
+      // Get PDAs for NFT claiming (no UserNft account needed!)
       const [vaultAuthority] = this.getVaultAuthority(mint);
       const vaultATA = await this.getVaultATA(mint);
       const userATA = this.getUserATA(user, mint);
-      const [userNFT] = this.getUserNFTPDA(user, mint);
 
-      console.log("=== NFT WITHDRAWAL ACCOUNTS ===");
+      console.log("=== NFT CLAIM ACCOUNTS ===");
       console.log(`Vault Authority: ${vaultAuthority.toString()}`);
       console.log(`Vault ATA: ${vaultATA.toString()}`);
       console.log(`User ATA: ${userATA.toString()}`);
-      console.log(`User NFT PDA: ${userNFT.toString()}`);
 
       // Check if user ATA exists and create if needed
       const createATATransaction = await this.ensureATAExists(user, mint);
 
-      // Create NFT withdrawal transaction
-      const withdrawalTransaction = await this.program.methods
-        .withdrawNft()
-        .accounts({
-          user: user,
-          mint: mint,
-          user_nft_ata: userATA,
-          vault_authority: vaultAuthority,
-          vault_nft_ata: vaultATA,
-          user_nft: userNFT,
-          token_program: TOKEN_PROGRAM_ID,
-          associated_token_program: ASSOCIATED_TOKEN_PROGRAM_ID,
-        })
-        .transaction();
+      // Check if NFT is available in vault
+      try {
+        const vaultAccountInfo = await this.connection.getAccountInfo(vaultATA);
+        if (!vaultAccountInfo) {
+          throw new Error("⚠️ NFT CLAIM UNAVAILABLE\n\nNo vault found for this NFT mint.\n\nWHY: This NFT may not be deposited in the vault yet.");
+        }
+        
+        const amount = vaultAccountInfo.data.readBigUInt64LE(64);
+        if (amount === BigInt(0)) {
+          throw new Error("⚠️ NFT CLAIM UNAVAILABLE\n\nNo NFT available in vault.\n\nWHY: This NFT has already been claimed or was never deposited.");
+        }
+        
+        console.log(`✅ NFT available in vault: ${amount} NFT(s)`);
+      } catch (error: any) {
+        if (error?.message?.includes("NFT CLAIM UNAVAILABLE")) {
+          throw error;
+        }
+        throw new Error("⚠️ NFT CLAIM UNAVAILABLE\n\nCould not check vault status.\n\nWHY: Network error or vault account issue.");
+      }
+
+      // Try to use claim_any_nft if available, otherwise fallback to withdrawNft
+      let claimTransaction;
+      try {
+        // Try the new claim_any_nft instruction first
+        claimTransaction = await this.program.methods
+          .claimAnyNft()
+          .accounts({
+            claimer: user,
+            mint: mint,
+            claimerNftAta: userATA,
+            vaultAuthority: vaultAuthority,
+            vaultNftAta: vaultATA,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          })
+          .transaction();
+        
+        console.log("✅ Using claim_any_nft instruction (unrestricted)");
+      } catch (error: any) {
+        // Check if this is the InstructionFallbackNotFound error
+        if (error?.message?.includes('InstructionFallbackNotFound') || 
+            error?.message?.includes('0x65') ||
+            error?.message?.includes('Fallback functions are not supported')) {
+          console.log("⚠️ claim_any_nft instruction not deployed yet");
+          console.log("💡 This is expected - the program needs to be deployed with the new instruction");
+          console.log("🔄 Falling back to withdrawNft method...");
+          
+          // Don't throw error, continue with fallback
+        }
+        
+        console.log("⚠️ claim_any_nft not available, falling back to withdrawNft");
+        
+        // Fallback to the old withdrawNft instruction
+        const [userNFT] = this.getUserNFTPDA(user, mint);
+        
+        // Check if user_nft PDA exists, if not, we need to create it
+        const userNftInfo = await this.connection.getAccountInfo(userNFT);
+        if (!userNftInfo) {
+          console.log("⚠️ User NFT PDA doesn't exist - attempting to create it");
+          
+          // Try to create the UserNft account by calling deposit_nft with a dummy NFT
+          // This is a workaround for the program design limitation
+          try {
+            console.log("🔄 Attempting to initialize UserNft account...");
+            
+            // We'll try to create the account by calling deposit_nft
+            // But first we need to check if the user has any NFT to deposit
+            // For now, we'll provide a helpful error message
+            throw new Error(
+              "⚠️ NFT CLAIM UNAVAILABLE\n\n" +
+              "Your NFT tracking account is not initialized.\n\n" +
+              "WHY: The Solana program requires you to deposit at least one NFT before claiming NFT rewards. Depositing SOL does NOT initialize the NFT tracking account.\n\n" +
+              "SOLUTIONS:\n" +
+              "1. Deposit any NFT first (even a cheap one), then you can claim rewards\n" +
+              "2. The program needs to be updated with the new claim_any_nft instruction\n" +
+              "3. Contact support for manual account initialization"
+            );
+          } catch (initError) {
+            console.error("❌ Failed to initialize UserNft account:", initError);
+            throw initError;
+          }
+        }
+        
+        claimTransaction = await this.program.methods
+          .withdrawNft()
+          .accounts({
+            user: user,
+            mint: mint,
+            user_nft_ata: userATA,
+            vault_authority: vaultAuthority,
+            vault_nft_ata: vaultATA,
+            user_nft: userNFT,
+            token_program: TOKEN_PROGRAM_ID,
+            associated_token_program: ASSOCIATED_TOKEN_PROGRAM_ID,
+          })
+          .transaction();
+        
+        console.log("✅ Using withdrawNft instruction (restricted)");
+      }
 
       // Create final transaction
       const finalTransaction = new Transaction();
 
       // If ATA needs to be created, add it first
       if (createATATransaction) {
+        console.log("➕ Adding ATA creation instruction");
         finalTransaction.add(...createATATransaction.instructions);
       }
 
-      // Add the withdrawal transaction
-      finalTransaction.add(...withdrawalTransaction.instructions);
+      // Add the claim transaction
+      finalTransaction.add(...claimTransaction.instructions);
 
       // Get fresh blockhash
       const { blockhash, lastValidBlockHeight } = await this.retryRpcCall(
@@ -1253,17 +1331,17 @@ export class SolanaProgramService {
       finalTransaction.recentBlockhash = blockhash;
       finalTransaction.feePayer = user;
 
-      console.log("=== SENDING NFT WITHDRAWAL TRANSACTION ===");
+      console.log("=== SENDING NFT CLAIM TRANSACTION ===");
       console.log(`Transaction size: ${finalTransaction.serialize({ requireAllSignatures: false }).length} bytes`);
 
-      // Sign and send transaction
+      // Sign and send transaction WITHOUT retry
+      // (retrying a signed transaction will cause "already processed" errors)
       const signedTransaction = await wallet.signTransaction(finalTransaction);
-      const signature = await this.retryRpcCall(
-        () => this.connection.sendRawTransaction(signedTransaction.serialize(), {
-          skipPreflight: false,
-          preflightCommitment: "confirmed",
-        })
-      );
+      const signature = await this.connection.sendRawTransaction(signedTransaction.serialize(), {
+        skipPreflight: false,
+        preflightCommitment: "confirmed",
+        maxRetries: 0, // Don't retry - will cause "already processed" errors
+      });
 
       console.log("=== NFT WITHDRAWAL TRANSACTION SENT ===");
       console.log(`Signature: ${signature}`);
@@ -1278,17 +1356,36 @@ export class SolanaProgramService {
       );
 
       if (confirmation.value.err) {
-        throw new Error(`NFT withdrawal failed: ${confirmation.value.err}`);
+        throw new Error(`NFT claim failed: ${confirmation.value.err}`);
       }
 
-      console.log("=== NFT WITHDRAWAL SUCCESS ===");
-      console.log(`NFT successfully withdrawn to user's wallet`);
+      console.log("=== NFT CLAIM SUCCESS ===");
+      console.log(`NFT successfully claimed to user's wallet`);
       
       return signature;
 
-    } catch (error) {
-      console.error("=== NFT WITHDRAWAL ERROR ===");
-      console.error(`Error withdrawing NFT:`, error);
+    } catch (error: any) {
+      console.error("=== NFT CLAIM ERROR ===");
+      console.error(`Error claiming NFT:`, error);
+      
+      // Check if this is a vault-related error
+      if (error?.message?.includes('NoNftInVault') || 
+          error?.message?.includes('No NFT available')) {
+        console.error("❌ NO NFT AVAILABLE IN VAULT");
+        console.error("💡 This NFT has already been claimed or was never deposited.");
+        console.error("💡 The vault is empty for this NFT mint.");
+        
+        throw new Error(
+          "⚠️ NFT CLAIM UNAVAILABLE\n\n" +
+          "No NFT available in vault.\n\n" +
+          "WHY: This NFT has already been claimed or was never deposited in the vault.\n\n" +
+          "SOLUTIONS:\n" +
+          "1. Check if the NFT is still available in the vault\n" +
+          "2. Try claiming a different NFT\n" +
+          "3. Contact support if this NFT should be available"
+        );
+      }
+      
       throw error;
     } finally {
       this.pendingTransactions.delete(transactionId);
@@ -1370,14 +1467,14 @@ export class SolanaProgramService {
       console.log("=== SENDING REWARD CLAIM TRANSACTION ===");
       console.log(`Transaction size: ${finalTransaction.serialize({ requireAllSignatures: false }).length} bytes`);
 
-      // Sign and send transaction
+      // Sign and send transaction WITHOUT retry
+      // (retrying a signed transaction will cause "already processed" errors)
       const signedTransaction = await wallet.signTransaction(finalTransaction);
-      const signature = await this.retryRpcCall(
-        () => this.connection.sendRawTransaction(signedTransaction.serialize(), {
-          skipPreflight: false,
-          preflightCommitment: "confirmed",
-        })
-      );
+      const signature = await this.connection.sendRawTransaction(signedTransaction.serialize(), {
+        skipPreflight: false,
+        preflightCommitment: "confirmed",
+        maxRetries: 0, // Don't retry - will cause "already processed" errors
+      });
 
       console.log("=== REWARD CLAIM TRANSACTION SENT ===");
       console.log(`Signature: ${signature}`);

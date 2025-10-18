@@ -137,8 +137,10 @@ export default function WithdrawModal() {
             
         } catch (error) {
             console.error("Error making withdrawal transaction:", error);
-            if (error instanceof Error && error.message.includes("already been processed")) {
-                alert("This transaction has already been processed. Please check your wallet or try again with a different amount.");
+            if (error instanceof Error && error.message === "TRANSACTION_ALREADY_PROCESSED") {
+                alert("server error try again in few seconds");
+            } else if (error instanceof Error && error.message.includes("already been processed")) {
+                alert("server error try again in few seconds");
             } else if (error instanceof Error && error.message.includes("already in progress")) {
                 alert("Transaction already in progress. Please wait for it to complete.");
             } else {

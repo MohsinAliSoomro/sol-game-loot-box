@@ -16,6 +16,7 @@ import { JackpotService } from "@/lib/jackpot-service";
 import JackpotWinAnnouncement from "@/app/Components/JackpotWinAnnouncement";
 // import { WalletContextProvider, useWallet } from "@solana/wallet-adapter-react";
 import deployedIdl from "../../../../deployed_idl.json";
+import Loader from "@/app/Components/Loader";
 
 interface WheelItem {
   id: number;
@@ -39,6 +40,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
   const [isClaiming, setIsClaiming] = useState(false);
   const [claimedRewards, setClaimedRewards] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
+  const [isReloading, setIsReloading] = useState(false);
   
   // Jackpot state
   const [jackpotWin, setJackpotWin] = useState<any>(null);
@@ -66,106 +68,224 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
     return null;
   }, []);
 
-  // Fetch all deposited NFTs and create wheel segments (excluding claimed ones)
+  // Load NFT rewards from database (only active ones)
   const getNFTWheelSegments = useCallback(async () => {
     try {
-      console.log("🎨 Fetching deposited NFTs for wheel segments...");
+      console.log("🎨 Loading NFT rewards from database...");
+      
+      // First, let's see ALL NFT rewards in database (for debugging)
+      const { data: allNFTs } = await supabase
+        .from('nft_reward_percentages')
+        .select('*')
+        .not('mint_address', 'is', null);
+      
+      console.log(`📊 Total NFTs in database: ${allNFTs?.length || 0}`);
+      if (allNFTs && allNFTs.length > 0) {
+        console.log('📋 All NFTs:', allNFTs.map((r: any) => `${r.reward_name} (active: ${r.is_active})`));
+      }
+      
+      // Load all ACTIVE NFT rewards from database
+      const { data: nftRewards, error } = await supabase
+        .from('nft_reward_percentages')
+        .select('*')
+        .eq('is_active', true)
+        .not('mint_address', 'is', null);
+
+      if (error) {
+        console.warn('⚠️ Could not load NFT rewards from database:', error);
+        return [];
+      }
+
+      if (!nftRewards || nftRewards.length === 0) {
+        console.log("📦 No active NFT rewards found in database");
+        return [];
+      }
+
+      // Convert database NFT rewards to wheel items
+      const nftSegments: WheelItem[] = nftRewards.map((r: any, idx: number) => ({
+        id: r.id || (2000 + idx),
+        name: r.reward_name || 'NFT Reward',
+        image: r.reward_image || '/default-nft.png',
+        color: `hsl(${(idx * 120) % 360}, 70%, 60%)`,
+        textColor: '#ffffff',
+        percentage: Math.max(r.percentage || 0, 1), // Ensure minimum 1% for visibility
+        price: r.reward_price || '100',
+        mint: r.mint_address,
+        isNFT: true,
+      }));
+
+      console.log(`✅ Loaded ${nftSegments.length} active NFT rewards from database`);
+      console.log('🎨 Active NFT rewards:', nftSegments.map(nft => `${nft.name} (${nft.percentage}%) - ${nft.mint?.slice(0, 8)}...`));
+      
+      return nftSegments;
+    } catch (e) {
+      console.warn('⚠️ Error loading NFT rewards:', e);
+      return [];
+    }
+  }, []);
+
+  // Sync deposited NFTs to database (run once on component mount)
+  const syncNFTsToDatabase = useCallback(async () => {
+    try {
+      console.log("🔄 Syncing deposited NFTs to database...");
       
       // Import the NFT metadata fetcher
       const { fetchMultipleNFTMetadata, getDepositedNFTs } = await import("@/lib/nft-metadata");
       
       // Get mint addresses of deposited NFTs
       const mintAddresses = await getDepositedNFTs();
-      console.log("📍 Mint addresses:", mintAddresses);
+      console.log("📍 Found", mintAddresses.length, "deposited NFTs");
       
-      // Get all NFT mints that are already won (claimed or pending) for this user
-      let wonMints: string[] = [];
-      if (user.id) {
-        const { data: wonRewards } = await supabase
-          .from("prizeWin")
-          .select("mint")
-          .eq("userId", user.id)
-          .not("mint", "is", null);
-        
-        wonMints = wonRewards?.map(r => r.mint) || [];
-        console.log("🚫 Already won mint addresses:", wonMints);
-      } else {
-        console.log("⚠️ No user ID, skipping won rewards check");
+      if (mintAddresses.length === 0) {
+        console.log("📦 No NFTs deposited in vault");
+        return;
       }
       
-      // Filter out already won NFTs
-      const availableMints = mintAddresses.filter(mint => !wonMints.includes(mint));
-      console.log("✅ Available mint addresses:", availableMints);
+      // Fetch metadata for all NFTs
+      const nftMetadata = await fetchMultipleNFTMetadata(mintAddresses);
+      console.log("✅ Loaded NFT metadata for", nftMetadata.length, "NFTs");
       
-      if (availableMints.length === 0) {
-        console.log("📦 No available NFTs found in vault (all already won)");
-        return [];
+      // Get existing NFT rewards from DB to avoid duplicates
+      const { data: existing, error: existingErr } = await supabase
+        .from('nft_reward_percentages')
+        .select('mint_address');
+      
+      if (existingErr) {
+        console.warn('⚠️ Could not fetch existing NFT rewards:', existingErr);
+        return;
       }
       
-      // Fetch metadata for available NFTs only
-      const nftMetadata = await fetchMultipleNFTMetadata(availableMints);
-      console.log("✅ Loaded available NFT metadata:", nftMetadata);
-      
-      // Sync deposited NFTs into database table `nft_reward_percentages`
-      try {
-        // Get existing NFT rewards from DB to avoid duplicates
-        const { data: existing, error: existingErr } = await supabase
+      const existingMints = new Set((existing || []).map((r: any) => r.mint_address));
+      const toInsert = nftMetadata
+        .filter(nft => !existingMints.has(nft.mint))
+        .map(nft => ({
+          reward_name: nft.name || 'NFT Reward',
+          reward_image: nft.image || '/default-nft.png',
+          reward_price: '100',
+          percentage: 1.0, // default; admin can adjust later
+          mint_address: nft.mint,
+          is_active: true,
+        }));
+
+      if (toInsert.length > 0) {
+        const { error: insertErr } = await supabase
           .from('nft_reward_percentages')
-          .select('mint_address');
-        if (existingErr) {
-          console.warn('⚠️ Could not fetch existing NFT rewards:', existingErr);
+          .upsert(toInsert, { onConflict: 'mint_address' });
+        
+        if (insertErr) {
+          console.warn('⚠️ Failed to sync NFTs to database:', insertErr);
         } else {
-          const existingMints = new Set((existing || []).map((r: any) => r.mint_address));
-          const toInsert = nftMetadata
-            .filter(nft => !existingMints.has(nft.mint))
-            .map(nft => ({
-              reward_name: nft.name || 'NFT Reward',
-              reward_image: nft.image || '/default-nft.png',
-              reward_price: '100',
-              percentage: 1.0, // default; admin can adjust later
-              mint_address: nft.mint,
-              is_active: true,
-            }));
-
-          if (toInsert.length > 0) {
-            const { error: insertErr } = await supabase
-              .from('nft_reward_percentages')
-              .upsert(toInsert, { onConflict: 'mint_address' });
-            if (insertErr) {
-              console.warn('⚠️ Failed to upsert new deposited NFTs into DB:', insertErr);
-            } else {
-              console.log(`✅ Upserted ${toInsert.length} newly deposited NFTs into DB`);
-            }
-          }
+          console.log(`✅ Synced ${toInsert.length} new NFTs to database`);
         }
-      } catch (dbSyncErr) {
-        console.warn('⚠️ Error during NFT DB sync:', dbSyncErr);
+      } else {
+        console.log("✅ All NFTs already synced to database");
       }
-
-      // Convert NFTs to wheel segments with equal percentage distribution
-      const nftPercentage = 100 / nftMetadata.length; // Equal distribution among all NFTs
-      const nftSegments: WheelItem[] = nftMetadata.map((nft, index) => ({
-        id: 1000 + index, // Use high IDs to avoid conflicts with existing rewards
-        name: nft.name,
-        image: nft.image,
-        color: `hsl(${(index * 120) % 360}, 70%, 60%)`, // Different colors for each NFT
-        textColor: "#ffffff",
-        percentage: nftPercentage, // Equal distribution
-        price: "100", // Default price
-        mint: nft.mint,
-        isNFT: true
-      }));
       
-      console.log(`🎨 NFT segments with percentages:`, nftSegments.map(nft => `${nft.name}: ${nft.percentage}%`));
+      // Check which NFTs are in sidebar carts (won but not yet claimed)
+      console.log("🔄 Checking for NFTs in sidebar carts...");
+      const { data: cartNFTs } = await supabase
+        .from('prizeWin')
+        .select('mint, userId, name, created_at')
+        .eq('reward_type', 'nft')
+        .eq('isWithdraw', false) // In cart but not yet claimed
+        .not('mint', 'is', null);
       
-      console.log(`🎯 Created ${nftSegments.length} available NFT wheel segments`);
-      return nftSegments;
+      const cartMints = new Set((cartNFTs || []).map(w => w.mint));
+      console.log(`📋 Found ${cartMints.size} NFTs in sidebar carts:`, Array.from(cartMints));
+      console.log('📋 Cart NFT details:', cartNFTs?.map(nft => `${nft.name} (${nft.mint?.slice(0, 8)}...) - User: ${nft.userId}`));
+      
+      // Sync NFT active status: In vault AND not in carts
+      console.log("🔄 Syncing NFT active status...");
+      const depositedMints = new Set(mintAddresses);
+      console.log(`📍 Deposited mints: ${Array.from(depositedMints)}`);
+      
+      // Get all NFTs in database (active and inactive)
+      const { data: allDBNFTs } = await supabase
+        .from('nft_reward_percentages')
+        .select('*')
+        .not('mint_address', 'is', null);
+      
+      console.log(`📊 All NFTs in database: ${allDBNFTs?.length || 0}`);
+      if (allDBNFTs) {
+        console.log('📋 Database NFTs:', allDBNFTs.map(nft => `${nft.reward_name} (${nft.mint_address?.slice(0, 8)}...) - Active: ${nft.is_active}`));
+        
+        // Activate NFTs that are: in vault AND not in carts AND currently inactive
+        const toActivate = allDBNFTs.filter(nft => 
+          depositedMints.has(nft.mint_address) && 
+          !cartMints.has(nft.mint_address) && 
+          !nft.is_active
+        );
+        
+        // Deactivate NFTs that are: (not in vault OR in carts) AND currently active
+        const toDeactivate = allDBNFTs.filter(nft => 
+          (!depositedMints.has(nft.mint_address) || cartMints.has(nft.mint_address)) && 
+          nft.is_active
+        );
+        
+        console.log('🔍 Analysis for each NFT:');
+        allDBNFTs.forEach(nft => {
+          const inVault = depositedMints.has(nft.mint_address);
+          const inCart = cartMints.has(nft.mint_address);
+          const shouldBeActive = inVault && !inCart;
+          console.log(`  ${nft.reward_name}: InVault=${inVault}, InCart=${inCart}, ShouldBeActive=${shouldBeActive}, CurrentlyActive=${nft.is_active}`);
+        });
+        
+        if (toActivate.length > 0) {
+          console.log(`🔄 Activating ${toActivate.length} available NFTs:`, toActivate.map(n => n.reward_name));
+          
+          for (const nft of toActivate) {
+            await supabase
+              .from('nft_reward_percentages')
+              .update({ is_active: true })
+              .eq('id', nft.id);
+          }
+          
+          console.log("✅ Activated available NFTs");
+        }
+        
+        if (toDeactivate.length > 0) {
+          console.log(`🔄 Deactivating ${toDeactivate.length} unavailable NFTs:`, toDeactivate.map(n => n.reward_name));
+          
+          for (const nft of toDeactivate) {
+            await supabase
+              .from('nft_reward_percentages')
+              .update({ is_active: false })
+              .eq('id', nft.id);
+          }
+          
+          console.log("✅ Deactivated unavailable NFTs (not in vault or in carts)");
+        }
+        
+        if (toActivate.length === 0 && toDeactivate.length === 0) {
+          console.log("✅ All NFTs already have correct active status");
+        }
+      }
+      
+      // Update percentages for all active NFTs to ensure equal distribution
+      const { data: allActiveNFTs } = await supabase
+        .from('nft_reward_percentages')
+        .select('*')
+        .eq('is_active', true)
+        .not('mint_address', 'is', null);
+      
+      if (allActiveNFTs && allActiveNFTs.length > 0) {
+        const equalPercentage = 50 / allActiveNFTs.length; // 50% total for all NFTs
+        console.log(`🔄 Updating ${allActiveNFTs.length} active NFTs to ${equalPercentage}% each`);
+        
+        for (const nft of allActiveNFTs) {
+          await supabase
+            .from('nft_reward_percentages')
+            .update({ percentage: equalPercentage })
+            .eq('id', nft.id);
+        }
+        
+        console.log("✅ Updated all active NFT percentages for equal distribution");
+      }
       
     } catch (error) {
-      console.error("❌ Error fetching NFT wheel segments:", error);
-      return [];
+      console.error("❌ Error syncing NFTs to database:", error);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // Load ALL active rewards from database (replaces original data)
   const loadAllActiveRewards = useCallback(async () => {
@@ -243,29 +363,66 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
     }
   }, []);
 
+  // Backend-powered NFT activation
+  const manuallyActivateDepositedNFTs = useCallback(async () => {
+    try {
+      console.log("🔧 Syncing NFT status with backend...");
+      
+      // Call backend API to get and sync NFT status
+      const response = await fetch('/api/nft-status', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      const result = await response.json();
+      
+      if (!result.success) {
+        console.error("❌ Backend NFT sync failed:", result.error);
+        return;
+      }
+      
+      console.log(`✅ Backend sync complete: ${result.availableNFTs.length} available NFTs`);
+      console.log(`📊 Total deposited: ${result.totalDeposited}, Won: ${result.wonNFTs.length}`);
+      
+    } catch (error) {
+      console.error("❌ Error syncing NFT status:", error);
+    }
+  }, []);
+
   useEffect(() => {
-    // Load wheel data with ONLY deposited NFT rewards
+    // Load wheel data from database
     const loadWheelData = async () => {
       try {
-        console.log("🎰 Loading wheel data with ONLY deposited NFT rewards...");
+        console.log("🎰 Loading wheel data from database...");
         console.log("👤 Current user ID:", user.id);
         
         setIsLoading(true);
         
-        // Note: We'll load NFTs even without user authentication for now
-        // User filtering will be applied in getNFTWheelSegments if user.id exists
+        // First, sync NFTs to database (if not already synced)
+        console.log("🔄 About to call syncNFTsToDatabase...");
+        await syncNFTsToDatabase();
+        console.log("✅ syncNFTsToDatabase completed");
         
-        // Get NFT and SOL segments
+        // Manual fallback to ensure deposited NFTs are active
+        console.log("🔧 Running manual activation as fallback...");
+        await manuallyActivateDepositedNFTs();
+        console.log("✅ Manual activation completed");
+        
+        // Then load NFT and SOL segments from database
         const [nftSegments, solSegments] = await Promise.all([
           getNFTWheelSegments(),
           loadSolRewards(),
         ]);
 
-        // Merge segments (percentages can come from backend; if 0, we will equalize)
+        console.log(`📊 Loaded ${nftSegments.length} NFT rewards and ${solSegments.length} SOL rewards`);
+
+        // Merge segments (percentages come from database)
         let merged = [...nftSegments, ...solSegments];
 
         if (merged.length === 0) {
-          console.warn("⚠️ No deposited NFTs found in vault. Wheel will be empty.");
+          console.warn("⚠️ No active rewards found in database. Wheel will be empty.");
           setShuffledData([]);
         } else {
           // If sum of percentages <= 0, normalize equally; otherwise keep backend percentages
@@ -278,9 +435,8 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
           setShuffledData(shuffled);
         }
         
-        console.log(`🎯 Wheel loaded with ${merged.length} total segments (NFT + SOL)`);
+        console.log(`🎯 Wheel loaded with ${merged.length} total segments (${nftSegments.length} NFT + ${solSegments.length} SOL)`);
         console.log("📊 Rewards:", merged.map(r => `${r.name}: ${r.percentage}%`));
-        console.log("🔍 Full segments data:", merged);
         
         setIsLoading(false);
         
@@ -293,7 +449,8 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
     };
     
     loadWheelData();
-  }, [getNFTWheelSegments]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncNFTsToDatabase, getNFTWheelSegments, loadSolRewards]); // Load from database
 
   // Real-time updates when NFT rewards are added/changed in database
   useEffect(() => {
@@ -321,7 +478,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
                 setShuffledData([]);
               } else {
                 const shuffled = nftSegments.sort(() => Math.random() - 0.5);
-                setShuffledData(shuffled);
+    setShuffledData(shuffled);
               }
               
               console.log(`✅ Wheel updated with ${nftSegments.length} NFT segments`);
@@ -390,6 +547,12 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
   const addRewardToCart = useCallback(async (winnerItem: WheelItem) => {
     try {
       console.log("🎯 Adding reward to cart:", winnerItem);
+      console.log("🎯 Winner item type check:", {
+        isNFT: winnerItem.isNFT,
+        hasMint: !!winnerItem.mint,
+        mint: winnerItem.mint,
+        name: winnerItem.name
+      });
       
       // Check if this is a SOL reward
       if ((winnerItem as any).reward_type === 'sol' && (winnerItem as any).solAmount) {
@@ -423,28 +586,20 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       } else if (winnerItem.isNFT && winnerItem.mint) {
         console.log("🎨 Processing NFT reward:", winnerItem.name);
         
-        // Verify the NFT is actually deposited in vault
-        try {
-          const { getDepositedNFTs } = await import("@/lib/nft-metadata");
-          const depositedMints = await getDepositedNFTs();
-          
-          if (!depositedMints.includes(winnerItem.mint)) {
-            console.warn("⚠️ NFT not in vault, skipping cart addition:", winnerItem.mint);
-            alert(`⚠️ NFT Not Available!\n\n${winnerItem.name} is no longer available in the vault.\n\nPlease try spinning again for a different reward.`);
-            return;
-          }
-        } catch (error) {
-          console.warn("⚠️ Could not verify NFT in vault:", error);
-          // If we can't verify, don't add to cart to be safe
-          alert(`⚠️ Unable to verify NFT availability!\n\nPlease try spinning again.`);
-          return;
-        }
-        
-        // Generate a unique reward ID
-        const rewardId = Date.now() % 1000000;
-        
-        console.log("📝 Inserting NFT into prizeWin table...");
         // Add NFT reward to prizeWin table (for sidebar cart)
+        console.log("📝 Inserting NFT into prizeWin table...");
+        console.log("🎯 NFT data to insert:", {
+          userId: user.id,
+          name: winnerItem.name,
+          image: winnerItem.image,
+          sol: winnerItem.price,
+          isWithdraw: false,
+          reward_type: 'nft',
+          mint: winnerItem.mint,
+          product_id: item.id,
+          created_at: new Date().toISOString(),
+        });
+        
         const prizeWinResult = await supabase.from("prizeWin").insert({
           userId: user.id,
           name: winnerItem.name,
@@ -459,10 +614,68 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
 
         if (prizeWinResult.error) {
           console.error("❌ Error inserting NFT into prizeWin:", prizeWinResult.error);
+          console.error("❌ Error details:", JSON.stringify(prizeWinResult.error, null, 2));
           throw prizeWinResult.error;
         }
 
         console.log("✅ Successfully inserted NFT into prizeWin:", prizeWinResult.data);
+        console.log("✅ Insert result:", JSON.stringify(prizeWinResult.data, null, 2));
+        
+        // Mark NFT as won using backend API
+        console.log("🔄 Marking NFT as won via backend...");
+        try {
+          const response = await fetch('/api/nft-status', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              mint: winnerItem.mint,
+              userId: user.id
+            }),
+          });
+          
+          const result = await response.json();
+          
+          if (!result.success) {
+            console.error("❌ Backend NFT marking failed:", result.error);
+          } else {
+            console.log(`✅ NFT marked as won via backend: ${winnerItem.mint}`);
+            console.log("🔄 Forcing wheel reload after NFT win...");
+          }
+        } catch (error) {
+          console.error("❌ Error calling backend API:", error);
+        }
+        
+        // Force reload wheel data immediately
+        setTimeout(async () => {
+          try {
+            console.log("🔄 Reloading wheel data after NFT win...");
+            setIsReloading(true);
+            
+            const nftSegments = await getNFTWheelSegments();
+            const solSegments = await loadSolRewards();
+            const merged = [...nftSegments, ...solSegments];
+            
+            if (merged.length === 0) {
+              setShuffledData([]);
+            } else {
+              const totalPct = merged.reduce((s, r:any) => s + (Number(r.percentage) || 0), 0);
+              const normalized = totalPct <= 0.001
+                ? merged.map((r) => ({ ...r, percentage: 100 / merged.length }))
+                : merged;
+              const shuffled = normalized.sort(() => Math.random() - 0.5);
+              setShuffledData(shuffled);
+            }
+            
+            console.log(`✅ Wheel reloaded with ${merged.length} segments after NFT win`);
+            setIsReloading(false);
+          } catch (error) {
+            console.error("❌ Error reloading wheel after NFT win:", error);
+            setIsReloading(false);
+          }
+        }, 1000); // Wait 1 second to ensure database update is complete
+        
         console.log(`🎉 NFT reward added to cart: ${winnerItem.name} (Mint: ${winnerItem.mint})`);
         
       } else {
@@ -519,7 +732,8 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       console.error("❌ Error adding reward to cart:", error);
       alert(`Error adding reward to cart: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  }, [user.id, getRandomNFTFromVault]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user.id, item.id]); // Only include essential dependencies
 
   const getRandomReward = () => {
     const totalProbability = data.reduce((sum: any, item: any) => sum + item.percentage, 0);
@@ -566,15 +780,29 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       if (pointerSegmentIndex < 0) pointerSegmentIndex += segmentCount;
       if (pointerSegmentIndex >= segmentCount) pointerSegmentIndex = 0;
       const winnerItem = shuffledData[pointerSegmentIndex];
+      console.log("🎯 Winner determined:", winnerItem);
+      console.log("🎯 Winner isNFT:", winnerItem?.isNFT);
+      console.log("🎯 Winner mint:", winnerItem?.mint);
+      console.log("🎯 Winner reward_type:", (winnerItem as any)?.reward_type);
+      
       setWinner(winnerItem);
       setShowWinnerDialog(true);
       setIsSpinning(false);
 
       // Paid spin: keep current behavior and add reward to cart
+      console.log("🎯 About to call addRewardToCart with:", winnerItem);
+      console.log("🎯 Winner item details:", {
+        name: winnerItem.name,
+        isNFT: winnerItem.isNFT,
+        mint: winnerItem.mint,
+        price: winnerItem.price,
+        image: winnerItem.image
+      });
       await addRewardToCart(winnerItem);
+      console.log("✅ addRewardToCart completed");
 
-      // Reward payout (OGX tokens automatically added) - only for non-SOL rewards
-      if ((winnerItem as any).reward_type !== 'sol') {
+      // Reward payout (OGX tokens automatically added) - only for OGX token rewards, NOT NFTs
+      if ((winnerItem as any).reward_type === 'ogx') {
         const rewardAmount = Number(winnerItem?.price);
         try {
           await supabase.from("user").update({ apes: user.apes - price + rewardAmount }).eq("id", user.id);
@@ -583,6 +811,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
           console.error("Reward update failed", e);
         }
       }
+      // Note: NFT rewards are handled in addRewardToCart() - no OGX tokens should be added for NFTs
 
       // Jackpot system integration
       try {
@@ -667,18 +896,14 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
     spinWheel();
   };
   
+
+  
   return (
     <div className="w-full bg-[#ff914d]/10">
       {/* Show loading state */}
-      {/* {isLoading && (
-        <div className="text-center py-8 px-4">
-          <div className="bg-white/20 rounded-lg p-6 mx-4">
-            <h3 className="text-xl font-bold text-white mb-2">🔄 Loading Wheel...</h3>
-            <p className="text-white/80 mb-4">Please wait while we load the deposited NFTs.</p>
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
-          </div>
-        </div>
-      )} */}
+      {isLoading && (
+       <Loader />
+      )}
       
       {/* Show message if no NFTs deposited (only when not loading) */}
       {!isLoading && shuffledData.length === 0 && (
@@ -692,8 +917,8 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       )}
       
       {!isLoading && shuffledData.length > 0 && (
-        <div className="w-full flex flex-col items-center justify-center">
-          <div className="relative w-full flex justify-center overflow-hidden md:h-[30vw] h-[40vw]">
+      <div className="w-full flex flex-col items-center justify-center">
+        <div className="relative w-full flex justify-center overflow-hidden md:h-[30vw] h-[40vw]">
           <div className="absolute inset-0 z-0" style={{
             backgroundImage: `url(${img.src})`,
             backgroundSize: "cover",
@@ -815,19 +1040,34 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
 
         <button
           onClick={spinWheel}
-          disabled={isSpinning}
-          className="mt-10 px-2 py-1 bg-[#f74e14] hover:bg-[#e63900] text-white rounded font-bold"
+          disabled={isSpinning || isLoading}
+          className={`mt-10 px-2 py-1 rounded font-bold transition-all duration-200 ${
+            isSpinning || isLoading 
+              ? 'bg-gray-500 cursor-not-allowed' 
+              : 'bg-[#f74e14] hover:bg-[#e63900]'
+          } text-white`}
         >
-          SPIN FOR {item?.price} OGX
+          {isSpinning ? (
+            <div className="flex items-center gap-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              <span>SPINNING...</span>
+            </div>
+          ) : (
+            `SPIN FOR ${item?.price} OGX`
+          )}
         </button>
         <button
           onClick={handleFreeTry}
-          disabled={isSpinning}
-          className="mt-4 px-4 py-2 text-[#f74e14] rounded font-bold "
+          disabled={isSpinning || isLoading}
+          className={`mt-4 px-4 py-2 rounded font-bold transition-all duration-200 ${
+            isSpinning || isLoading 
+              ? 'text-gray-500 cursor-not-allowed' 
+              : 'text-[#f74e14] hover:text-[#e63900]'
+          }`}
         >
-          TRY FOR FREE
+          {isSpinning ? 'SPINNING...' : 'TRY FOR FREE'}
         </button>
-        </div>
+      </div>
       )}
 
       {showWinnerDialog && winner && (
@@ -880,12 +1120,12 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
                     Spin Again
                   </button>
                 ) : (
-                  <button
-                    onClick={resetWheel}
-                    className="px-6 py-2 border-2 border-[#f74e14] text-[#f74e14] rounded-lg hover:bg-[#f74e14] hover:text-white"
-                  >
+                <button
+                  onClick={resetWheel}
+                  className="px-6 py-2 border-2 border-[#f74e14] text-[#f74e14] rounded-lg hover:bg-[#f74e14] hover:text-white"
+                >
                     Close
-                  </button>
+                </button>
                 )}
                 <button
                   onClick={() => {

@@ -175,6 +175,29 @@ export default function SidebarCart() {
 
             console.log(`✅ Marked all instances of mint ${mintAddress} as claimed`);
 
+            // Mark NFT as available again using backend API
+            try {
+              const response = await fetch('/api/nft-status', {
+                method: 'DELETE',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  mint: mintAddress
+                }),
+              });
+              
+              const result = await response.json();
+              
+              if (result.success) {
+                console.log(`✅ NFT marked as available again: ${mintAddress}`);
+              } else {
+                console.warn("⚠️ Backend NFT availability update failed:", result.error);
+              }
+            } catch (error) {
+              console.warn("⚠️ Error calling backend API:", error);
+            }
+
             // Remove claimed NFT reward from the wheel DB (nft_reward_percentages)
             try {
                 const { error: delErr } = await supabase
@@ -200,6 +223,29 @@ export default function SidebarCart() {
 
             // Handle specific error cases
             if (error instanceof Error) {
+                // Handle new user account initialization error
+                if (error.message.includes("NFT CLAIM UNAVAILABLE") ||
+                    error.message.includes("account needs initialization") || 
+                    error.message.includes("AccountNotInitialized") ||
+                    error.message.includes("NFT tracking account")) {
+                    alert(
+                        `⚠️ NFT CLAIM UNAVAILABLE - ACCOUNT NOT INITIALIZED\n\n` +
+                        `Your NFT tracking account has not been initialized.\n\n` +
+                        `WHY THIS HAPPENS:\n` +
+                        `The Solana program requires you to DEPOSIT AN NFT first before claiming NFT rewards.\n` +
+                        `⚠️ Depositing SOL does NOT initialize the NFT tracking account!\n\n` +
+                        `SOLUTION:\n` +
+                        `You must deposit at least one NFT (any NFT, even a cheap one) to initialize your account.\n` +
+                        `After that, you'll be able to claim NFT rewards.\n\n` +
+                        `ALTERNATIVE:\n` +
+                        `Contact support for manual initialization.\n\n` +
+                        `This is a known limitation of the current Solana program design.`
+                    );
+                    
+                    setClaimingReward(null);
+                    return;
+                }
+                
                 if (error.message.includes("already been processed")) {
                     console.log("✅ Transaction was already processed successfully");
                     // Update ALL instances of this mint as claimed

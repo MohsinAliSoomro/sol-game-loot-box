@@ -42,9 +42,7 @@ export default function Details() {
     setOpenModal(!openModal);
   };
 
-  if (loading) {
-    return <Loader />;
-  }
+ 
   if (error) {
     return (
       <div className="min-h-screen bg-orange-500">
@@ -57,7 +55,9 @@ export default function Details() {
       </div>
     );
   }
-
+  if (loading) {
+    return <Loader />;
+  }
   return (
     <div className="overflow-hidden bg-orange-500 text-white">
       <div className="nav-top z-50 relative">

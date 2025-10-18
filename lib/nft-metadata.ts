@@ -60,8 +60,15 @@ export const fetchMultipleNFTMetadata = async (mintAddresses: string[]) => {
   // Filter out null results
   const validNFTs = results.filter(nft => nft !== null);
   
-  console.log(`✅ Successfully fetched ${validNFTs.length}/${mintAddresses.length} NFTs`);
-  return validNFTs;
+    console.log(`✅ Successfully fetched ${validNFTs.length}/${mintAddresses.length} NFTs`);
+    
+    // Remove duplicates based on mint address
+    const uniqueNFTs = validNFTs.filter((nft, index, self) => 
+      index === self.findIndex(t => t.mint === nft.mint)
+    );
+    
+    console.log(`🔄 Removed duplicates: ${validNFTs.length} → ${uniqueNFTs.length} NFTs`);
+    return uniqueNFTs;
 };
 
 /**
@@ -110,8 +117,37 @@ export const getDepositedNFTs = async (): Promise<string[]> => {
             const hasNft = hasNftByte[0] === 1;
             
             if (hasNft) {
-              depositedMints.push(mint.toString());
-              console.log(`✅ Found deposited NFT: ${mint.toString()}`);
+              // Double-check: verify the vault ATA actually has NFTs
+              try {
+                const [vaultAuthority] = PublicKey.findProgramAddressSync(
+                  [Buffer.from('vault'), mint.toBuffer()],
+                  PROGRAM_ID
+                );
+                
+                const { getAssociatedTokenAddressSync } = await import('@solana/spl-token');
+                const vaultATA = getAssociatedTokenAddressSync(mint, vaultAuthority, true);
+                
+                // Check if vault ATA exists and has NFTs
+                const vaultAccountInfo = await connection.getAccountInfo(vaultATA);
+                let vaultHasNFTs = false;
+                
+                if (vaultAccountInfo) {
+                  const amount = vaultAccountInfo.data.readBigUInt64LE(64);
+                  vaultHasNFTs = amount > BigInt(0);
+                }
+                
+                if (vaultHasNFTs && vaultAccountInfo) {
+                  depositedMints.push(mint.toString());
+                  console.log(`✅ Found deposited NFT: ${mint.toString()} (vault has ${vaultAccountInfo.data.readBigUInt64LE(64)} NFTs)`);
+                } else {
+                  console.log(`⚠️ UserNft says deposited but vault ATA is empty: ${mint.toString()}`);
+                }
+              } catch (vaultError) {
+                console.warn(`⚠️ Error checking vault for ${mint.toString()}: ${vaultError}`);
+                // If we can't check vault, trust the UserNft account
+                depositedMints.push(mint.toString());
+                console.log(`✅ Found deposited NFT (vault check failed): ${mint.toString()}`);
+              }
             }
             
           } catch (error) {
@@ -121,13 +157,19 @@ export const getDepositedNFTs = async (): Promise<string[]> => {
       }
     }
 
-    console.log(`🎨 Total deposited NFTs: ${depositedMints.length}`);
+    // Remove duplicate mint addresses
+    const uniqueMints = [...new Set(depositedMints)];
     
-    if (depositedMints.length === 0) {
+    console.log(`🎨 Total deposited NFTs: ${depositedMints.length} (${uniqueMints.length} unique)`);
+    if (depositedMints.length !== uniqueMints.length) {
+      console.log(`🔄 Removed ${depositedMints.length - uniqueMints.length} duplicate mint addresses`);
+    }
+    
+    if (uniqueMints.length === 0) {
       console.log("📦 No NFTs currently deposited in vault");
     }
     
-    return depositedMints;
+    return uniqueMints;
     
   } catch (error) {
     console.error("❌ Error querying vault for NFTs:", error);

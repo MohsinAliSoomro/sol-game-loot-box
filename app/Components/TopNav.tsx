@@ -5,7 +5,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useEffectOnce } from "react-use";
 // @ts-ignore
 import bs58 from "bs58";
@@ -24,6 +24,8 @@ export default function TopNav() {
   const [isLogin, setIsLogin] = useState(false);
   const [totalVolumeOGX, setTotalVolumeOGX] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isAutoLoggingIn, setIsAutoLoggingIn] = useState(false);
+  const hasAttemptedLogin = useRef(false);
   const router = useRouter();
   const { publicKey, connect, signMessage, connected, disconnect } = useWallet();
 
@@ -36,38 +38,90 @@ export default function TopNav() {
     });
   };
 
-  const handleLogin = async () => {
-    if (!connected || !publicKey || !signMessage) {
-      alert("Please connect your wallet first");
+  const handleSimpleWalletLogin = useCallback(async () => {
+    if (!connected || !publicKey || isAutoLoggingIn || isLogin) {
       return;
     }
 
-    const message = `Login to app at ${new Date().toISOString()}`;
-    const encodedMessage: any = new TextEncoder().encode(message);
-    const signature = await signMessage(encodedMessage);
-    const res = await fetch("/api/auth", {
-      method: "POST",
-      body: JSON.stringify({
-        publicKey: publicKey.toBase58(),
-        signature: bs58.encode(signature),
-        message,
-      }),
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-
-    const data = await res.json();
-    if (data.session) {
-      await supabase.auth.setSession({
-        access_token: data.session.access_token,
-        refresh_token: data.session.refresh_token,
-      });
+    setIsAutoLoggingIn(true);
+    
+    try {
+      console.log("Creating/loading user for wallet:", publicKey.toBase58());
+      
+      // Try to find existing user by wallet address
+      const { data: existingUser, error: fetchError } = await supabase
+        .from("user")
+        .select()
+        .eq("walletAddress", publicKey.toBase58())
+        .single();
+      
+      if (existingUser && !fetchError) {
+        console.log("Found existing user:", existingUser);
+        setUser(prevUser => ({ ...prevUser, ...existingUser }));
+        
+        // Load user volume
+        try {
+          const { data: txs } = await supabase
+            .from('transaction')
+            .select('ogx')
+            .eq('userId', existingUser.id);
+          const volume = (txs || []).reduce((sum: number, t: any) => sum + (Number(t?.ogx) || 0), 0);
+          setTotalVolumeOGX(volume);
+        } catch (volErr) {
+          console.warn('Failed to load user volume:', volErr);
+        }
+      } else {
+        console.log("Creating new user for wallet");
+        // Create new user record with UUID
+        const userId = crypto.randomUUID(); // Generate UUID
+        const walletAddress = publicKey.toBase58();
+        
+        // Create deterministic email from wallet address
+        const emailHash = walletAddress.substring(0, 8);
+        const email = `${emailHash}@wallet.local`;
+        
+        const newUser = {
+          uid: userId,  // Primary UUID field
+          id: userId,   // Keep both fields with same UUID
+          walletAddress: walletAddress,
+          email: email,
+          provider: 'wallet',
+          apes: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        
+        console.log("Creating new user with UUID:", userId);
+        
+        const { data: insertedUser, error: insertError } = await supabase
+          .from("user")
+          .insert(newUser)
+          .select()
+          .single();
+        
+        if (insertedUser && !insertError) {
+          console.log("Created new user:", insertedUser);
+          setUser(prevUser => ({ ...prevUser, ...insertedUser }));
+          setTotalVolumeOGX(0);
+        } else {
+          console.error("Error creating user:", insertError);
+        }
+      }
+      
       setIsLogin(true);
       setOpen(false);
-    } else {
-      alert("Login failed.");
+      console.log("Simple wallet login completed successfully!");
+      
+    } catch (error) {
+      console.error("Error during simple wallet login:", error);
+    } finally {
+      setIsAutoLoggingIn(false);
     }
+  }, [connected, publicKey, isAutoLoggingIn, isLogin, setUser, setTotalVolumeOGX]);
+
+  const handleLogin = async () => {
+    // This is now just a wrapper for manual login if needed
+    await handleSimpleWalletLogin();
   };
   useEffect(() => {
     const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -148,12 +202,12 @@ export default function TopNav() {
     onLoad();
   });
 
-  // Load user data when wallet connects
+  // Load user data when wallet connects (but don't create - that's handled by auto-login)
   useEffect(() => {
     const loadUserData = async () => {
-      if (connected && publicKey) {
+      if (connected && publicKey && isLogin) {
         try {
-          // Try to find user by wallet address
+          // Try to find user by wallet address (only if already logged in)
           const { data: userData, error } = await supabase
             .from("user")
             .select()
@@ -161,7 +215,7 @@ export default function TopNav() {
             .single();
           
           if (userData && !error) {
-            console.log("Found user by wallet address:", userData);
+            console.log("Found existing user by wallet address:", userData);
             setUser(prevUser => ({ ...prevUser, ...userData }));
             // Also load volume for this wallet's user
             try {
@@ -174,36 +228,15 @@ export default function TopNav() {
             } catch (volErr) {
               console.warn('Failed to load user volume:', volErr);
             }
-          } else {
-            console.log("No user found with wallet address, creating new user");
-            // Create a new user record with wallet address
-            const newUser = {
-              walletAddress: publicKey.toBase58(),
-              apes: 0,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            };
-            
-            const { data: insertedUser, error: insertError } = await supabase
-              .from("user")
-              .insert(newUser)
-              .select()
-              .single();
-            
-            if (insertedUser && !insertError) {
-              console.log("Created new user:", insertedUser);
-              setUser(prevUser => ({ ...prevUser, ...insertedUser }));
-              setTotalVolumeOGX(0);
-            }
           }
         } catch (error) {
-          console.error("Error loading/creating user data:", error);
+          console.error("Error loading user data:", error);
         }
       }
     };
 
     loadUserData();
-  }, [connected, publicKey, setUser]);
+  }, [connected, publicKey, isLogin, setUser]);
 
   const logout = async () => {
     try {
@@ -218,6 +251,8 @@ export default function TopNav() {
       await supabase.auth.signOut();
       router.push("/");
       setIsLogin(false);
+      setIsAutoLoggingIn(false);
+      hasAttemptedLogin.current = false;
       setOpen(false);
     } catch (error) {
       console.log("error", { error });
@@ -232,18 +267,39 @@ export default function TopNav() {
   const handleCloseModal = () => {
     setOpen(false);
   };
+  // Handle wallet connection - create user without signature
   useEffect(() => {
-    if (connected) {
-      console.log("Wallet connected, setting isLogin to true");
-      setIsLogin(true);
-      setOpen(false); // Close modal when wallet connects
-    } else {
-      console.log("Wallet disconnected, setting isLogin to false");
+    if (connected && publicKey && !isLogin && !hasAttemptedLogin.current) {
+      console.log("Wallet connected for first time:", publicKey.toBase58());
+      hasAttemptedLogin.current = true;
+      handleSimpleWalletLogin();
+    } else if (!connected) {
+      console.log("Wallet disconnected, resetting login state");
       setIsLogin(false);
+      setIsAutoLoggingIn(false);
+      hasAttemptedLogin.current = false; // Reset for next connection
     }
-  }, [connected]);
+  }, [connected, publicKey, isLogin, handleSimpleWalletLogin]);
   
-  console.log(isLogin,'isLogin',connected,'connected');
+  console.log({
+    isLogin,
+    connected,
+    isAutoLoggingIn,
+    hasAttemptedLogin: hasAttemptedLogin.current,
+    publicKey: publicKey?.toBase58()
+  });
+  
+  // Add wallet address to console for debugging
+  if (connected && publicKey) {
+    console.log("Current wallet address:", publicKey.toBase58());
+  }
+  
+  // Make wallet address available globally for debugging
+  if (typeof window !== 'undefined') {
+    (window as any).getCurrentWalletAddress = () => {
+      return connected && publicKey ? publicKey.toBase58() : "No wallet connected";
+    };
+  }
   
   // Derived balances
   const userOGX = Number(user?.apes || 0);
@@ -494,9 +550,30 @@ export default function TopNav() {
             {/* Wallet connection */}
             {!connected ? (
               <div className="space-y-3">
-                <WalletMultiButton />
+                <div className="wallet-button-wrapper">
+                  <WalletMultiButton />
+                  <style jsx>{`
+                     .wallet-button-wrapper :global(.wallet-adapter-button) {
+                       width: 350px !important;
+                       background-color: #4B5563 !important;
+                       color: white !important;
+                       border: 1px solid #6B7280 !important;
+                       border-radius: 8px !important;
+                       padding: 12px 24px !important;
+                       font-weight: 500 !important;
+                       font-family: inherit !important;
+                       transition: all 0.2s !important;
+                       align-items: center !important;
+                       text-align: center !important;
+                       justify-content: center !important;
+                     }
+                    .wallet-button-wrapper :global(.wallet-adapter-button:hover) {
+                      background-color: #374151 !important;
+                    }
+                  `}</style>
+                </div>
                 <p className="text-xs text-gray-400 text-center">
-                  Connect your wallet to access the app
+                  Connect your wallet to automatically create your account
                 </p>
               </div>
             ) : (
@@ -504,9 +581,21 @@ export default function TopNav() {
                 <div className="text-center text-sm text-green-400 mb-2">
                   ✓ Wallet Connected: {publicKey?.toBase58().slice(0, 8)}...
                 </div>
+                {isAutoLoggingIn ? (
+                  <div className="w-full border border-green-600 text-green-400 py-3 px-6 rounded-lg bg-green-900/20 transition-colors duration-200 font-medium relative z-10 text-center">
+                    🔄 Creating your account...
+                  </div>
+                ) : (
                 <div className="w-full border border-green-600 text-green-400 py-3 px-6 rounded-lg bg-green-900/20 transition-colors duration-200 font-medium relative z-10 text-center">
-                  ✓ Successfully Connected!
+                    ✓ Account created successfully!
                 </div>
+                )}
+                <p className="text-xs text-gray-400 text-center">
+                  {isAutoLoggingIn 
+                    ? "Setting up your account in the database..."
+                    : "You're now logged in and ready to use the app"
+                  }
+                </p>
               </div>
             )}
           </div>

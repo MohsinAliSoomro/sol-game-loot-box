@@ -67,8 +67,76 @@ export async function POST(req: Request) {
         email,
         password,
       });
+    
+    // Create user record in database with proper UUID
+    if (sessionData.session?.user) {
+      try {
+        const userData = {
+          id: sessionData.session.user.id, // Use the auth UUID
+          uid: sessionData.session.user.id,
+          email: sessionData.session.user.email,
+          walletAddress: publicKey,
+          provider: 'wallet',
+          apes: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        // Insert or update user record
+        const { error: upsertError } = await supabase
+          .from("user")
+          .upsert(userData, { onConflict: 'id' });
+        
+        if (upsertError) {
+          console.error("Error creating user record:", upsertError);
+        } else {
+          console.log("User record created successfully with UUID:", userData.id);
+        }
+      } catch (dbError) {
+        console.error("Database error:", dbError);
+      }
+    }
+    
     console.log({ sessionData });
     return Response.json({ session: sessionData.session }, { status: 200 });
+  }
+
+  // Also ensure existing wallet users have proper database records
+  if (data.session?.user) {
+    try {
+      // Check if user record exists
+      const { data: existingUser, error: fetchError } = await supabase
+        .from("user")
+        .select()
+        .eq("id", data.session.user.id)
+        .single();
+      
+      // If no user record exists, create one
+      if (fetchError && fetchError.code === "PGRST116") {
+        const userData = {
+          id: data.session.user.id, // Use the auth UUID
+          uid: data.session.user.id,
+          email: data.session.user.email,
+          walletAddress: publicKey,
+          provider: 'wallet',
+          apes: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error: insertError } = await supabase
+          .from("user")
+          .insert(userData);
+        
+        if (insertError) {
+          console.error("Error creating user record for existing user:", insertError);
+        } else {
+          console.log("User record created for existing wallet user:", userData.id);
+        }
+      }
+    } catch (dbError) {
+      console.error("Database error for existing user:", dbError);
+    }
   }
 
   return Response.json({ session: data.session }, { status: 200 });
