@@ -19,6 +19,7 @@ const metaplex = Metaplex.make(connection);
 export const fetchNFTMetadata = async (mintAddress: string) => {
   try {
     console.log("🔍 Fetching NFT metadata for:", mintAddress);
+    console.log("🌐 Using RPC:", process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com");
     
     const mint = new PublicKey(mintAddress);
     const nft = await metaplex.nfts().findByMint({ mintAddress: mint });
@@ -28,9 +29,41 @@ export const fetchNFTMetadata = async (mintAddress: string) => {
       return null;
     }
     
+    console.log("📦 NFT found:", {
+      name: nft.name,
+      symbol: nft.symbol,
+      uri: nft.uri,
+      hasJson: !!nft.json,
+      imageUrl: nft.json?.image
+    });
+    
+    // Convert IPFS URLs to HTTP gateway URLs
+    let imageUrl = nft.json?.image || "/default-nft.png";
+    if (imageUrl && typeof imageUrl === 'string') {
+      console.log("🖼️ Original image URL:", imageUrl);
+      // Handle IPFS URLs (ipfs://... or ipfs/...)
+      if (imageUrl.startsWith('ipfs://')) {
+        // Convert ipfs://Qm... to https://gateway.pinata.cloud/ipfs/Qm...
+        imageUrl = imageUrl.replace('ipfs://', 'https://gateway.pinata.cloud/ipfs/');
+        console.log("🔄 Converted IPFS URL to:", imageUrl);
+      } else if (imageUrl.startsWith('ipfs/')) {
+        // Convert ipfs/Qm... to https://gateway.pinata.cloud/ipfs/Qm...
+        imageUrl = imageUrl.replace('ipfs/', 'https://gateway.pinata.cloud/ipfs/');
+        console.log("🔄 Converted IPFS path to:", imageUrl);
+      } else if (imageUrl.startsWith('Qm') && imageUrl.length === 46 && !imageUrl.includes('/') && !imageUrl.includes('http')) {
+        // If it's just a CID (Qm...), prepend gateway URL
+        imageUrl = `https://gateway.pinata.cloud/ipfs/${imageUrl}`;
+        console.log("🔄 Converted CID to:", imageUrl);
+      }
+      // Keep original if it's already an HTTP/HTTPS URL
+      console.log("✅ Final image URL:", imageUrl);
+    } else {
+      console.warn("⚠️ Image URL is not a string:", imageUrl);
+    }
+    
     const metadata = {
       name: nft.name,
-      image: nft.json?.image || "/default-nft.png",
+      image: imageUrl,
       description: nft.json?.description || "",
       mint: mintAddress,
       symbol: nft.symbol || "NFT",

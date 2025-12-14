@@ -8,11 +8,17 @@ import SidebarCart from "./Components/SidebarCart";
 import PurchaseModal from "./Components/Purchase";
 import WithdrawModal from "./Components/Withdraw";
 import dynamic from "next/dynamic";
+import { ProjectProvider } from "@/lib/project-context";
 // import { SolanaWalletProvider } from "./Components/SolanaWalletProvider";
 // Dynamically import the component
 const SolanaWalletProvider = dynamic(
   () => import("./Components/SolanaWalletProvider"),
   { ssr: false } // disable SSR because wallet providers usually depend on window
+);
+
+const WebsiteTheme = dynamic(
+  () => import("./Components/WebsiteTheme"),
+  { ssr: false } // disable SSR because theme needs browser APIs
 );
 
 // const fontSans = Princess_Sofia({
@@ -42,26 +48,106 @@ export default function RootLayout({
     <html lang="en">
       <head>
       <link rel="icon" href="/favicon.ico" />
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `
+            (function() {
+              try {
+                // Apply theme immediately from cache before React loads to prevent flash
+                const themeKey = 'website-theme-cache';
+                const applyThemeFromCache = function() {
+                  try {
+                    const cachedTheme = localStorage.getItem(themeKey);
+                    if (cachedTheme) {
+                      const theme = JSON.parse(cachedTheme);
+                      const primaryColor = theme.primaryColor || '#FF6B35';
+                      
+                      // Apply to body if it exists
+                      if (document.body) {
+                        document.body.style.backgroundColor = primaryColor;
+                        document.body.style.setProperty('background-color', primaryColor, 'important');
+                      }
+                      
+                      // Apply to html element
+                      const html = document.documentElement;
+                      if (html) {
+                        html.style.backgroundColor = primaryColor;
+                        html.style.setProperty('background-color', primaryColor, 'important');
+                      }
+                      
+                      // Set CSS variables immediately
+                      if (html) {
+                        html.style.setProperty('--theme-primary', primaryColor);
+                        html.style.setProperty('--theme-secondary', theme.secondaryColor || '#004E89');
+                        html.style.setProperty('--theme-background', theme.backgroundColor || '#FFFFFF');
+                        html.style.setProperty('--theme-text', theme.textColor || '#1F2937');
+                      }
+                    }
+                  } catch (e) {
+                    // Silently fail
+                  }
+                };
+                
+                // Apply immediately if DOM is ready
+                if (document.body) {
+                  applyThemeFromCache();
+                }
+                
+                // Wait for DOM ready
+                if (document.addEventListener) {
+                  document.addEventListener('DOMContentLoaded', applyThemeFromCache);
+                  // Also try on load as backup
+                  window.addEventListener('load', applyThemeFromCache);
+                  // Apply immediately when body appears
+                  if (document.readyState === 'loading') {
+                    const checkBody = setInterval(function() {
+                      if (document.body) {
+                        applyThemeFromCache();
+                        clearInterval(checkBody);
+                      }
+                    }, 10);
+                    // Clear after 5 seconds to prevent infinite loop
+                    setTimeout(function() {
+                      clearInterval(checkBody);
+                    }, 5000);
+                  }
+                }
+                
+                // Expose function globally for route changes
+                window.__applyThemeFromCache = applyThemeFromCache;
+              } catch (e) {
+                // Silently fail
+              }
+            })();
+          `,
+        }}
+      />
 
       <body
         className={cn(
-          "min-h-screen bg-orange-500 antialiased",
+          "min-h-screen antialiased",
           myFont.className
         )}
+        style={{
+          backgroundColor: '#FF6B35' // Default fallback
+        }}
       >
         <SolanaWalletProvider>
-          <ThemeProvider
-            attribute="class"
-            // defaultTheme="system"
-            // enableSystem
-            // disableTransitionOnChange
-          >
-            {children}
-            <Footer />
-            <SidebarCart />
-            <PurchaseModal />
-            <WithdrawModal />
-          </ThemeProvider>
+          <ProjectProvider>
+            <ThemeProvider
+              attribute="class"
+              // defaultTheme="system"
+              // enableSystem
+              // disableTransitionOnChange
+            >
+              <WebsiteTheme />
+              {children}
+              <Footer />
+              <SidebarCart />
+              <PurchaseModal />
+              <WithdrawModal />
+            </ThemeProvider>
+          </ProjectProvider>
         </SolanaWalletProvider>
       </body>
       </head>

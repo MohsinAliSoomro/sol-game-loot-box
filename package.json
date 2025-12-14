@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "force-build": "npm install --force && npm run build"
+    "force-build": "npm install --force && npm run build",
+    "postinstall": "node scripts/fix-keystone-deps.js"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",

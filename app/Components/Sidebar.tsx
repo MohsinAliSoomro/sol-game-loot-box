@@ -1,17 +1,24 @@
+"use client";
 import { Gauge, Gift } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useProject } from "@/lib/project-context";
+import { useParams } from "next/navigation";
 
 export default function Sidebar() {
+    const { currentProject } = useProject();
+    const params = useParams();
+    const projectSlug = (params?.projectSlug as string) || currentProject?.slug || "";
+
     let SIDEBAR_DATA = [
         {
             name: "Dashboard",
-            href: "/",
+            href: projectSlug ? `/${projectSlug}` : "/",
             icon: <Gauge />,
         },
         {
             name: "Loot Boxes",
-            href: "/lootboxes",
+            href: projectSlug ? `/${projectSlug}/lootboxes` : "/lootboxes",
             icon: <Gift />,
         },
     ];

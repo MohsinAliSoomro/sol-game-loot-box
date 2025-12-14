@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import img from "../../../../public/bg.jpg"
 import { supabase } from "@/service/supabase";
+import { getWheelSettings, getImageUrl } from "@/service/websiteSettings";
 import Image from "next/image";
 import {
   Connection,
@@ -17,6 +17,25 @@ import JackpotWinAnnouncement from "@/app/Components/JackpotWinAnnouncement";
 // import { WalletContextProvider, useWallet } from "@solana/wallet-adapter-react";
 import deployedIdl from "../../../../deployed_idl.json";
 import Loader from "@/app/Components/Loader";
+
+// Helper function to convert Supabase storage path to full URL
+const getImageUrlFromPath = (path: string | null | undefined): string => {
+  if (!path) return '/default-item.png';
+  
+  // If it's already a full URL, return it
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+  
+  // If it starts with '/', it's a local path
+  if (path.startsWith('/')) {
+    return path;
+  }
+  
+  // Otherwise, it's a Supabase storage path - convert to full URL
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://zkltmkbmzxvfovsgotpt.supabase.co';
+  return `${supabaseUrl}/storage/v1/object/public/apes-bucket/${path}`;
+};
 
 interface WheelItem {
   id: number;
@@ -41,6 +60,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
   const [claimedRewards, setClaimedRewards] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [isReloading, setIsReloading] = useState(false);
+  const [wheelBgImage, setWheelBgImage] = useState<string | null>(null);
   
   // Jackpot state
   const [jackpotWin, setJackpotWin] = useState<any>(null);
@@ -71,25 +91,18 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
   // Load NFT rewards from database (only active ones)
   const getNFTWheelSegments = useCallback(async () => {
     try {
-      console.log("🎨 Loading NFT rewards from database...");
+      console.log(`🎨 Loading NFT rewards from database for lootbox: ${item.id}...`);
       
-      // First, let's see ALL NFT rewards in database (for debugging)
-      const { data: allNFTs } = await supabase
-        .from('nft_reward_percentages')
-        .select('*')
-        .not('mint_address', 'is', null);
-      
-      console.log(`📊 Total NFTs in database: ${allNFTs?.length || 0}`);
-      if (allNFTs && allNFTs.length > 0) {
-        console.log('📋 All NFTs:', allNFTs.map((r: any) => `${r.reward_name} (active: ${r.is_active})`));
-      }
-      
-      // Load all ACTIVE NFT rewards from database
-      const { data: nftRewards, error } = await supabase
+      // Load ACTIVE NFT rewards from database for THIS specific lootbox
+      // Check if product_id column exists in nft_reward_percentages
+      const query = supabase
         .from('nft_reward_percentages')
         .select('*')
         .eq('is_active', true)
         .not('mint_address', 'is', null);
+      
+      // Try to filter by product_id if column exists
+      const { data: nftRewards, error } = await query.eq('product_id', item.id);
 
       if (error) {
         console.warn('⚠️ Could not load NFT rewards from database:', error);
@@ -114,7 +127,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
         isNFT: true,
       }));
 
-      console.log(`✅ Loaded ${nftSegments.length} active NFT rewards from database`);
+      console.log(`✅ Loaded ${nftSegments.length} active NFT rewards from database for lootbox ${item.id}`);
       console.log('🎨 Active NFT rewards:', nftSegments.map(nft => `${nft.name} (${nft.percentage}%) - ${nft.mint?.slice(0, 8)}...`));
       
       return nftSegments;
@@ -122,7 +135,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       console.warn('⚠️ Error loading NFT rewards:', e);
       return [];
     }
-  }, []);
+  }, [item.id]);
 
   // Sync deposited NFTs to database (run once on component mount)
   const syncNFTsToDatabase = useCallback(async () => {
@@ -290,13 +303,14 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
   // Load ALL active rewards from database (replaces original data)
   const loadAllActiveRewards = useCallback(async () => {
     try {
-      console.log("🎯 Loading ALL active rewards from database...");
+      console.log("🎯 Loading rewards from database for lootbox:", item.id);
       
-      // Load all active token rewards
+      // Load token rewards for THIS specific lootbox (filter by product_id)
       const { data: tokenRewards, error: tokenError } = await supabase
         .from('token_reward_percentages')
         .select('*')
         .eq('is_active', true)
+        .eq('product_id', item.id) // Filter by this specific lootbox
         .order('reward_price');
 
       if (tokenError) {
@@ -317,14 +331,14 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
         isNFT: false
       }));
 
-      console.log(`✅ Loaded ${databaseRewards.length} active rewards from database:`, databaseRewards);
+      console.log(`✅ Loaded ${databaseRewards.length} active rewards from database for lootbox ${item.id}:`, databaseRewards);
       return databaseRewards;
       
     } catch (error) {
       console.error("❌ Error loading active rewards:", error);
       return [];
     }
-  }, []);
+  }, [item.id]);
 
   // Load SOL rewards from backend (token_reward_percentages table where reward_name contains "SOL")
   const loadSolRewards = useCallback(async (): Promise<WheelItem[]> => {
@@ -333,6 +347,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
         .from('token_reward_percentages')
         .select('*')
         .eq('is_active', true)
+        .eq('product_id', item.id) // Filter by this specific lootbox
         .like('reward_name', '%SOL%');
 
       if (error) {
@@ -343,7 +358,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       const mapped: WheelItem[] = (solRewards || []).map((r: any, idx: number) => ({
         id: 3000 + (r.id || idx),
         name: r.reward_name || `${r.reward_price} SOL`,
-        image: r.reward_image || 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
+        image: getImageUrlFromPath(r.reward_image) || 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
         color: `hsl(${(idx * 55 + 220) % 360}, 70%, 60%)`,
         textColor: '#ffffff',
         percentage: r.percentage || 0,
@@ -355,13 +370,75 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
         solAmount: Number(r.reward_price || 0),
       }));
 
-      console.log('✅ Loaded SOL rewards from backend:', mapped);
+      console.log(`✅ Loaded SOL rewards from backend for lootbox ${item.id}:`, mapped);
       return mapped;
     } catch (e) {
       console.warn('⚠️ Error loading SOL rewards:', e);
       return [];
     }
-  }, []);
+  }, [item.id]);
+
+  // Load ITEM rewards from backend (token_reward_percentages table - NOT SOL, NOT NFT)
+  const loadItemRewards = useCallback(async (): Promise<WheelItem[]> => {
+    try {
+      // Fetch all non-SOL token rewards for this lootbox
+      const { data: allTokenRewards, error } = await supabase
+        .from('token_reward_percentages')
+        .select('*')
+        .eq('is_active', true)
+        .eq('product_id', item.id) // Filter by this specific lootbox
+        .not('reward_name', 'ilike', '%SOL%');
+
+      if (error) {
+        console.warn('⚠️ Could not load token rewards from backend:', error);
+        return [];
+      }
+
+      // Filter items: exclude NFTs (which have both collection and token_id)
+      const itemRewards = (allTokenRewards || []).filter((r: any) => {
+        const hasCollection = r.collection && r.collection.trim() !== '';
+        const hasTokenId = r.token_id && r.token_id.toString().trim() !== '';
+        // Item: doesn't have both collection AND token_id (not an NFT)
+        return !(hasCollection && hasTokenId);
+      });
+
+      const mapped: WheelItem[] = itemRewards.map((r: any, idx: number) => {
+        // Ensure reward_price is properly extracted and stored
+        const rewardPrice = String(r.reward_price || r.price || '0').trim();
+        const itemValue = parseFloat(rewardPrice) || 0;
+        
+        console.log(`📦 Loading item reward:`, {
+          id: r.id,
+          name: r.reward_name,
+          reward_price: r.reward_price,
+          parsed_itemValue: itemValue
+        });
+        
+        return {
+          id: 4000 + (r.id || idx),
+          name: r.reward_name || 'Item',
+          image: getImageUrlFromPath(r.reward_image) || '/default-item.png',
+          color: `hsl(${(idx * 55 + 120) % 360}, 70%, 60%)`,
+          textColor: '#ffffff',
+          percentage: r.percentage || 0,
+          price: rewardPrice,
+          // @ts-ignore
+          reward_type: 'item',
+          isNFT: false,
+          // @ts-ignore
+          itemValue: rewardPrice, // Store as string for consistency
+          // @ts-ignore
+          itemValueNumber: itemValue, // Also store as number for direct use
+        };
+      });
+
+      console.log(`✅ Loaded ITEM rewards from backend for lootbox ${item.id}:`, mapped);
+      return mapped;
+    } catch (e) {
+      console.warn('⚠️ Error loading ITEM rewards:', e);
+      return [];
+    }
+  }, [item.id]);
 
   // Backend-powered NFT activation
   const manuallyActivateDepositedNFTs = useCallback(async () => {
@@ -410,16 +487,17 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
         await manuallyActivateDepositedNFTs();
         console.log("✅ Manual activation completed");
         
-        // Then load NFT and SOL segments from database
-        const [nftSegments, solSegments] = await Promise.all([
+        // Then load NFT, SOL, and ITEM segments from database
+        const [nftSegments, solSegments, itemSegments] = await Promise.all([
           getNFTWheelSegments(),
           loadSolRewards(),
+          loadItemRewards(),
         ]);
 
-        console.log(`📊 Loaded ${nftSegments.length} NFT rewards and ${solSegments.length} SOL rewards`);
+        console.log(`📊 Loaded ${nftSegments.length} NFT rewards, ${solSegments.length} SOL rewards, and ${itemSegments.length} ITEM rewards`);
 
         // Merge segments (percentages come from database)
-        let merged = [...nftSegments, ...solSegments];
+        let merged = [...nftSegments, ...solSegments, ...itemSegments];
 
         if (merged.length === 0) {
           console.warn("⚠️ No active rewards found in database. Wheel will be empty.");
@@ -435,7 +513,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
           setShuffledData(shuffled);
         }
         
-        console.log(`🎯 Wheel loaded with ${merged.length} total segments (${nftSegments.length} NFT + ${solSegments.length} SOL)`);
+        console.log(`🎯 Wheel loaded with ${merged.length} total segments (${nftSegments.length} NFT + ${solSegments.length} SOL + ${itemSegments.length} ITEM)`);
         console.log("📊 Rewards:", merged.map(r => `${r.name}: ${r.percentage}%`));
         
         setIsLoading(false);
@@ -449,6 +527,23 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
     };
     
     loadWheelData();
+
+    // Load wheel background image
+    const loadWheelBgImage = async () => {
+      try {
+        const wheelSettings = await getWheelSettings();
+        if (wheelSettings?.backgroundImage) {
+          const bgImageUrl = getImageUrl(wheelSettings.backgroundImage);
+          if (bgImageUrl) {
+            setWheelBgImage(bgImageUrl);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading wheel background image:', error);
+      }
+    };
+
+    loadWheelBgImage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncNFTsToDatabase, getNFTWheelSegments, loadSolRewards]); // Load from database
 
@@ -583,6 +678,10 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
         console.log("✅ Successfully inserted SOL reward into prizeWin:", prizeWinResult.data);
         console.log(`🎉 SOL reward added to cart: ${(winnerItem as any).solAmount} SOL`);
         
+        // Automatically open sidebar cart to show the won reward
+        setUser({ ...user, cart: true });
+        console.log("🛒 Sidebar cart opened automatically for SOL reward");
+        
       } else if (winnerItem.isNFT && winnerItem.mint) {
         console.log("🎨 Processing NFT reward:", winnerItem.name);
         
@@ -600,10 +699,31 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
           created_at: new Date().toISOString(),
         });
         
+        // Fetch NFT image from database if not available in winnerItem
+        let nftImage = winnerItem.image;
+        if (!nftImage && winnerItem.mint) {
+          const { data: nftData } = await supabase
+            .from('nft_reward_percentages')
+            .select('reward_image')
+            .eq('mint_address', winnerItem.mint)
+            .single();
+          
+          if (nftData?.reward_image) {
+            nftImage = nftData.reward_image;
+            console.log("📸 Fetched NFT image from database:", nftImage);
+          }
+        }
+
+        console.log("📝 NFT winner data:", {
+          name: winnerItem.name,
+          image: nftImage,
+          mint: winnerItem.mint
+        });
+
         const prizeWinResult = await supabase.from("prizeWin").insert({
           userId: user.id,
           name: winnerItem.name,
-          image: winnerItem.image,
+          image: nftImage || '/default-nft.png', // Use fetched image or fallback
           sol: winnerItem.price, // Keep as string to match varchar type
           isWithdraw: false, // Use correct field name from table
           reward_type: 'nft', // Add reward type
@@ -642,41 +762,79 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
           } else {
             console.log(`✅ NFT marked as won via backend: ${winnerItem.mint}`);
             console.log("🔄 Forcing wheel reload after NFT win...");
+            
+            // Reload wheel data after successful API call
+            setTimeout(async () => {
+              try {
+                console.log("🔄 Reloading wheel data after NFT win...");
+                setIsReloading(true);
+                
+                const nftSegments = await getNFTWheelSegments();
+                const solSegments = await loadSolRewards();
+                const itemSegments = await loadItemRewards();
+                const merged = [...nftSegments, ...solSegments, ...itemSegments];
+                
+                if (merged.length === 0) {
+                  setShuffledData([]);
+                } else {
+                  const totalPct = merged.reduce((s, r:any) => s + (Number(r.percentage) || 0), 0);
+                  const normalized = totalPct <= 0.001
+                    ? merged.map((r) => ({ ...r, percentage: 100 / merged.length }))
+                    : merged;
+                  const shuffled = normalized.sort(() => Math.random() - 0.5);
+                  setShuffledData(shuffled);
+                }
+                
+                console.log(`✅ Wheel reloaded with ${merged.length} segments after NFT win`);
+                setIsReloading(false);
+              } catch (error) {
+                console.error("❌ Error reloading wheel after NFT win:", error);
+                setIsReloading(false);
+              }
+            }, 500); // Wait 500ms after API success
           }
         } catch (error) {
           console.error("❌ Error calling backend API:", error);
+          // Even if API fails, try to reload wheel
+          setTimeout(async () => {
+            try {
+              console.log("🔄 Reloading wheel data after NFT win (API failed, but trying anyway)...");
+              setIsReloading(true);
+              
+              const nftSegments = await getNFTWheelSegments();
+              const solSegments = await loadSolRewards();
+              const merged = [...nftSegments, ...solSegments];
+              
+              if (merged.length === 0) {
+                setShuffledData([]);
+              } else {
+                const totalPct = merged.reduce((s, r:any) => s + (Number(r.percentage) || 0), 0);
+                const normalized = totalPct <= 0.001
+                  ? merged.map((r) => ({ ...r, percentage: 100 / merged.length }))
+                  : merged;
+                const shuffled = normalized.sort(() => Math.random() - 0.5);
+                setShuffledData(shuffled);
+              }
+              
+              console.log(`✅ Wheel reloaded with ${merged.length} segments after NFT win`);
+              setIsReloading(false);
+            } catch (reloadError) {
+              console.error("❌ Error reloading wheel after NFT win:", reloadError);
+              setIsReloading(false);
+            }
+          }, 1000);
         }
         
-        // Force reload wheel data immediately
-        setTimeout(async () => {
-          try {
-            console.log("🔄 Reloading wheel data after NFT win...");
-            setIsReloading(true);
-            
-            const nftSegments = await getNFTWheelSegments();
-            const solSegments = await loadSolRewards();
-            const merged = [...nftSegments, ...solSegments];
-            
-            if (merged.length === 0) {
-              setShuffledData([]);
-            } else {
-              const totalPct = merged.reduce((s, r:any) => s + (Number(r.percentage) || 0), 0);
-              const normalized = totalPct <= 0.001
-                ? merged.map((r) => ({ ...r, percentage: 100 / merged.length }))
-                : merged;
-              const shuffled = normalized.sort(() => Math.random() - 0.5);
-              setShuffledData(shuffled);
-            }
-            
-            console.log(`✅ Wheel reloaded with ${merged.length} segments after NFT win`);
-            setIsReloading(false);
-          } catch (error) {
-            console.error("❌ Error reloading wheel after NFT win:", error);
-            setIsReloading(false);
-          }
-        }, 1000); // Wait 1 second to ensure database update is complete
-        
         console.log(`🎉 NFT reward added to cart: ${winnerItem.name} (Mint: ${winnerItem.mint})`);
+        
+        // Automatically open sidebar cart to show the won reward
+        setUser({ ...user, cart: true });
+        console.log("🛒 Sidebar cart opened automatically for NFT reward");
+        
+      } else if ((winnerItem as any).reward_type === 'item') {
+        // Item rewards are NOT added to cart - they are immediately credited to token balance
+        // This is handled in the spinWheel function after addRewardToCart
+        console.log("🎁 Item reward won - will be credited immediately to token balance (not added to cart)");
         
       } else {
         console.log("💰 Processing token reward:", winnerItem.name);
@@ -692,13 +850,15 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
           
           if (!depositedMints.includes(randomNFT.mint)) {
             console.warn("⚠️ Random NFT not in vault, skipping cart addition:", randomNFT.mint);
-            alert(`⚠️ No NFTs Available!\n\nThere are currently no NFTs deposited in the vault.\n\nPlease deposit NFTs first or try spinning again later.`);
+            // Don't show alert - just log and skip adding to cart
+            // The user still gets their spin result, just no NFT reward
+            console.log("ℹ️ No NFTs available in vault for token reward. User still won the spin.");
             return;
           }
         } catch (error) {
           console.warn("⚠️ Could not verify random NFT in vault:", error);
-          // If we can't verify, don't add to cart to be safe
-          alert(`⚠️ Unable to verify NFT availability!\n\nPlease try spinning again.`);
+          // Don't show alert - just log and skip
+          console.log("ℹ️ Could not verify NFT availability. Skipping NFT reward addition.");
           return;
         }
         
@@ -726,6 +886,10 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
 
         console.log("✅ Successfully inserted into prizeWin:", prizeWinResult.data);
         console.log(`🎉 NFT reward added to cart: ${randomNFT.name} (Mint: ${randomNFT.mint})`);
+        
+        // Automatically open sidebar cart to show the won reward
+        setUser({ ...user, cart: true });
+        console.log("🛒 Sidebar cart opened automatically for token/item reward");
       }
 
     } catch (error) {
@@ -733,7 +897,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       alert(`Error adding reward to cart: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user.id, item.id]); // Only include essential dependencies
+  }, [user.id, item.id, setUser]); // Only include essential dependencies
 
   const getRandomReward = () => {
     const totalProbability = data.reduce((sum: any, item: any) => sum + item.percentage, 0);
@@ -754,10 +918,95 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
     const price = Number(item.price);
 
     try {
-      await supabase.from("user").update({ apes: user.apes - price }).eq("id", user.id);
+      // Get current project ID (for main project, this will be null)
+      const projectId = typeof window !== 'undefined' 
+        ? localStorage.getItem('currentProjectId') 
+        : null;
+      
+      // Check if we're on the main project
+      let isMainProject = false;
+      if (typeof window !== 'undefined') {
+        const pathParts = window.location.pathname.split('/').filter(Boolean);
+        const firstSegment = pathParts[0];
+        isMainProject = !firstSegment || 
+                       firstSegment === 'lootboxes' || 
+                       firstSegment === 'live-draw' || 
+                       firstSegment === 'leaderboard' ||
+                       (!projectId);
+      }
+
+      // Verify user has a valid ID
+      if (!user.id) {
+        console.error("User ID is missing. Cannot update balance.");
+        alert("User session error. Please refresh the page and try again.");
+        return;
+      }
+
+      console.log(`🔄 Updating balance for user ${user.id}, project: ${projectId || 'main'}, isMainProject: ${isMainProject}`);
+
+      // Main project: use legacy user table directly (main website has nothing to do with project_users)
+      // Sub-project: use project_users table
+      let updatedUser: any[] | null = null;
+      let updateError: any = null;
+
+      if (isMainProject) {
+        console.log("🏠 Main project: Deducting spin price from legacy user table");
+        const { data: legacyUser, error: legacyError } = await supabase
+          .from("user")
+        .update({ apes: user.apes - price })
+        .eq("id", user.id)
+          .select();
+        
+        if (!legacyError && legacyUser && legacyUser.length > 0) {
+          updatedUser = legacyUser;
+          updateError = null;
+          console.log("✅ Deducted spin price using legacy user table for main project");
+        } else {
+          updateError = legacyError;
+          console.error("❌ Error deducting spin price from main project user:", legacyError);
+        }
+      } else {
+        // Sub-project: use project_users table
+        console.log(`📦 Sub-project: Deducting spin price from project_users table for project ID ${projectId}`);
+        let updateQuery = supabase
+          .from("project_users")
+          .update({ apes: user.apes - price })
+          .eq("id", user.id)
+          .select();
+        
+        // Filter by project_id for sub-projects
+        if (projectId) {
+          updateQuery = updateQuery.eq("project_id", parseInt(projectId));
+        }
+        
+        const result = await updateQuery;
+        updatedUser = result.data;
+        updateError = result.error;
+        
+        if (!updateError && updatedUser && updatedUser.length > 0) {
+          console.log("✅ Deducted spin price using project_users table for sub-project");
+        } else {
+          console.error("❌ Error deducting spin price from sub-project user:", updateError);
+        }
+      }
+      
+      // If we still have an error or no user found, update local state and continue
+      if (updateError || !updatedUser || updatedUser.length === 0) {
+        console.error("❌ Could not update user balance in database:", updateError || "User not found");
+        console.error("User object:", { id: user.id, apes: user.apes, project_id: user.project_id });
+        // Update local state anyway to prevent blocking the user
       setUser({ ...user, apes: user.apes - price });
+        console.warn("⚠️ Updated local state only. Balance may be out of sync. Please refresh the page.");
+        return;
+      }
+      
+      // Update local state with the new balance from database
+      const newBalance = updatedUser[0].apes;
+      setUser({ ...user, apes: newBalance });
+      console.log(`✅ Deducted ${price} tokens. Old balance: ${user.apes}, New balance: ${newBalance}`);
     } catch (e) {
       console.error("Update error", e);
+      alert("Failed to deduct tokens. Please try again.");
       return;
     }
 
@@ -772,6 +1021,27 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
     setRotation(newRotation);
 
     setTimeout(async () => {
+      // Get current project ID (for main project, this will be null)
+      const projectId = typeof window !== 'undefined' 
+        ? localStorage.getItem('currentProjectId') 
+        : null;
+      
+      // Check if we're on the main project
+      // Main project: no projectSlug in URL (localhost:3000/lootboxes/18)
+      // Sub-project: has projectSlug in URL (localhost:3000/project-slug/lootboxes/18)
+      let isMainProject = false;
+      if (typeof window !== 'undefined') {
+        const pathParts = window.location.pathname.split('/').filter(Boolean);
+        const firstSegment = pathParts[0];
+        // Main project paths: no first segment, or 'lootboxes', 'live-draw', 'leaderboard'
+        // Sub-project paths: first segment is a project slug (not these keywords)
+        isMainProject = !firstSegment || 
+                       firstSegment === 'lootboxes' || 
+                       firstSegment === 'live-draw' || 
+                       firstSegment === 'leaderboard' ||
+                       (!projectId || projectId === 'null' || projectId === '');
+      }
+
       // After spin, determine which segment is under the pointer (-90°)
       const normalizedRotation = ((newRotation % 360) + 360) % 360;
       const pointerAngle = -90;
@@ -784,6 +1054,9 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       console.log("🎯 Winner isNFT:", winnerItem?.isNFT);
       console.log("🎯 Winner mint:", winnerItem?.mint);
       console.log("🎯 Winner reward_type:", (winnerItem as any)?.reward_type);
+      console.log("🎯 Winner itemValue:", (winnerItem as any)?.itemValue);
+      console.log("🎯 Winner price:", winnerItem?.price);
+      console.log("🎯 Full winner item object:", JSON.stringify(winnerItem, null, 2));
       
       setWinner(winnerItem);
       setShowWinnerDialog(true);
@@ -798,10 +1071,102 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
         price: winnerItem.price,
         image: winnerItem.image
       });
+      // Item rewards are NOT added to cart - they are immediately credited to token balance
+      // Only add to cart if it's NOT an item reward
+      if ((winnerItem as any).reward_type !== 'item') {
       await addRewardToCart(winnerItem);
       console.log("✅ addRewardToCart completed");
+      } else {
+        console.log("🎁 Item reward - skipping cart, will credit tokens directly");
+      }
 
-      // Reward payout (OGX tokens automatically added) - only for OGX token rewards, NOT NFTs
+      // Reward payout for ITEM rewards - credit user's offchain token balance immediately (OGX for main project)
+      if ((winnerItem as any).reward_type === 'item') {
+        // Extract item value - try multiple sources in order of preference
+        const itemValueNumber = (winnerItem as any).itemValueNumber; // Direct number if available
+        const itemValueStr = (winnerItem as any).itemValue || winnerItem?.price || '0';
+        const rewardAmount = itemValueNumber || parseFloat(String(itemValueStr)) || 0;
+        
+        console.log(`🎁 Processing ITEM reward:`);
+        console.log(`   - Winner item:`, winnerItem);
+        console.log(`   - itemValue (string):`, (winnerItem as any).itemValue);
+        console.log(`   - itemValueNumber (number):`, (winnerItem as any).itemValueNumber);
+        console.log(`   - price:`, winnerItem?.price);
+        console.log(`   - Final parsed rewardAmount:`, rewardAmount);
+        console.log(`   - Current user balance:`, user.apes);
+        console.log(`   - Spin price:`, price);
+        console.log(`   - Calculation: ${user.apes} - ${price} + ${rewardAmount} = ${user.apes - price + rewardAmount}`);
+        
+        if (rewardAmount <= 0) {
+          console.error(`❌ Invalid reward amount: ${rewardAmount}. Item value not found!`);
+          console.error(`   - Checked itemValue:`, (winnerItem as any).itemValue);
+          console.error(`   - Checked itemValueNumber:`, (winnerItem as any).itemValueNumber);
+          console.error(`   - Checked price:`, winnerItem?.price);
+          return;
+        }
+        
+        try {
+          const newBalance = user.apes - price + rewardAmount;
+          let updatedUser: any[] | null = null;
+          let updateError: any = null;
+
+          // Main project: use legacy user table directly (main website has nothing to do with project_users)
+          if (isMainProject) {
+            console.log("🏠 Main project: Updating balance in legacy user table");
+            const { data: legacyUser, error: legacyError } = await supabase
+              .from("user")
+              .update({ apes: newBalance })
+              .eq("id", user.id)
+              .select();
+            
+            if (!legacyError && legacyUser && legacyUser.length > 0) {
+              updatedUser = legacyUser;
+              updateError = null;
+              console.log("✅ Updated balance using legacy user table for main project");
+            } else {
+              updateError = legacyError;
+              console.error("❌ Error updating main project user balance:", legacyError);
+            }
+          } else {
+            // Sub-project: use project_users table
+            console.log(`📦 Sub-project: Updating balance in project_users table for project ID ${projectId}`);
+            let updateQuery = supabase
+              .from("project_users")
+              .update({ apes: newBalance })
+              .eq("id", user.id)
+              .select();
+            
+            // Filter by project_id for sub-projects
+            if (projectId) {
+              updateQuery = updateQuery.eq("project_id", parseInt(projectId));
+            }
+            
+            const result = await updateQuery;
+            updatedUser = result.data;
+            updateError = result.error;
+            
+            if (!updateError && updatedUser && updatedUser.length > 0) {
+              console.log("✅ Updated balance using project_users table for sub-project");
+            } else {
+              console.error("❌ Error updating sub-project user balance:", updateError);
+            }
+          }
+          
+          if (updateError || !updatedUser || updatedUser.length === 0) {
+            console.error("❌ Could not update user balance for item reward:", updateError || "User not found");
+            console.error("   - Update query details:", { isMainProject, projectId, userId: user.id, newBalance });
+            throw updateError || new Error("User not found");
+          }
+          
+          const updatedBalance = updatedUser[0].apes;
+          setUser({ ...user, apes: updatedBalance });
+          console.log(`✅ Item reward credited: ${rewardAmount} OGX. New balance: ${updatedBalance}`);
+        } catch (e) {
+          console.error("❌ Item reward update failed:", e);
+        }
+      }
+      
+      // Reward payout (OGX tokens automatically added) - only for OGX token rewards, NOT NFTs or ITEMs
       if ((winnerItem as any).reward_type === 'ogx') {
         const rewardAmount = Number(winnerItem?.price);
         try {
@@ -811,26 +1176,50 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
           console.error("Reward update failed", e);
         }
       }
-      // Note: NFT rewards are handled in addRewardToCart() - no OGX tokens should be added for NFTs
+      // Note: NFT and SOL rewards are handled in addRewardToCart() - no tokens should be added for NFTs/SOL
 
       // Jackpot system integration
       try {
         console.log("🎰 Checking for jackpot win...");
         
         // Auto-contribute to jackpots
-        const contribution = await JackpotService.autoContributeFromSpin(user.id, price);
+        // Pass projectId: null for main project, or the project ID for sub-projects
+        const projectIdForJackpot = isMainProject ? null : (projectId ? parseInt(projectId) : null);
+        const contribution = await JackpotService.autoContributeFromSpin(user.id, price, undefined, projectIdForJackpot);
         if (contribution.contributed) {
           console.log(`💰 Contributed to ${contribution.contributions} jackpot pools`);
         }
         
         // Check for jackpot win
-        const jackpotResult = await JackpotService.checkJackpotWin(user.id, price);
+        // Pass projectId: null for main project, or the project ID for sub-projects
+        const jackpotResult = await JackpotService.checkJackpotWin(user.id, price, projectIdForJackpot);
         if (jackpotResult.won && jackpotResult.pool && jackpotResult.winAmount) {
           console.log(`🎉 JACKPOT WIN! ${jackpotResult.winAmount} SOL from ${jackpotResult.pool.name}`);
           
-          // Add jackpot win to user's OGX balance (since vault has no SOL)
-          const ogxEquivalent = jackpotResult.winAmount * 1000; // 1 SOL = 1000 OGX
-          const newBalance = (user.apes || 0) + ogxEquivalent;
+          // Check if prize is an item (not an NFT)
+          // Item: image is a file path (contains '/' or '.') or item_price is set
+          // NFT: image is a mint address (32-44 chars, no '/' or '.')
+          const poolImage = jackpotResult.pool.image;
+          const isNFTMint = poolImage && 
+                           typeof poolImage === 'string' && 
+                           poolImage.length >= 32 && 
+                           poolImage.length <= 44 && 
+                           !poolImage.includes('/') &&
+                           !poolImage.includes('.');
+          const isItemPrize = !isNFTMint && jackpotResult.pool.item_price;
+          
+          let tokenAmount = 0;
+          if (isItemPrize && jackpotResult.pool.item_price) {
+            // Item prize: credit item_price in OGX/tokens
+            tokenAmount = jackpotResult.pool.item_price || 0;
+            console.log(`🎁 Item prize: Crediting ${tokenAmount} OGX/tokens (item_price)`);
+          } else {
+            // NFT or SOL prize: convert SOL to OGX (legacy behavior)
+            tokenAmount = jackpotResult.winAmount * 1000; // 1 SOL = 1000 OGX
+            console.log(`💰 NFT/SOL prize: Crediting ${tokenAmount} OGX (converted from ${jackpotResult.winAmount} SOL)`);
+          }
+          
+          const newBalance = (user.apes || 0) + tokenAmount;
           
           await supabase.from("user").update({ apes: newBalance }).eq("id", user.id);
           setUser({ ...user, apes: newBalance });
@@ -839,7 +1228,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
           setJackpotWin({
             pool: jackpotResult.pool,
             amount: jackpotResult.winAmount,
-            ogxEquivalent: ogxEquivalent
+            ogxEquivalent: tokenAmount
           });
           setShowJackpotWin(true);
           
@@ -920,16 +1309,20 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       <div className="w-full flex flex-col items-center justify-center">
         <div className="relative w-full flex justify-center overflow-hidden md:h-[30vw] h-[40vw]">
           <div className="absolute inset-0 z-0" style={{
-            backgroundImage: `url(${img.src})`,
+            backgroundImage: `url(${wheelBgImage || '/bg.jpg'})`,
             backgroundSize: "cover",
             backgroundPosition: "center"
           }} />
 
           <div className="absolute top-0 left-1/2 transform -translate-x-1/2 z-30">
-            <div className="w-4 md:h-12 h-8 bg-[#f74e14]" style={{
-              clipPath: "polygon(0 100%, 100% 100%, 50% 0)",
-              transform: "rotate(180deg)"
-            }} />
+            <div 
+              className="w-4 md:h-12 h-8" 
+              style={{
+                backgroundColor: 'var(--wheel-pointer, #f74e14)',
+                clipPath: "polygon(0 100%, 100% 100%, 50% 0)",
+                transform: "rotate(180deg)"
+              }} 
+            />
           </div>
 
           <div className="relative left-1/2 md:bottom-[13vw] bottom-[15vw] transform -translate-x-1/2 translate-y-1/2">
@@ -981,7 +1374,12 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
 
                 return (
                   <g key={i}>
-                    <path d={pathData} fill="#ff914d" stroke="#f74e14" strokeWidth="0.5" />
+                    <path 
+                      d={pathData} 
+                      fill="var(--wheel-segment-fill, #ff914d)" 
+                      stroke="var(--wheel-segment-stroke, #f74e14)" 
+                      strokeWidth="0.5" 
+                    />
                     <image
                       href={item.image?.startsWith('http') ? item.image : `/images/${item.image || 'default-reward.png'}`}
                       x={imgX - 6}
@@ -1002,7 +1400,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
                       textAnchor="middle"
                       alignmentBaseline="middle"
                       fontSize="3.5"
-                      fill="#ffffff"
+                      fill="var(--wheel-text, #ffffff)"
                       fontWeight="bold"
                       style={{ 
                         userSelect: 'none', 
@@ -1020,7 +1418,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
                       textAnchor="middle"
                       alignmentBaseline="middle"
                       fontSize="2.5"
-                      fill="#ffffff"
+                      fill="var(--wheel-text, #ffffff)"
                       fontWeight="bold"
                       style={{ 
                         userSelect: 'none', 
@@ -1044,8 +1442,21 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
           className={`mt-10 px-2 py-1 rounded font-bold transition-all duration-200 ${
             isSpinning || isLoading 
               ? 'bg-gray-500 cursor-not-allowed' 
-              : 'bg-[#f74e14] hover:bg-[#e63900]'
+              : ''
           } text-white`}
+          style={{
+            backgroundColor: isSpinning || isLoading ? undefined : 'var(--wheel-button-bg, #f74e14)'
+          }}
+          onMouseEnter={(e) => {
+            if (!isSpinning && !isLoading) {
+              e.currentTarget.style.backgroundColor = 'var(--wheel-button-hover, #e63900)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!isSpinning && !isLoading) {
+              e.currentTarget.style.backgroundColor = 'var(--wheel-button-bg, #f74e14)';
+            }
+          }}
         >
           {isSpinning ? (
             <div className="flex items-center gap-2">
@@ -1062,8 +1473,21 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
           className={`mt-4 px-4 py-2 rounded font-bold transition-all duration-200 ${
             isSpinning || isLoading 
               ? 'text-gray-500 cursor-not-allowed' 
-              : 'text-[#f74e14] hover:text-[#e63900]'
+              : ''
           }`}
+          style={{
+            color: isSpinning || isLoading ? undefined : 'var(--wheel-button-bg, #f74e14)'
+          }}
+          onMouseEnter={(e) => {
+            if (!isSpinning && !isLoading) {
+              e.currentTarget.style.color = 'var(--wheel-button-hover, #e63900)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!isSpinning && !isLoading) {
+              e.currentTarget.style.color = 'var(--wheel-button-bg, #f74e14)';
+            }
+          }}
         >
           {isSpinning ? 'SPINNING...' : 'TRY FOR FREE'}
         </button>
@@ -1072,10 +1496,18 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
 
       {showWinnerDialog && winner && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl p-6 w-[90%] max-w-lg border-2 border-[#f74e14]">
+          <div 
+            className="bg-white rounded-xl p-6 w-[90%] max-w-lg border-2" 
+            style={{ borderColor: 'var(--wheel-button-bg, #f74e14)' }}
+          >
             <div className="text-end text-black cursor-pointer" onClick={resetWheel}>X</div>
             <div className="text-center">
-              <h2 className="text-2xl font-bold mb-4 text-[#f74e14]">Congratulations!</h2>
+              <h2 
+                className="text-2xl font-bold mb-4"
+                style={{ color: 'var(--wheel-button-bg, #f74e14)' }}
+              >
+                Congratulations!
+              </h2>
               <div className="flex items-center justify-center mb-6">
                 <Image
                   src={`${winner.image}`}
@@ -1115,16 +1547,40 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
                 {!isFreeSpin ? (
                   <button
                     onClick={handleSpinAgain}
-                    className="px-6 py-2 border-2 border-[#f74e14] text-[#f74e14] rounded-lg hover:bg-[#f74e14] hover:text-white"
+                    className="px-6 py-2 border-2 rounded-lg transition-colors"
+                    style={{
+                      borderColor: 'var(--wheel-button-bg, #f74e14)',
+                      color: 'var(--wheel-button-bg, #f74e14)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--wheel-button-bg, #f74e14)';
+                      e.currentTarget.style.color = 'white';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '';
+                      e.currentTarget.style.color = 'var(--wheel-button-bg, #f74e14)';
+                    }}
                   >
                     Spin Again
                   </button>
                 ) : (
                 <button
                   onClick={resetWheel}
-                  className="px-6 py-2 border-2 border-[#f74e14] text-[#f74e14] rounded-lg hover:bg-[#f74e14] hover:text-white"
+                  className="px-6 py-2 border-2 rounded-lg transition-colors"
+                  style={{
+                    borderColor: 'var(--wheel-button-bg, #f74e14)',
+                    color: 'var(--wheel-button-bg, #f74e14)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--wheel-button-bg, #f74e14)';
+                    e.currentTarget.style.color = 'white';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '';
+                    e.currentTarget.style.color = 'var(--wheel-button-bg, #f74e14)';
+                  }}
                 >
-                    Close
+                  Close
                 </button>
                 )}
                 <button
@@ -1137,7 +1593,16 @@ Try your luck 👇`
                     const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(message)}&url=${encodeURIComponent(window.location.href)} Stake. Spin. Win. Repeat.`;
                     window.open(url, '_blank', 'width=550,height=420');
                   }}
-                  className="px-4 sm:px-6 py-2 bg-[#f74e14] text-white rounded-lg hover:bg-[#e63900] transition-colors text-sm sm:text-base font-medium"
+                  className="px-4 sm:px-6 py-2 text-white rounded-lg transition-colors text-sm sm:text-base font-medium"
+                  style={{
+                    backgroundColor: 'var(--wheel-button-bg, #f74e14)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--wheel-button-hover, #e63900)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--wheel-button-bg, #f74e14)';
+                  }}
                 >
                   Share on X
                 </button>

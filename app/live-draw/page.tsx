@@ -5,17 +5,19 @@ import { useRouter } from "next/navigation";
 import Model from "../Components/Model";
 import Loader from "../Components/Loader";
 import TopNav from "../Components/TopNav";
-import Image from "next/image";
+import JackpotImage from "../Components/JackpotImage";
 
 const getJackpotPools = async () => {
     try {
-        console.log("🔍 DEBUG: Fetching jackpot pools...");
+        console.log("🔍 DEBUG: Fetching jackpot pools for MAIN PROJECT (project_id IS NULL)...");
         
-        // Load active jackpot pools ordered by current amount (highest first)
+        // Main project: Only show jackpots where project_id IS NULL
+        // This isolates main project jackpots from sub-project jackpots
         const response = await supabase
             .from("jackpot_pools")
             .select("id, name, description, current_amount, ticket_price, max_tickets, end_time, is_active, image")
             .eq("is_active", true)
+            .is("project_id", null) // MAIN PROJECT ONLY: Filter by project_id IS NULL
             .order("current_amount", { ascending: false });
         
         console.log("🔍 DEBUG: Jackpot pools response:", response);
@@ -126,19 +128,14 @@ console.log( data?.data,'img data')
                             {/* Content */}
                             <div className="p-1 flex-1 flex flex-col items-center justify-center relative z-10">
                                 <div className="w-64 h-56 mb-4 relative mt-4">
-                                    <div className="absolute inset-0 rounded-ful bg-gradient-to-r from-[#f74e14]/20 to-[#ff914d]/20  rounded-lg"></div>
-                                    <Image
-                                        src={'public'+'/'+pool.image ? `/${pool.image}` : '/coin.png'}
-                                        alt={pool.name}
+                                    <div className="absolute inset-0 rounded-full rounded-lg"></div>
+                                    <JackpotImage
+                                        image={pool.image}
+                                        name={pool.name}
                                         width={260}
                                         height={230}
-                                        className=""
-                                        onError={(e) => {
-                                            console.log('❌ Jackpot image failed to load:', pool.image ? `/${pool.image}` : '/coin.png');
-                                        }}
-                                        onLoad={() => {
-                                            console.log('✅ Jackpot image loaded successfully:', pool.image ? `/${pool.image}` : '/coin.png');
-                                        }}
+                                        className="w-full h-full object-cover"
+                                        fallbackSrc="/coin.png"
                                     />
                                 </div>
                                 

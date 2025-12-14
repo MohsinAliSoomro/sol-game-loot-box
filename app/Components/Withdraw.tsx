@@ -3,41 +3,173 @@ import { useUserState } from "@/state/useUserState";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { supabase } from "@/service/supabase";
 import { useRequest } from "ahooks";
+import { useParams } from "next/navigation";
 import {
-  Connection,
-  PublicKey,
-  Transaction,
-  SystemProgram,
-  LAMPORTS_PER_SOL,
-  clusterApiUrl,
+    Connection,
+    PublicKey,
+    Transaction,
+    SystemProgram,
+    LAMPORTS_PER_SOL,
+    clusterApiUrl,
 } from "@solana/web3.js";
-import { solanaProgramService, OGX_MINT, SOL_MINT } from "@/lib/solana-program";
+import { solanaProgramService, OGX_MINT, SOL_MINT, USDC_MINT, TOKEN4_MINT } from "@/lib/solana-program";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { CONFIG, convertOGXToSOL, convertSOLToOGX } from "@/lib/config";
+import { CONFIG, convertOGXToSOL, convertSOLToOGX, convertOGXToUSDC } from "@/lib/config";
+import {
+    convertOGXToTokenDynamic,
+    calculateOGXToTokenRate,
+    getAllExchangeRates
+} from "@/lib/price-service";
+import { calculateProjectTokenToTokenRate } from "@/lib/project-price-service";
+import { useProject } from "@/lib/project-context";
 const getWithdrawHistory = async (userId: string) => {
     const response = await supabase.from("withdraw").select("*").eq("userId", userId);
     return response.data;
 };
 export default function WithdrawModal() {
-    // Default to Sell OGX flow
-    const [tab, setTab] = useState("sell");
+    const [tab, setTab] = useState("withdraw");
     const [state, setState] = useUserState();
-    const { publicKey, signTransaction, connected } = useWallet();
+    const { publicKey, signTransaction, sendTransaction, connected } = useWallet();
     const { run, data, loading } = useRequest(getWithdrawHistory);
-    const [form, setForm] = useState({ 
-        // sell flow: user enters ogxToSell (from purchased OGX balance), we pay out SOL
-        ogxToSell: 0,
-        withdrawBalance: 0, 
-        availableBalance: 0, 
+    const { getProjectId, getProjectTokenSymbol } = useProject();
+    const projectTokenSymbol = getProjectTokenSymbol();
+    
+    // Get project slug from URL params (most reliable source for main project detection)
+    const params = useParams();
+    const projectSlugFromUrl = (params?.projectSlug as string | undefined);
+    // Main project: no projectSlug in URL (localhost:3000)
+    // Sub-project: has projectSlug in URL (localhost:3000/project-slug)
+    const isMainProject = !projectSlugFromUrl;
+    const projectId = getProjectId();
+
+    // Available tokens for withdrawal - dynamically loaded from database
+    // Admins can add/edit tokens from the master dashboard
+    const [availableTokens, setAvailableTokens] = useState<Array<{
+        key: string;
+        mint: PublicKey;
+        name: string;
+        symbol: string;
+        decimals: number;
+        exchangeRate: number;
+        coingeckoId?: string | null;
+    }>>([]);
+
+    // Load tokens from database on mount
+    // Main project: uses legacy tokenService (tokens table or CONFIG)
+    // Sub-projects: uses projectTokenService (project_tokens table - on-chain tokens only)
+    useEffect(() => {
+        const loadTokens = async () => {
+            // Main project: no projectId or no projectSlug
+            if (isMainProject || !projectId) {
+                console.log("🏠 Main project: Loading tokens from legacy tokenService");
+                try {
+                    const { getAvailableTokens } = await import("@/service/tokenService");
+                    const tokens = await getAvailableTokens();
+                    setAvailableTokens(tokens);
+                } catch (error) {
+                    console.error("Error loading tokens:", error);
+                    // Fallback to config tokens
+                    const fallbackTokens = CONFIG.AVAILABLE_TOKENS.map((tokenKey: string) => {
+                        const tokenInfo = CONFIG.TOKEN_INFO[tokenKey as keyof typeof CONFIG.TOKEN_INFO];
+                        const tokenMint = CONFIG.TOKENS[tokenKey as keyof typeof CONFIG.TOKENS];
+                        return {
+                            key: tokenKey,
+                            mint: new PublicKey(tokenMint),
+                            ...tokenInfo,
+                        };
+                    });
+                    setAvailableTokens(fallbackTokens);
+                }
+            } else {
+                // Sub-project: use project-specific on-chain tokens (same as deposit)
+                console.log(`📦 Sub-project: Loading on-chain tokens for project ID ${projectId}`);
+                try {
+                    const { getProjectAvailableTokens } = await import("@/service/projectTokenService");
+                    const tokens = await getProjectAvailableTokens(projectId);
+
+                    if (tokens && tokens.length > 0) {
+                        console.log(`✅ Loaded ${tokens.length} on-chain tokens for withdrawal (SOL + project tokens)`);
+                        setAvailableTokens(tokens);
+                        // Always default to SOL (first token)
+                        setSelectedToken("SOL");
+                    } else {
+                        // Fallback: at least SOL should be available
+                        console.warn("⚠️ No tokens loaded, using SOL fallback");
+                        setAvailableTokens([{
+                            key: "SOL",
+                            name: "Solana",
+                            symbol: "SOL",
+                            decimals: 9,
+                            exchangeRate: 1000,
+                            coingeckoId: "solana",
+                            mint: new PublicKey("So11111111111111111111111111111111111111112"),
+                        }]);
+                        setSelectedToken("SOL");
+                    }
+                } catch (error) {
+                    console.error("Error loading project tokens:", error);
+                    // Fallback to SOL only
+                    setAvailableTokens([{
+                        key: "SOL",
+                        name: "Solana",
+                        symbol: "SOL",
+                        decimals: 9,
+                        exchangeRate: 1000,
+                        coingeckoId: "solana",
+                        mint: new PublicKey("So11111111111111111111111111111111111111112"),
+                    }]);
+                    setSelectedToken("SOL");
+                }
+            }
+        };
+        loadTokens();
+    }, [projectId, isMainProject]);
+
+    const [selectedToken, setSelectedToken] = useState<string>("SOL");
+    const [ogxAmount, setOgxAmount] = useState<number>(0.01);
+    const [tokenBalance, setTokenBalance] = useState<number>(0);
+
+    // Dynamic exchange rates state
+    const [exchangeRates, setExchangeRates] = useState<{
+        SOL_TO_OGX: number;
+        USDC_TO_OGX: number;
+        TOKEN4_TO_OGX: number;
+        [key: string]: number;
+    }>({
+        SOL_TO_OGX: CONFIG.EXCHANGE_RATES.SOL_TO_OGX,
+        USDC_TO_OGX: CONFIG.EXCHANGE_RATES.USDC_TO_OGX,
+        TOKEN4_TO_OGX: CONFIG.EXCHANGE_RATES.TOKEN4_TO_OGX,
+    });
+
+    const [currentRate, setCurrentRate] = useState<number>(
+        CONFIG.EXCHANGE_RATES.OGX_TO_SOL
+    );
+    const [isLoadingRates, setIsLoadingRates] = useState(false);
+
+    const [form, setForm] = useState({
+        withdrawBalance: 0,
+        availableBalance: 0,
         walletAddress: "",
         solAmount: 0,
-        solBalance: 0
+        solBalance: 0,
+        usdcAmount: 0,
+        usdcBalance: 0
     });
     const [isProcessing, setIsProcessing] = useState(false);
-    
+
+    // Get selected token info
+    const selectedTokenInfo = useMemo(() => {
+        return availableTokens.find(t => t.key === selectedToken) || availableTokens[0];
+    }, [selectedToken]);
+
+    // Get selected token mint
+    const selectedTokenMint = useMemo(() => {
+        return selectedTokenInfo?.mint || SOL_MINT;
+    }, [selectedTokenInfo]);
+
     const fetchSolBalance = useCallback(async () => {
         if (!publicKey) return;
-        
+
         try {
             const balance = await solanaProgramService.getSOLBalance(publicKey);
             setForm(prev => ({ ...prev, solBalance: balance }));
@@ -46,6 +178,114 @@ export default function WithdrawModal() {
             console.error("Error fetching SOL balance:", error);
         }
     }, [publicKey]);
+
+    const fetchOGXBalance = useCallback(async () => {
+        if (!publicKey) return;
+
+        try {
+            const balance = await solanaProgramService.getOGXBalance(publicKey);
+            // Note: We don't update form here since OGX balance is tracked in vault, not wallet
+            // For withdrawals, we need to check the vault balance, not wallet balance
+            console.log(`Current OGX wallet balance: ${balance}`);
+        } catch (error) {
+            console.error("Error fetching OGX balance:", error);
+        }
+    }, [publicKey]);
+
+    const fetchUSDCBalance = useCallback(async () => {
+        if (!publicKey) return;
+
+        try {
+            const balance = await solanaProgramService.getUSDCBalance(publicKey);
+            setForm(prev => ({ ...prev, usdcBalance: balance }));
+            console.log(`Current USDC balance: ${balance}`);
+        } catch (error) {
+            console.error("Error fetching USDC balance:", error);
+        }
+    }, [publicKey]);
+
+    // Fetch balance for selected token
+    const fetchTokenBalance = useCallback(async () => {
+        if (!publicKey || !selectedTokenMint) return;
+
+        try {
+            let balance = 0;
+            if (selectedToken === "SOL") {
+                balance = await solanaProgramService.getSOLBalance(publicKey);
+            } else {
+                balance = await solanaProgramService.getTokenBalance(publicKey, selectedTokenMint);
+            }
+            setTokenBalance(balance);
+            console.log(`Current ${selectedTokenInfo?.symbol} balance: ${balance}`);
+        } catch (error) {
+            console.error(`Error fetching ${selectedTokenInfo?.symbol} balance:`, error);
+            setTokenBalance(0);
+        }
+    }, [publicKey, selectedToken, selectedTokenMint, selectedTokenInfo]);
+
+    // Fetch dynamic exchange rates on component mount and when token changes
+    useEffect(() => {
+        const fetchExchangeRates = async () => {
+            setIsLoadingRates(true);
+            try {
+                // Initialize price service with project tokens if sub-project
+                if (projectId && !isMainProject) {
+                    const { initializePriceService } = await import("@/lib/price-service");
+                    await initializePriceService(CONFIG, projectId);
+                }
+
+                const rates = await getAllExchangeRates(CONFIG.BASE_EXCHANGE_RATE.SOL_TO_OGX);
+                setExchangeRates({
+                    SOL_TO_OGX: rates.SOL_TO_OGX,
+                    USDC_TO_OGX: rates.USDC_TO_OGX,
+                    TOKEN4_TO_OGX: rates.TOKEN4_TO_OGX,
+                });
+
+                // Calculate rate: Project Token to On-Chain Token (reverse of deposit)
+                let tokenRate: number;
+                if (isMainProject || !projectId) {
+                    // Main project: use OGX to Token rate
+                    tokenRate = await calculateOGXToTokenRate(selectedToken, CONFIG.BASE_EXCHANGE_RATE.SOL_TO_OGX);
+                    console.log(`📊 Current OGX to ${selectedToken} rate: 1 OGX = ${tokenRate.toFixed(4)} ${selectedToken}`);
+                } else {
+                    // Sub-project: use Project Token to Token rate
+                    tokenRate = await calculateProjectTokenToTokenRate(
+                        selectedToken,
+                        projectTokenSymbol,
+                        CONFIG.BASE_EXCHANGE_RATE.SOL_TO_OGX
+                    );
+                    console.log(`📊 Current ${projectTokenSymbol} to ${selectedToken} rate: 1 ${projectTokenSymbol} = ${tokenRate.toFixed(4)} ${selectedToken}`);
+                }
+                setCurrentRate(tokenRate);
+
+                console.log(`✅ Updated exchange rates:`, rates);
+            } catch (error) {
+                console.error("Error fetching exchange rates:", error);
+                // Use fallback rates from config
+                const fallbackRates: { [key: string]: number } = {
+                    SOL: CONFIG.EXCHANGE_RATES.OGX_TO_SOL,
+                    USDC: CONFIG.EXCHANGE_RATES.OGX_TO_USDC,
+                    TOKEN4: CONFIG.EXCHANGE_RATES.OGX_TO_TOKEN4,
+                };
+                setCurrentRate(fallbackRates[selectedToken] || CONFIG.EXCHANGE_RATES.OGX_TO_SOL);
+            } finally {
+                setIsLoadingRates(false);
+            }
+        };
+
+        if (connected && selectedToken) {
+            fetchExchangeRates();
+
+            // Refresh rates every 5 minutes
+            const interval = setInterval(fetchExchangeRates, 5 * 60 * 1000);
+            return () => clearInterval(interval);
+        }
+    }, [selectedToken, connected, projectId, isMainProject, projectTokenSymbol]);
+
+    // Calculate token equivalent for OGX withdrawal using dynamic rates
+    const tokenEquivalent = useMemo(() => {
+        return ogxAmount * currentRate;
+    }, [ogxAmount, selectedToken, currentRate]);
 
     const connectWallet = async () => {
         //@ts-ignore
@@ -61,27 +301,236 @@ export default function WithdrawModal() {
         return convertOGXToSOL(form.withdrawBalance);
     }, [form.withdrawBalance]);
 
-    // Sell flow: payout SOL calculated from OGX amount the user wants to sell
-    const solPayoutForSell = useMemo(() => {
-        return convertOGXToSOL(form.ogxToSell || 0);
-    }, [form.ogxToSell]);
-
     // Calculate OGX equivalent for SOL withdrawal
     const ogxExchange = useMemo(() => {
         return convertSOLToOGX(form.solAmount);
     }, [form.solAmount]);
 
+    // Calculate OGX equivalent for USDC withdrawal
+    const ogxExchangeForUSDC = useMemo(() => {
+        return convertSOLToOGX(form.usdcAmount); // Using same rate as SOL for now
+    }, [form.usdcAmount]);
+
+    // Calculate USDC equivalent for OGX withdrawal
+    const usdcExchange = useMemo(() => {
+        return convertOGXToUSDC(form.withdrawBalance);
+    }, [form.withdrawBalance]);
+
     useEffect(() => {
         fetchSolBalance();
+        fetchOGXBalance();
+        fetchUSDCBalance();
+        fetchTokenBalance();
         if (publicKey) {
             run(publicKey.toString());
         }
-    }, [publicKey, run, fetchSolBalance]);
+    }, [publicKey, run, fetchSolBalance, fetchOGXBalance, fetchUSDCBalance, fetchTokenBalance, selectedToken]);
 
-    const updaetUserApes = async (walletAddress: string) => {
-        const minus = state.apes - form.withdrawBalance;
-        await supabase.from("user").update({ apes: minus }).eq("walletAddress", walletAddress);
-        setState({ ...state, apes: minus });
+    // Unified withdrawal function that works with any selected token
+    const makeTokenWithdrawTransaction = async () => {
+        if (!publicKey || !signTransaction) {
+            return alert("Please connect your wallet first");
+        }
+
+        // Check for user authentication - use both state.id and state.uid
+        const userId = state.id || state.uid;
+        if (!userId) {
+            console.error("User state:", state);
+            return alert("User not authenticated. Please refresh the page and try again.");
+        }
+
+        if (!ogxAmount || ogxAmount <= 0) {
+            const tokenLabel = isMainProject ? "OGX" : projectTokenSymbol;
+            return alert(`Please enter a valid ${tokenLabel} withdrawal amount`);
+        }
+
+        // Check if user has enough balance
+        const tokenLabel = isMainProject ? "OGX" : projectTokenSymbol;
+        if (state.apes < ogxAmount) {
+            return alert(`Insufficient ${tokenLabel} balance. You have ${state.apes.toFixed(4)} ${tokenLabel} but need ${ogxAmount.toFixed(4)} ${tokenLabel}.`);
+        }
+
+        if (isProcessing) {
+            return alert("Transaction already in progress. Please wait.");
+        }
+
+        setIsProcessing(true);
+
+        try {
+            // Main project detection: Check URL params (most reliable)
+            // Main project: no projectSlug in URL (localhost:3000)
+            // Sub-project: has projectSlug in URL (localhost:3000/project-slug)
+            const projectSlug = projectSlugFromUrl;
+            const isMainProjectCheck = !projectSlug;
+            
+            // Also check localStorage as fallback (but URL is primary)
+            const projectId = typeof window !== 'undefined'
+                ? localStorage.getItem('currentProjectId')
+                : null;
+
+            // Final check: main project if no slug in URL OR no projectId in localStorage
+            const isMainProject = isMainProjectCheck || !projectId || projectId === 'null' || projectId === '';
+
+            let signature: string;
+            const tokenAmount = tokenEquivalent;
+
+            // Route to appropriate withdrawal function based on token
+            if (selectedToken === "SOL") {
+                // For SOL, withdrawSOL expects SOL amount and handles OGX conversion internally
+                // But we need to verify the platform has enough SOL
+                const platformBalance = await solanaProgramService.getPlatformWalletBalance();
+                if (platformBalance < tokenAmount + 0.01) {
+                    alert(`Platform wallet has insufficient SOL. Available: ${platformBalance.toFixed(4)} SOL, Required: ${(tokenAmount + 0.01).toFixed(4)} SOL`);
+                    setIsProcessing(false);
+                    return;
+                }
+
+                // Withdraw SOL - the program will handle OGX burning
+                // Main project: use main website admin wallet (pass undefined)
+                // Sub-project: use project-specific admin wallet (pass projectId)
+                signature = await solanaProgramService.withdrawSOL(
+                    publicKey,
+                    tokenAmount, // SOL amount to withdraw
+                    { publicKey, signTransaction },
+                    isMainProject ? undefined : (projectId ? parseInt(projectId) : undefined)
+                );
+            } else {
+                // Use generic withdraw function for all SPL tokens (USDC, TOKEN4, and any new tokens)
+                // This works for any token mint address
+                const exchangeRate = currentRate; // OGX to token rate
+                // Pass database OGX balance for balance sync (if user deposited USDC/TOKEN4)
+                // Main project: use main website admin wallet (pass undefined)
+                // Sub-project: use project-specific admin wallet (pass projectId)
+                signature = await solanaProgramService.withdrawToken(
+                    publicKey,
+                    selectedTokenMint,
+                    ogxAmount, // OGX amount to burn
+                    { publicKey, signTransaction },
+                    exchangeRate, // Exchange rate (OGX to token)
+                    state.apes, // Database OGX balance (for sync if needed)
+                    isMainProject ? undefined : (projectId ? parseInt(projectId) : undefined)
+                );
+            }
+
+            // Update database
+            // Use userId which was determined at the start of the function
+            console.log(`${selectedToken} Withdrawal - User state:`, {
+                userId: userId,
+                walletAddress: publicKey.toString(),
+                ogx: ogxAmount,
+                token: selectedToken,
+                tokenAmount: tokenAmount
+            });
+            
+            console.log(`🔍 Withdrawal context check:`, {
+                projectSlugFromUrl: projectSlug,
+                projectId: projectId,
+                isMainProject: isMainProject,
+                userId: userId,
+                walletAddress: publicKey.toString()
+            });
+
+            // Main project: use legacy user table (no project_user_id, project_id is null)
+            // Sub-project: use project_users table (project_user_id required, project_id set)
+            const withdrawData: any = {
+                ogx: ogxAmount,
+                status: "COMPLETED",
+                walletAddress: publicKey.toString(),
+            };
+
+            if (isMainProject) {
+                console.log("🏠 Main project: Processing withdrawal using legacy user table");
+                console.log("   - Using userId field (from legacy user table)");
+                console.log("   - NOT using project_user_id (main project has nothing to do with project_users)");
+                // Main project: use userId (from legacy user table), no project_user_id, project_id is null
+                withdrawData.userId = userId; // Use userId field for legacy user table
+                withdrawData.project_id = null;
+                // Explicitly do NOT set project_user_id for main project
+                // Main website has nothing to do with project_users
+                // Remove it multiple times to be absolutely sure
+                delete withdrawData.project_user_id;
+                if ('project_user_id' in withdrawData) {
+                    delete withdrawData.project_user_id;
+                }
+            } else {
+                console.log(`📦 Sub-project: Processing withdrawal for project ID ${projectId}`);
+                console.log("   - Using project_user_id field (from project_users table)");
+                // Sub-project: use project_user_id and project_id
+                withdrawData.project_user_id = userId; // UUID from project_users table
+                withdrawData.project_id = parseInt(projectId);
+                // Don't use userId field for sub-projects
+                delete withdrawData.userId;
+            }
+            
+            // Final safety check: ensure project_user_id is NOT in withdrawData for main project
+            if (isMainProject && 'project_user_id' in withdrawData) {
+                console.error("❌ CRITICAL: project_user_id found in withdrawData for main project! Removing it...");
+                delete withdrawData.project_user_id;
+            }
+            
+            console.log(`📝 Final withdrawData (keys only):`, Object.keys(withdrawData));
+            console.log(`📝 Final withdrawData:`, JSON.stringify(withdrawData, null, 2));
+
+            const { error: withdrawError } = await supabase.from("withdraw").insert(withdrawData);
+
+            if (withdrawError) {
+                console.error(`Error saving ${selectedToken} withdrawal:`, withdrawError);
+                throw withdrawError;
+            }
+
+            // Update user balance (OGX deducted)
+            const minus = state.apes - ogxAmount;
+            
+            if (isMainProject) {
+                // Main project: update legacy user table
+                console.log("🏠 Main project: Updating balance in legacy user table");
+                const { error: userError } = await supabase
+                    .from("user")
+                    .update({ apes: minus })
+                    .eq("id", userId); // userId is the UUID from user table
+
+                if (userError) {
+                    console.error("Error updating main project user balance:", userError);
+                    throw userError;
+                }
+            } else {
+                // Sub-project: update project_users table
+                console.log(`📦 Sub-project: Updating balance in project_users table`);
+                const { error: userError } = await supabase
+                    .from("project_users")
+                    .update({ apes: minus })
+                    .eq("id", userId); // userId is the UUID from project_users
+
+                if (userError) {
+                    console.error("Error updating project user balance:", userError);
+                    throw userError;
+                }
+            }
+
+            setState({ ...state, apes: minus });
+
+            const tokenLabel = isMainProject ? "OGX" : projectTokenSymbol;
+            alert(`${selectedToken} withdrawal successful! ${ogxAmount.toFixed(4)} ${tokenLabel} burned, ${tokenAmount.toFixed(4)} ${selectedTokenInfo?.symbol} sent to your wallet. Transaction: ${signature}`);
+
+            // Refresh balances
+            await fetchTokenBalance();
+            await fetchOGXBalance();
+            run(userId);
+
+        } catch (error) {
+            console.error(`Error making ${selectedToken} withdrawal transaction:`, error);
+            if (error instanceof Error && error.message.includes("already been processed")) {
+                alert("This transaction has already been processed. Please check your wallet or try again with a different amount.");
+            } else if (error instanceof Error && error.message.includes("already in progress")) {
+                alert("Transaction already in progress. Please wait for it to complete.");
+            } else if (error instanceof Error && error.message.includes("Insufficient")) {
+                alert(error.message);
+            } else {
+                alert(`Error making ${selectedToken} withdrawal: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
+        } finally {
+            setIsProcessing(false);
+        }
     };
 
     const makeOGXWithdrawTransaction = async () => {
@@ -89,13 +538,15 @@ export default function WithdrawModal() {
             return alert("Please connect your wallet first");
         }
 
-        if (!state.id) {
+        // Check for user authentication - use both state.id and state.uid
+        const userId = state.id || state.uid;
+        if (!userId) {
+            console.error("User state:", state);
             return alert("User not authenticated. Please refresh the page and try again.");
         }
 
-        if (!form.withdrawBalance) return alert("Please enter withdrawal amount");
-        if (state.apes < form.withdrawBalance) {
-            return alert("Insufficient OGX");
+        if (!form.withdrawBalance || form.withdrawBalance <= 0) {
+            return alert("Please enter a valid OGX withdrawal amount");
         }
 
         if (isProcessing) {
@@ -113,38 +564,100 @@ export default function WithdrawModal() {
             );
 
             // Update database
-            console.log("OGX Withdrawal - User state:", { 
-                userId: state.id, 
+            console.log("OGX Withdrawal - User state:", {
+                userId: userId,
                 walletAddress: publicKey.toString(),
-                ogx: form.withdrawBalance 
+                ogx: form.withdrawBalance
             });
+
+            // Main project detection: Check URL params (most reliable)
+            const projectSlug = projectSlugFromUrl;
+            const isMainProjectCheck = !projectSlug;
             
-            const { error: withdrawError } = await supabase.from("withdraw").insert({
+            // Also check localStorage as fallback
+            const projectId = typeof window !== 'undefined'
+                ? localStorage.getItem('currentProjectId')
+                : null;
+            
+            // Final check: main project if no slug in URL OR no projectId in localStorage
+            const isMainProject = isMainProjectCheck || !projectId || projectId === 'null' || projectId === '';
+
+            const withdrawData: any = {
                 ogx: form.withdrawBalance,
                 status: "COMPLETED",
                 walletAddress: publicKey.toString(),
-                userId: state.id,
-            });
+            };
+
+            // Main project: use userId (from legacy user table), no project_user_id, project_id is null
+            // Sub-project: use project_user_id, no userId, set project_id
+            if (isMainProject) {
+                console.log("🏠 Main project: Processing OGX withdrawal");
+                withdrawData.userId = userId; // Use userId field for legacy user table
+                withdrawData.project_id = null;
+                // Explicitly do NOT set project_user_id for main project
+                delete withdrawData.project_user_id;
+            } else {
+                console.log(`📦 Sub-project: Processing OGX withdrawal for project ID ${projectId}`);
+                withdrawData.project_user_id = userId; // UUID from project_users table
+                withdrawData.project_id = parseInt(projectId);
+                // Don't use userId field for sub-projects
+                delete withdrawData.userId;
+            }
+
+            const { error: withdrawError } = await supabase.from("withdraw").insert(withdrawData);
 
             if (withdrawError) {
                 console.error("Error saving OGX withdrawal:", withdrawError);
                 throw withdrawError;
             }
 
-            // Update user balance
-            await updaetUserApes(publicKey.toString());
-            alert(`Withdrawal successful! Transaction: ${signature}`);
+            // Update user balance (OGX deducted)
+            const minus = state.apes - form.withdrawBalance;
             
+            if (isMainProject) {
+                // Main project: update legacy user table
+                console.log("🏠 Main project: Updating balance in legacy user table");
+                const updateField = state.id ? "id" : "uid";
+                const { error: userError } = await supabase.from("user").update({ apes: minus }).eq(updateField, userId);
+                
+                if (userError) {
+                    console.error("Error updating main project user balance:", userError);
+                    throw userError;
+                }
+            } else {
+                // Sub-project: update project_users table
+                console.log(`📦 Sub-project: Updating balance in project_users table`);
+                const { error: userError } = await supabase
+                    .from("project_users")
+                    .update({ apes: minus })
+                    .eq("id", userId);
+                
+                if (userError) {
+                    console.error("Error updating project user balance:", userError);
+                    throw userError;
+                }
+            }
+
+            setState({ ...state, apes: minus });
+
+            alert(`OGX withdrawal successful! ${form.withdrawBalance} OGX burned, ${solExchange.toFixed(4)} SOL sent to your wallet. Transaction: ${signature}`);
+
+            // Refresh balances
+            await fetchOGXBalance();
+            run(userId);
+
         } catch (error) {
-            console.error("Error making withdrawal transaction:", error);
+            console.error("Error making OGX withdrawal transaction:", error);
             if (error instanceof Error && error.message === "TRANSACTION_ALREADY_PROCESSED") {
                 alert("server error try again in few seconds");
             } else if (error instanceof Error && error.message.includes("already been processed")) {
                 alert("server error try again in few seconds");
             } else if (error instanceof Error && error.message.includes("already in progress")) {
                 alert("Transaction already in progress. Please wait for it to complete.");
+            } else if (error instanceof Error && error.message.includes("Insufficient")) {
+                alert(error.message);
             } else {
-                alert(`Error making withdrawal: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                alert(`Error making OGX withdrawal: ${error instanceof Error ? error.message : 'Unknown error'}`);
             }
         } finally {
             setIsProcessing(false);
@@ -156,7 +669,10 @@ export default function WithdrawModal() {
             return alert("Please connect your wallet first");
         }
 
-        if (!state.id) {
+        // Check for user authentication - use both state.id and state.uid
+        const userId = state.id || state.uid;
+        if (!userId) {
+            console.error("User state:", state);
             return alert("User not authenticated. Please refresh the page and try again.");
         }
 
@@ -172,6 +688,18 @@ export default function WithdrawModal() {
         setIsProcessing(true);
 
         try {
+            // Main project detection: Check URL params (most reliable)
+            const projectSlug = projectSlugFromUrl;
+            const isMainProjectCheck = !projectSlug;
+            
+            // Also check localStorage as fallback
+            const projectId = typeof window !== 'undefined'
+                ? localStorage.getItem('currentProjectId')
+                : null;
+
+            // Final check: main project if no slug in URL OR no projectId in localStorage
+            const isMainProject = isMainProjectCheck || !projectId || projectId === 'null' || projectId === '';
+
             // Verify that the connected wallet matches the user's deposit wallet
             if (!publicKey) {
                 alert("Please connect your wallet first");
@@ -187,47 +715,85 @@ export default function WithdrawModal() {
 
             // Withdraw SOL directly from the program's vault
             // This ensures SOL goes back to the same wallet that made the deposit
+            // Main project: use main website admin wallet (pass undefined)
+            // Sub-project: use project-specific admin wallet (pass projectId)
             const signature = await solanaProgramService.withdrawSOL(
                 publicKey, // This is the wallet address that made the deposit
                 form.solAmount,
-                { publicKey, signTransaction }
+                { publicKey, signTransaction },
+                isMainProject ? undefined : (projectId ? parseInt(projectId) : undefined)
             );
 
             // Update database with completed withdrawal
             console.log("SOL Withdrawal - User state:", {
-                userId: state.id,
+                userId: userId,
                 walletAddress: publicKey.toString(),
                 ogx: ogxExchange,
                 status: "COMPLETED"
             });
-            
-            const { error: withdrawError } = await supabase.from("withdraw").insert({
+
+            const withdrawData: any = {
                 ogx: ogxExchange,
                 status: "COMPLETED", // Direct withdrawal from vault
                 walletAddress: publicKey.toString(),
-                userId: state.id, // Use state.id instead of publicKey.toString()
-            });
+                userId: userId,
+            };
+
+            // Main project: project_id is null
+            // Sub-project: set project_id
+            if (isMainProject) {
+                console.log("🏠 Main project: Processing withdrawal");
+                withdrawData.project_id = null;
+            } else {
+                console.log(`📦 Sub-project: Processing withdrawal for project ID ${projectId}`);
+                withdrawData.project_id = parseInt(projectId);
+            }
+
+            const { error: withdrawError } = await supabase.from("withdraw").insert(withdrawData);
 
             if (withdrawError) {
                 console.error("Error saving withdrawal:", withdrawError);
                 throw withdrawError;
             }
-            
+
             console.log("Withdrawal saved successfully to database");
 
             // Update user balance immediately (OGX deducted)
             const minus = state.apes - ogxExchange;
-            const { error: userError } = await supabase.from("user").update({ apes: minus }).eq("id", state.id);
             
-            if (userError) {
-                console.error("Error updating user balance:", userError);
-                throw userError;
+            if (isMainProject) {
+                // Main project: update legacy user table
+                console.log("🏠 Main project: Updating balance in legacy user table");
+                const updateField = state.id ? "id" : "uid";
+                const { error: userError } = await supabase.from("user").update({ apes: minus }).eq(updateField, userId);
+                
+                if (userError) {
+                    console.error("Error updating main project user balance:", userError);
+                    throw userError;
+                }
+            } else {
+                // Sub-project: update project_users table
+                console.log(`📦 Sub-project: Updating balance in project_users table`);
+                const { error: userError } = await supabase
+                    .from("project_users")
+                    .update({ apes: minus })
+                    .eq("id", userId);
+                
+                if (userError) {
+                    console.error("Error updating project user balance:", userError);
+                    throw userError;
+                }
             }
-            
+
             setState({ ...state, apes: minus });
 
             alert(`SOL withdrawal completed! Transaction: ${signature}\n\n✅ SOL sent to: ${publicKey.toString()}\n\nYour SOL has been withdrawn from the vault and sent to your wallet.`);
-            
+
+            // Refresh balances
+            await fetchSolBalance();
+            await fetchOGXBalance();
+            run(userId);
+
         } catch (error) {
             console.error("Error making SOL withdrawal transaction:", error);
             if (error instanceof Error && error.message.includes("already been processed")) {
@@ -246,69 +812,141 @@ export default function WithdrawModal() {
         }
     };
 
-    // SELL: convert OGX (from purchased balance) to SOL payout
-    const handleSellOGX = async () => {
+    const makeUSDCWithdrawTransaction = async () => {
         if (!publicKey || !signTransaction) {
             return alert("Please connect your wallet first");
         }
 
-        if (!state.id) {
+        // Check for user authentication - use both state.id and state.uid
+        const userId = state.id || state.uid;
+        if (!userId) {
+            console.error("User state:", state);
             return alert("User not authenticated. Please refresh the page and try again.");
         }
 
-        if (!form.ogxToSell || form.ogxToSell <= 0) return alert("Please enter OGX amount to sell");
-        if (state.apes < form.ogxToSell) return alert("Insufficient OGX balance to sell");
-        if (isProcessing) return alert("Transaction already in progress. Please wait.");
+        if (!form.withdrawBalance || form.withdrawBalance <= 0) {
+            return alert("Please enter a valid OGX withdrawal amount");
+        }
+
+        if (isProcessing) {
+            return alert("Transaction already in progress. Please wait.");
+        }
 
         setIsProcessing(true);
-        try {
-            // Ensure platform has enough SOL to pay out
-            const solToSend = solPayoutForSell;
-            const platformBalance = await solanaProgramService.getPlatformWalletBalance();
-            if (platformBalance < solToSend + 0.01) {
-                alert(`Platform wallet has insufficient SOL. Available: ${platformBalance.toFixed(4)} SOL, Required: ${(solToSend + 0.01).toFixed(4)} SOL`);
-                return;
-            }
 
-            // Send SOL payout to user's wallet
-            const signature = await solanaProgramService.withdrawSOL(
+        try {
+            // Use the real Solana program for OGX withdrawal (burns OGX and sends USDC)
+            const signature = await solanaProgramService.withdrawUSDC(
                 publicKey,
-                solToSend,
+                form.withdrawBalance,
                 { publicKey, signTransaction }
             );
 
-            // Deduct OGX from user's purchased balance
-            const remaining = state.apes - form.ogxToSell;
-            const { error: userError } = await supabase.from("user").update({ apes: remaining }).eq("id", state.id);
-            if (userError) throw userError;
-            setState({ ...state, apes: remaining });
-
-            // Record sale in withdraw table for now
-            await supabase.from("withdraw").insert({
-                ogx: form.ogxToSell,
-                status: "COMPLETED",
+            // Update database
+            console.log("USDC Withdrawal - User state:", {
+                userId: userId,
                 walletAddress: publicKey.toString(),
-                userId: state.id,
+                ogx: form.withdrawBalance
             });
 
-            alert(`Sold ${form.ogxToSell} OGX for ${solToSend.toFixed(4)} SOL.\nTransaction: ${signature}`);
+            // Main project detection: Check URL params (most reliable)
+            const projectSlug = projectSlugFromUrl;
+            const isMainProjectCheck = !projectSlug;
+            
+            // Also check localStorage as fallback
+            const projectId = typeof window !== 'undefined'
+                ? localStorage.getItem('currentProjectId')
+                : null;
+            
+            // Final check: main project if no slug in URL OR no projectId in localStorage
+            const isMainProject = isMainProjectCheck || !projectId || projectId === 'null' || projectId === '';
+
+            const withdrawData: any = {
+                ogx: form.withdrawBalance,
+                status: "COMPLETED",
+                walletAddress: publicKey.toString(),
+                userId: userId,
+            };
+
+            // Main project: project_id is null
+            // Sub-project: set project_id
+            if (isMainProject) {
+                console.log("🏠 Main project: Processing USDC withdrawal");
+                withdrawData.project_id = null;
+            } else {
+                console.log(`📦 Sub-project: Processing USDC withdrawal for project ID ${projectId}`);
+                withdrawData.project_id = parseInt(projectId);
+            }
+
+            const { error: withdrawError } = await supabase.from("withdraw").insert(withdrawData);
+
+            if (withdrawError) {
+                console.error("Error saving USDC withdrawal:", withdrawError);
+                throw withdrawError;
+            }
+
+            // Update user balance (OGX deducted)
+            const minus = state.apes - form.withdrawBalance;
+            
+            if (isMainProject) {
+                // Main project: update legacy user table
+                console.log("🏠 Main project: Updating balance in legacy user table");
+                const updateField = state.id ? "id" : "uid";
+                const { error: userError } = await supabase.from("user").update({ apes: minus }).eq(updateField, userId);
+                
+                if (userError) {
+                    console.error("Error updating main project user balance:", userError);
+                    throw userError;
+                }
+            } else {
+                // Sub-project: update project_users table
+                console.log(`📦 Sub-project: Updating balance in project_users table`);
+                const { error: userError } = await supabase
+                    .from("project_users")
+                    .update({ apes: minus })
+                    .eq("id", userId);
+                
+                if (userError) {
+                    console.error("Error updating project user balance:", userError);
+                    throw userError;
+                }
+            }
+
+            setState({ ...state, apes: minus });
+
+            alert(`USDC withdrawal successful! ${form.withdrawBalance} OGX burned, ${usdcExchange.toFixed(4)} USDC sent to your wallet. Transaction: ${signature}`);
+
+            // Refresh balances
+            await fetchUSDCBalance();
+            run(userId);
+
         } catch (error) {
-            console.error("Error selling OGX:", error);
-            alert(`Error selling OGX: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            console.error("Error making USDC withdrawal transaction:", error);
+            if (error instanceof Error && error.message === "TRANSACTION_ALREADY_PROCESSED") {
+                alert("server error try again in few seconds");
+            } else if (error instanceof Error && error.message.includes("already been processed")) {
+                alert("server error try again in few seconds");
+            } else if (error instanceof Error && error.message.includes("already in progress")) {
+                alert("Transaction already in progress. Please wait for it to complete.");
+            } else if (error instanceof Error && error.message.includes("Insufficient")) {
+                alert(error.message);
+            } else {
+                alert(`Error making USDC withdrawal: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
         } finally {
             setIsProcessing(false);
         }
     };
 
     if (!state.withdraw) return null;
-    
+
     return (
-<div className="fixed top-0 left-0 w-screen h-screen flex items-center 
-        justify-center bg-black/40 z-50">            <div className="z-50 justify-center items-center">
-                <div className="relative p-4 w-full max-w-2xl h-[40rem] ">
+        <div className="fixed top-0 left-0 w-screen h-screen flex items-center 
+        justify-center bg-black/40 z-50">            <div className="z-50 flex justify-center items-center w-full">
+                <div className="relative p-4 w-full max-w-2xl">
                     <div className="relative bg-orange-400 rounded-lg shadow dark:bg-gray-700 h-full overflow-hidden">
                         <div className="flex items-center justify-between p-4 md:p-5 border-b rounded-t dark:border-gray-600">
-                            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mx-auto -mr-5">Withdraw OGX</h3>
+                            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mx-auto -mr-5">Withdraw Tokens</h3>
                             <button
                                 onClick={() => setState({ ...state, withdraw: false })}
                                 type="button"
@@ -331,123 +969,129 @@ export default function WithdrawModal() {
                                 <span className="sr-only">Close modal</span>
                             </button>
                         </div>
-                        <div className="flex space-x-4 border-b w-full">
-                            {/* Withdraw OGX tab still disabled for now */}
+                        <div className="flex space-x-2 border-b w-full overflow-x-auto">
                             <button
-                                onClick={() => setTab("sell")}
-                                className={`py-2 px-4 w-1/3 text-center ${
-                                    tab === "sell"
+                                onClick={() => setTab("withdraw")}
+                                className={`py-2 px-3 text-sm text-center whitespace-nowrap ${tab === "withdraw"
                                         ? "border-b-2 border-[#ff914d] text-orange-600 bg-gray-200"
                                         : "text-orange-600 bg-transparent"
-                                }`}
+                                    }`}
                             >
-                                Sell OGX
-                            </button>
-                            <button
-                                onClick={() => setTab("sol")}
-                                className={`py-2 px-4 w-1/3 text-center ${
-                                    tab === "sol"
-                                        ? "border-b-2 border-[#ff914d] text-orange-600 bg-gray-200"
-                                        : "text-orange-600 bg-transparent"
-                                }`}
-                            >
-                                SOL Withdraw
+                                Withdraw Tokens
                             </button>
                             <button
                                 onClick={() => setTab("history")}
-                                className={`py-2 px-4 w-1/3 text-center ${
-                                    tab === "history"
+                                className={`py-2 px-3 text-sm text-center whitespace-nowrap ${tab === "history"
                                         ? "border-b-2 border-[#ff914d] text-orange-600 bg-gray-200"
                                         : "text-orange-600 bg-transparent"
-                                }`}
+                                    }`}
                             >
                                 Withdraw History
                             </button>
                         </div>
-                        {tab === "sell" && (
-                            <div className="p-4 md:p-5">
-                                <p className="text-base leading-relaxed text-orange-600 mb-3">
-                                    Sell your purchased OGX for SOL at the current exchange rate. This does not require deposited OGX in the vault.
-                                </p>
+                        {tab === "withdraw" && (
+                            <div className="p-4 md:p-5 ">
+                                {/* <p className="text-base leading-relaxed text-orange-600 mb-3">
+                                    Withdraw tokens by burning OGX. Select the token you want to receive. Your OGX tokens will be burned and converted to the selected token at the current exchange rate.
+                                </p> */}
                                 <div className="space-y-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-orange-600 mb-2">Available OGX</label>
-                                        <input
-                                            value={state.apes || 0}
-                                            className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
-                                            disabled
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-orange-600 mb-2">OGX to Sell</label>
-                                        <input
-                                            type="number"
-                                            step="1"
-                                            placeholder="0"
-                                            min={1}
-                                            value={form.ogxToSell}
-                                            onChange={(e) => setForm({ ...form, ogxToSell: Number(e.target.value) })}
+                                        <label className="block text-sm font-medium text-orange-600 mb-2">
+                                            Select Token to Withdraw
+                                        </label>
+                                        <select
+                                            value={selectedToken}
+                                            onChange={(e) => {
+                                                setSelectedToken(e.target.value);
+                                                setOgxAmount(0.01); // Reset amount when token changes
+                                            }}
                                             className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800 focus:ring-[#ff914d]/50 focus:border-[#ff914d]/50"
-                                        />
+                                        >
+                                            {availableTokens.map((token) => (
+                                                <option key={token.key} value={token.key}>
+                                                    {token.name} ({token.symbol})
+                                                </option>
+                                            ))}
+                                        </select>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-orange-600 mb-2">You will receive (SOL)</label>
+                                        <label className="block text-sm font-medium text-orange-600 mb-2">
+                                            Available {isMainProject ? "OGX" : projectTokenSymbol} Balance
+                                        </label>
                                         <input
                                             className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
-                                            value={solPayoutForSell.toFixed(4)}
-                                            disabled
-                                        />
-                                    </div>
-                                    <div className="bg-blue-50 p-3 rounded-lg">
-                                        <p className="text-sm text-blue-800">
-                                            <strong>Note:</strong> SOL will be sent to your connected wallet address.
-                                            This sells OGX from your purchased balance (not the vault).
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                        {tab === "sol" && (
-                            <div className="p-4 md:p-5">
-                                <p className="text-base leading-relaxed text-orange-600 mb-3">
-                                    Withdraw SOL from the vault. Your OGX will be converted to SOL at the current exchange rate.
-                                </p>
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-orange-600 mb-2">Available OGX</label>
-                                        <input
                                             value={state.apes || 0}
-                                            className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
                                             disabled
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-orange-600 mb-2">Withdraw SOL Amount</label>
+                                        <label className="block text-sm font-medium text-orange-600 mb-2">
+                                            {isMainProject ? "OGX" : projectTokenSymbol} Amount to Withdraw
+                                        </label>
                                         <input
                                             type="number"
                                             step="0.01"
                                             placeholder="0.0"
-                                            min={0.01}
-                                            max={10}
-                                            value={form.solAmount}
-                                            onChange={(e) => setForm({ ...form, solAmount: Number(e.target.value) })}
+                                            min="0.01"
+                                            value={ogxAmount}
+                                            onChange={(e) => setOgxAmount(Number(e.target.value))}
                                             className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800 focus:ring-[#ff914d]/50 focus:border-[#ff914d]/50"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-orange-600 mb-2">Required OGX</label>
+                                        <label className="block text-sm font-medium text-orange-600 mb-2">
+                                            You Will Receive ({selectedTokenInfo?.symbol})
+                                        </label>
                                         <input
                                             className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
-                                            value={ogxExchange}
+                                            value={tokenEquivalent.toFixed(4)}
                                             disabled
                                         />
                                     </div>
-                                    <div className="bg-blue-50 p-3 rounded-lg">
-                                        <p className="text-sm text-blue-800">
-                                            <strong>Note:</strong> SOL will be sent to your connected wallet address.
-                                            This withdraws directly from the program vault and deducts OGX accordingly.
-                                        </p>
+                                    <div>
+                                        <label className="block text-sm font-medium text-orange-600 mb-2">
+                                            Available {selectedTokenInfo?.symbol} in Wallet
+                                        </label>
+                                        <input
+                                            className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
+                                            disabled
+                                            value={tokenBalance.toFixed(4)}
+                                        />
                                     </div>
+                                    {/* <div className="bg-blue-50 p-3 rounded-lg space-y-2">
+                                        <p className="text-sm text-blue-800">
+                                            <strong>Note:</strong> OGX tokens will be burned and {selectedTokenInfo?.symbol} will be sent to your connected wallet address.
+                                        </p>
+
+                                        {selectedToken !== "SOL" && (
+                                            <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg mt-2">
+                                                <p className="text-sm text-amber-800 font-semibold mb-1">
+                                                    ⚠️ Phantom Wallet Display Note:
+                                                </p>
+                                                <p className="text-xs text-amber-700">
+                                                    For devnet tokens, Phantom wallet may display "Unknown" in the confirmation dialog. This is normal for devnet test tokens and does not affect the transaction. Your {selectedTokenInfo?.symbol} tokens will be withdrawn correctly.
+                                                </p>
+                                                <p className="text-xs text-amber-600 mt-2 font-mono">
+                                                    Token Mint: {CONFIG.TOKENS[selectedToken as keyof typeof CONFIG.TOKENS]}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div> */}
+                                </div>
+                                <div className="flex items-center justify-end pt-4 space-x-3 border-t border-[#ff914d]/20">
+                                    <button
+                                        onClick={makeTokenWithdrawTransaction}
+                                        disabled={isProcessing || !connected}
+                                        className="px-5 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-[#f74e14] to-[#ff914d] text-white hover:opacity-90 focus:ring-2 focus:ring-[#ff914d]/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {isProcessing ? "Processing..." : `Withdraw ${selectedTokenInfo?.symbol}`}
+                                    </button>
+                                    <button
+                                        onClick={() => setState({ ...state, withdraw: false })}
+                                        className="px-5 py-2.5 text-sm font-medium rounded-lg border border-[#ff914d]/20 text-gray-300 hover:bg-[#ff914d]/20 focus:ring-2 focus:ring-[#ff914d]/50"
+                                    >
+                                        Cancel
+                                    </button>
                                 </div>
                             </div>
                         )}
@@ -466,11 +1110,11 @@ export default function WithdrawModal() {
                                                     className="px-6 py-3 bg-gray-50 dark:bg-gray-800 w-1/3">
                                                     <span className="flex justify-center">Wallet</span>
                                                 </th>
-                                            
+
                                                 <th
                                                     scope="col"
                                                     className="px-6 py-3 w-52 flex justify-center">
-                                                     <span className="">OGX</span> / <span>SOL</span>
+                                                    <span className="">OGX</span> / <span>SOL</span>
                                                 </th>
                                                 <th
                                                     scope="col"
@@ -507,35 +1151,6 @@ export default function WithdrawModal() {
                             </div>
                         )}
 
-                        <div className="flex absolute bottom-0 right-0 items-center p-4 md:p-5  rounded-b dark:border-gray-600">
-                            {tab === "sell" && (
-                                <button
-                                    data-modal-hide="default-modal"
-                                    type="button"
-                                    onClick={handleSellOGX}
-                                    disabled={isProcessing || !connected}
-                                    className="px-5 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-[#f74e14] to-[#ff914d] text-white hover:opacity-90 focus:ring-2 focus:ring-[#ff914d]/50 disabled:opacity-50 disabled:cursor-not-allowed">
-                                    {isProcessing ? "Processing..." : "Sell OGX"}
-                                </button>
-                            )}
-                            {tab === "sol" && (
-                                <button
-                                    data-modal-hide="default-modal"
-                                    type="button"
-                                    onClick={makeSOLWithdrawTransaction}
-                                    disabled={isProcessing || !connected}
-                                    className="px-5 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-[#f74e14] to-[#ff914d] text-white hover:opacity-90 focus:ring-2 focus:ring-[#ff914d]/50 disabled:opacity-50 disabled:cursor-not-allowed">
-                                    {isProcessing ? "Processing..." : "Withdraw SOL"}
-                                </button>
-                            )}
-                            <button
-                                onClick={() => setState({ ...state, withdraw: false })}
-                                data-modal-hide="default-modal"
-                                type="button"
-                                className="px-5 py-2.5 text-sm font-medium rounded-lg border border-[#ff914d]/20 text-gray-300 hover:bg-[#ff914d]/20 focus:ring-2 focus:ring-[#ff914d]/50">
-                                Cancel
-                            </button>
-                        </div>
                     </div>
                 </div>
             </div>

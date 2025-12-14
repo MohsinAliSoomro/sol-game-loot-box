@@ -1301,6 +1301,65 @@
           }
         },
         {
+          "name": "fee_wallet",
+          "writable": true
+        },
+        {
+          "name": "sol_fee_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  111,
+                  108,
+                  95,
+                  102,
+                  101,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "exchange_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  120,
+                  99,
+                  104,
+                  97,
+                  110,
+                  103,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
           "name": "user_balance",
           "writable": true,
           "pda": {
@@ -1620,6 +1679,208 @@
       "args": []
     },
     {
+      "name": "deposit_sol",
+      "discriminator": [
+        108,
+        81,
+        78,
+        117,
+        125,
+        155,
+        56,
+        200
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "platform_wallet",
+          "writable": true
+        },
+        {
+          "name": "fee_wallet",
+          "writable": true
+        },
+        {
+          "name": "user_balance",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  98,
+                  97,
+                  108,
+                  97,
+                  110,
+                  99,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              },
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "sol_fee_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  111,
+                  108,
+                  95,
+                  102,
+                  101,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "deposit_sol_project",
+      "discriminator": [
+        30,
+        57,
+        58,
+        59,
+        104,
+        12,
+        238,
+        127
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "platform_wallet",
+          "writable": true
+        },
+        {
+          "name": "fee_wallet",
+          "writable": true
+        },
+        {
+          "name": "user_balance",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  98,
+                  97,
+                  108,
+                  97,
+                  110,
+                  99,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              },
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "project",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  106,
+                  101,
+                  99,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "project.project_id",
+                "account": "Project"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "init_exchange_config",
       "discriminator": [
         156,
@@ -1918,6 +2179,66 @@
       "args": []
     },
     {
+      "name": "init_sol_fee_config",
+      "discriminator": [
+        51,
+        115,
+        136,
+        235,
+        207,
+        3,
+        241,
+        217
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "sol_mint"
+        },
+        {
+          "name": "sol_fee_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  111,
+                  108,
+                  95,
+                  102,
+                  101,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "fee_amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "init_vault",
       "discriminator": [
         77,
@@ -2065,6 +2386,92 @@
       "args": []
     },
     {
+      "name": "initialize_project",
+      "docs": [
+        "Initialize a new project with unique ID and custom fee",
+        "Each project gets its own PDA based on project_id"
+      ],
+      "discriminator": [
+        69,
+        126,
+        215,
+        37,
+        20,
+        60,
+        73,
+        235
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "docs": [
+            "Admin who will own and control this project (must be signer to pay for initialization)"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "project",
+          "docs": [
+            "Project account PDA initialized with project_id as seed",
+            "Seeds: [b\"project\", project_id.to_le_bytes()]",
+            "Space allocation: 8 (discriminator) + 8 (project_id) + 54 (name String) + 104 (description String)",
+            "+ 32 (admin) + 32 (mint) + 8 (fee_amount) + 8 (created_at) = 254 bytes",
+            "Using 260 bytes for safety margin"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  106,
+                  101,
+                  99,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "project_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "docs": [
+            "System program for account creation and rent payment"
+          ],
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "project_id",
+          "type": "u64"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "description",
+          "type": "string"
+        },
+        {
+          "name": "fee_amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "set_fee_amount",
       "discriminator": [
         202,
@@ -2114,6 +2521,116 @@
         }
       ],
       "args": [
+        {
+          "name": "new_fee_amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "set_sol_fee_amount",
+      "discriminator": [
+        212,
+        216,
+        189,
+        99,
+        207,
+        166,
+        136,
+        84
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "sol_mint"
+        },
+        {
+          "name": "sol_fee_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  111,
+                  108,
+                  95,
+                  102,
+                  101,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_fee_amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "update_project_fee",
+      "discriminator": [
+        252,
+        203,
+        111,
+        184,
+        174,
+        122,
+        202,
+        37
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "project",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  106,
+                  101,
+                  99,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "project_id"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "_project_id",
+          "type": "u64"
+        },
         {
           "name": "new_fee_amount",
           "type": "u64"
@@ -2605,37 +3122,13 @@
           }
         },
         {
-          "name": "user_balance",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  117,
-                  115,
-                  101,
-                  114,
-                  95,
-                  98,
-                  97,
-                  108,
-                  97,
-                  110,
-                  99,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "user"
-              },
-              {
-                "kind": "account",
-                "path": "mint"
-              }
-            ]
-          }
+          "name": "withdraw_user_balance",
+          "docs": [
+            "For SOL: [b\"user_balance\", user, b\"sol\"]",
+            "For other tokens: [b\"user_balance\", user, mint]",
+            "Renamed to withdraw_user_balance to avoid Anchor's pattern matching with DepositSol's user_balance",
+            "Using AccountInfo directly to completely bypass Anchor's validation"
+          ]
         },
         {
           "name": "fee_vault_authority",
@@ -2779,6 +3272,37 @@
           }
         },
         {
+          "name": "fee_wallet",
+          "writable": true
+        },
+        {
+          "name": "sol_fee_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  111,
+                  108,
+                  95,
+                  102,
+                  101,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
           "name": "vault",
           "writable": true,
           "pda": {
@@ -2802,6 +3326,7 @@
         },
         {
           "name": "exchange_config",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -2876,6 +3401,19 @@
       ]
     },
     {
+      "name": "Project",
+      "discriminator": [
+        205,
+        168,
+        189,
+        202,
+        181,
+        247,
+        142,
+        19
+      ]
+    },
+    {
       "name": "RewardEntry",
       "discriminator": [
         208,
@@ -2899,6 +3437,19 @@
         154,
         82,
         32
+      ]
+    },
+    {
+      "name": "SolFeeConfig",
+      "discriminator": [
+        75,
+        145,
+        107,
+        59,
+        212,
+        161,
+        144,
+        143
       ]
     },
     {
@@ -3042,6 +3593,16 @@
       "code": 6011,
       "name": "NoNftInVault",
       "msg": "No NFT available in vault to claim"
+    },
+    {
+      "code": 6012,
+      "name": "InvalidInput",
+      "msg": "Invalid input - string length exceeds maximum"
+    },
+    {
+      "code": 6013,
+      "name": "InvalidAccount",
+      "msg": "Invalid account provided"
     }
   ],
   "types": [
@@ -3129,6 +3690,72 @@
           {
             "name": "amount",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Project",
+      "docs": [
+        "Project account structure for managing multiple projects under one program",
+        "Each project has a unique ID and can have custom fee settings"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "project_id",
+            "docs": [
+              "Unique project identifier (8 bytes)",
+              "Used in PDA derivation: [b\"project\", project_id.to_le_bytes()]"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "name",
+            "docs": [
+              "Project name, maximum 50 characters (4 + 50 bytes for String)"
+            ],
+            "type": "string"
+          },
+          {
+            "name": "description",
+            "docs": [
+              "Project description, maximum 100 characters (4 + 100 bytes for String)"
+            ],
+            "type": "string"
+          },
+          {
+            "name": "admin",
+            "docs": [
+              "Admin/owner public key who controls this project (32 bytes)",
+              "Only this admin can modify project settings"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "docs": [
+              "Mint address associated with this project (32 bytes)",
+              "Can be token mint or SOL mint for identification"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_amount",
+            "docs": [
+              "Custom fee amount for this project in lamports (8 bytes)",
+              "Used when processing transactions for this specific project"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "created_at",
+            "docs": [
+              "Unix timestamp when project was created (8 bytes)",
+              "Stored as i64 for signed timestamp representation"
+            ],
+            "type": "i64"
           }
         ]
       }
@@ -3236,6 +3863,26 @@
           },
           {
             "name": "next_reward_id",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SolFeeConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_amount",
             "type": "u64"
           }
         ]

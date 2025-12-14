@@ -12,10 +12,10 @@
 
 const { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, Keypair } = require('@solana/web3.js');
 const { createClient } = require('@supabase/supabase-js');
+const bs58 = require('bs58');
 
 // Configuration
 const RPC_URL = 'https://api.devnet.solana.com';
-const PLATFORM_WALLET_PRIVATE_KEY = process.env.PLATFORM_WALLET_PRIVATE_KEY; // Set this environment variable
 const SUPABASE_URL = process.env.SUPABASE_URL; // Set this environment variable
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY; // Set this environment variable
 
@@ -23,15 +23,26 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY; // Set this environment
 const connection = new Connection(RPC_URL, 'confirmed');
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Platform wallet keypair (you need to set the private key)
-let platformWallet;
-if (PLATFORM_WALLET_PRIVATE_KEY) {
-    const privateKeyArray = JSON.parse(PLATFORM_WALLET_PRIVATE_KEY);
-    platformWallet = Keypair.fromSecretKey(new Uint8Array(privateKeyArray));
-} else {
-    console.error('❌ PLATFORM_WALLET_PRIVATE_KEY environment variable not set!');
-    console.error('Please set your platform wallet private key as an environment variable.');
-    process.exit(1);
+/**
+ * Get admin private key for a specific project
+ */
+async function getProjectAdminKey(projectId) {
+    if (!projectId) {
+        throw new Error('No project_id found in withdrawal request');
+    }
+
+    const { data, error } = await supabase
+        .from('project_settings')
+        .select('setting_value')
+        .eq('project_id', projectId)
+        .eq('setting_key', 'admin_private_key')
+        .single();
+
+    if (error || !data?.setting_value) {
+        throw new Error(`Admin private key not configured for project ID ${projectId}`);
+    }
+
+    return data.setting_value;
 }
 
 /**
@@ -60,14 +71,9 @@ async function processWithdrawals() {
 
         console.log(`📋 Found ${withdrawals.length} pending withdrawal(s)`);
 
-        // Check platform wallet balance
-        const platformBalance = await connection.getBalance(platformWallet.publicKey);
-        const platformSOLBalance = platformBalance / LAMPORTS_PER_SOL;
-        console.log(`💰 Platform wallet balance: ${platformSOLBalance.toFixed(4)} SOL`);
-
         for (const withdrawal of withdrawals) {
             try {
-                await processWithdrawal(withdrawal, platformSOLBalance);
+                await processWithdrawal(withdrawal);
             } catch (error) {
                 console.error(`❌ Error processing withdrawal ${withdrawal.id}:`, error.message);
                 // Mark as failed
@@ -86,19 +92,32 @@ async function processWithdrawals() {
 /**
  * Process a single withdrawal request
  */
-async function processWithdrawal(withdrawal, platformBalance) {
+async function processWithdrawal(withdrawal) {
     const solAmount = parseFloat(withdrawal.solAmount || 0);
     const userWallet = new PublicKey(withdrawal.walletAddress);
+    const projectId = withdrawal.project_id;
     
     console.log(`\n🔄 Processing withdrawal ${withdrawal.id}:`);
+    console.log(`   Project ID: ${projectId}`);
     console.log(`   User Wallet: ${withdrawal.walletAddress}`);
     console.log(`   Amount: ${solAmount} SOL`);
     console.log(`   OGX: ${withdrawal.apes}`);
     console.log(`   ✅ SOL will be sent TO: ${userWallet.toString()}`);
 
-    // Check if platform has enough SOL
-    if (platformBalance < solAmount + 0.01) { // Add 0.01 SOL for fees
-        throw new Error(`Insufficient platform balance. Available: ${platformBalance.toFixed(4)} SOL, Required: ${(solAmount + 0.01).toFixed(4)} SOL`);
+    // Get project-specific admin private key
+    const adminPrivateKeyBase58 = await getProjectAdminKey(projectId);
+    const privateKeyBytes = bs58.decode(adminPrivateKeyBase58.trim());
+    const adminWallet = Keypair.fromSecretKey(privateKeyBytes);
+    
+    console.log(`   🔑 Using admin wallet: ${adminWallet.publicKey.toString()}`);
+
+    // Check if admin wallet has enough SOL
+    const adminBalance = await connection.getBalance(adminWallet.publicKey);
+    const adminSOLBalance = adminBalance / LAMPORTS_PER_SOL;
+    console.log(`   💰 Admin wallet balance: ${adminSOLBalance.toFixed(4)} SOL`);
+    
+    if (adminSOLBalance < solAmount + 0.01) { // Add 0.01 SOL for fees
+        throw new Error(`Insufficient admin wallet balance. Available: ${adminSOLBalance.toFixed(4)} SOL, Required: ${(solAmount + 0.01).toFixed(4)} SOL`);
     }
 
     // Get fresh blockhash
@@ -107,17 +126,17 @@ async function processWithdrawal(withdrawal, platformBalance) {
     // Create transfer transaction
     const transaction = new Transaction().add(
         SystemProgram.transfer({
-            fromPubkey: platformWallet.publicKey,
+            fromPubkey: adminWallet.publicKey,
             toPubkey: userWallet,
             lamports: solAmount * LAMPORTS_PER_SOL,
         })
     );
 
     transaction.recentBlockhash = blockhash;
-    transaction.feePayer = platformWallet.publicKey;
+    transaction.feePayer = adminWallet.publicKey;
 
     // Sign and send transaction
-    transaction.sign(platformWallet);
+    transaction.sign(adminWallet);
     const signature = await connection.sendRawTransaction(transaction.serialize(), {
         skipPreflight: false,
         preflightCommitment: 'confirmed',
@@ -150,7 +169,7 @@ async function processWithdrawal(withdrawal, platformBalance) {
         console.error('❌ Error updating withdrawal status:', updateError);
     } else {
         console.log(`✅ Withdrawal ${withdrawal.id} completed successfully!`);
-        console.log(`💰 ${solAmount} SOL sent to wallet: ${userWallet.toString()}`);
+        console.log(`💰 ${solAmount} SOL sent from ${adminWallet.publicKey.toString()} to ${userWallet.toString()}`);
     }
 }
 
@@ -159,7 +178,7 @@ async function processWithdrawal(withdrawal, platformBalance) {
  */
 async function main() {
     console.log('🚀 Starting Withdrawal Processor...');
-    console.log(`📍 Platform wallet: ${platformWallet.publicKey.toString()}`);
+    console.log('📋 Processing withdrawals from project-specific admin wallets...');
     
     try {
         await processWithdrawals();

@@ -1,0 +1,16 @@
+{
+  "clientName": "asas",
+  "projectId": 1762943561515,
+  "slug": "asas",
+  "domain": "",
+  "branding": {
+    "primaryColor": "#FF6B35",
+    "logo": "/logos/asas.png"
+  },
+  "features": {
+    "jackpot": true,
+    "tickets": true,
+    "nfts": true
+  },
+  "createdAt": "2025-11-12T11:06:03Z"
+}

@@ -11,6 +11,8 @@ export interface JackpotPool {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  image?: string | null;
+  item_price?: number | null; // Price in OGX/tokens for item rewards
 }
 
 export interface JackpotWin {
@@ -26,13 +28,30 @@ export interface JackpotWin {
 
 export class JackpotService {
   // Get all active jackpot pools
-  static async getActivePools(): Promise<JackpotPool[]> {
+  // Filters by project context:
+  // - If projectId is null: returns only main project pools (project_id IS NULL)
+  // - If projectId is a number: returns only pools for that project (project_id = projectId)
+  // - If projectId is undefined: returns all pools (legacy behavior for backward compatibility)
+  static async getActivePools(projectId?: number | null): Promise<JackpotPool[]> {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('jackpot_pools')
         .select('*')
-        .eq('is_active', true)
-        .order('current_amount', { ascending: false });
+        .eq('is_active', true);
+      
+      // Filter by project_id if provided
+      // If projectId is explicitly null, filter for main project (project_id IS NULL)
+      if (projectId === null) {
+        query = query.is('project_id', null);
+        console.log('🔍 Filtering jackpot pools for MAIN PROJECT (project_id IS NULL)');
+      } else if (projectId !== undefined && projectId > 0) {
+        query = query.eq('project_id', projectId);
+        console.log(`🔍 Filtering jackpot pools for SUB-PROJECT (project_id = ${projectId})`);
+      } else {
+        console.log('⚠️ No project filter applied - returning all active pools (legacy behavior)');
+      }
+      
+      const { data, error } = await query.order('current_amount', { ascending: false });
 
       if (error) {
         console.error('Error fetching jackpot pools:', error);
@@ -87,7 +106,8 @@ export class JackpotService {
   // Check if user wins jackpot
   static async checkJackpotWin(
     userId: string,
-    spinAmount: number
+    spinAmount: number,
+    projectId?: number | null
   ): Promise<{ won: boolean; pool?: JackpotPool; winAmount?: number }> {
     try {
       // Get jackpot settings
@@ -100,7 +120,8 @@ export class JackpotService {
 
       if (random < adjustedChance) {
         // User won! Determine which pool they win
-        const pools = await this.getActivePools();
+        // Pass projectId to filter pools correctly (null for main project, number for sub-projects)
+        const pools = await this.getActivePools(projectId);
         if (pools.length === 0) {
           return { won: false };
         }
@@ -219,10 +240,12 @@ export class JackpotService {
   static async autoContributeFromSpin(
     userId: string,
     spinAmount: number,
-    transactionHash?: string
+    transactionHash?: string,
+    projectId?: number | null
   ): Promise<{ contributed: boolean; contributions: number }> {
     try {
-      const pools = await this.getActivePools();
+      // Pass projectId to filter pools correctly (null for main project, number for sub-projects)
+      const pools = await this.getActivePools(projectId);
       let contributions = 0;
 
       for (const pool of pools) {

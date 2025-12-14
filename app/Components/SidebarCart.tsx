@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import { PublicKey } from "@solana/web3.js";
 import { solanaProgramService } from "@/lib/solana-program";
 import Image from "next/image";
+import JackpotImage from "./JackpotImage";
+import { useProject } from "@/lib/project-context";
 
 /**
  * Fetches the prizes won by a user that are available to claim.
@@ -17,8 +19,53 @@ const getWinPrizes = async (userId: string) => {
     try {
         console.log("🔍 Fetching NFT prizes won by user:", userId);
 
-        // Get rewards that user has won (not withdrawn) - both NFTs and SOL
-        const response = await supabase.from("prizeWin").select().eq("userId", userId).eq("isWithdraw", false);
+        // Get current project ID and slug
+        const projectId = typeof window !== 'undefined'
+            ? localStorage.getItem('currentProjectId')
+            : null;
+        const projectSlug = typeof window !== 'undefined'
+            ? localStorage.getItem('currentProjectSlug')
+            : null;
+
+        // Check if we're on the main project by checking URL pathname
+        // Main project routes: /, /lootboxes/..., /live-draw/..., /leaderboard
+        // Sub-project routes: /[projectSlug]/lootboxes/..., /[projectSlug]/live-draw/...
+        let isMainProject = false;
+        if (typeof window !== 'undefined') {
+            const pathParts = window.location.pathname.split('/').filter(Boolean);
+            // If first path segment is NOT a project slug (i.e., it's 'lootboxes', 'live-draw', 'leaderboard', or empty)
+            // then we're on the main project
+            const firstSegment = pathParts[0];
+            isMainProject = !firstSegment ||
+                firstSegment === 'lootboxes' ||
+                firstSegment === 'live-draw' ||
+                firstSegment === 'leaderboard' ||
+                (!projectSlug && !projectId);
+        }
+
+        // Get rewards that user has won (not withdrawn) - only NFTs and SOL (exclude item rewards)
+        // Item rewards are credited directly to token balance and should NOT appear in sidebar
+        // Note: We fetch all unwithdrawn rewards first, then filter in JavaScript to handle legacy entries
+        // that might not have reward_type set
+        let query = supabase
+            .from("prizeWin")
+            .select()
+            .eq("userId", userId)
+            .eq("isWithdraw", false);
+
+        // Filter by project_id based on whether we're on main project or sub-project
+        if (isMainProject) {
+            // Main project: only show rewards where project_id IS NULL
+            query = query.is("project_id", null);
+            console.log("🏠 Main project: filtering for rewards with project_id IS NULL");
+        } else if (projectId) {
+            // Sub-project: filter by specific project_id
+            query = query.eq("project_id", parseInt(projectId));
+            console.log(`📦 Sub-project: filtering for rewards with project_id = ${projectId}`);
+        }
+        // If no projectId and not main project, show all rewards (fallback)
+
+        const response = await query;
 
         if (response.error) {
             console.error("❌ Error fetching prizes:", response.error);
@@ -26,41 +73,165 @@ const getWinPrizes = async (userId: string) => {
         }
 
         console.log("✅ Fetched prizes from database:", response.data);
+        console.log("📋 All rewards breakdown:", {
+            total: response.data?.length || 0,
+            rewards: response.data?.map((r: any) => ({
+                id: r.id,
+                name: r.name,
+                reward_type: r.reward_type,
+                mint: r.mint,
+                hasMint: !!r.mint && r.mint.trim() !== '',
+                isWithdraw: r.isWithdraw,
+                project_id: r.project_id,
+                userId: r.userId,
+                image: r.image,
+                sol: r.sol
+            }))
+        });
+        console.log("🔍 Project context:", {
+            projectId: projectId,
+            projectSlug: projectSlug,
+            isMainProject: isMainProject,
+            pathname: typeof window !== 'undefined' ? window.location.pathname : 'N/A'
+        });
 
-        // Separate NFT and SOL rewards
-        const nftRewards = response.data.filter((reward: any) => reward.reward_type === 'nft' && reward.mint);
-        const solRewards = response.data.filter((reward: any) => reward.reward_type === 'sol');
+        // Separate NFT and SOL rewards (case-insensitive check)
+        // Explicitly exclude item rewards - they should never appear in sidebar
+        // Handle legacy entries that might not have reward_type set
+        const nftRewards = response.data.filter((reward: any) => {
+            const rewardType = (reward.reward_type || '').toLowerCase();
+            const hasMint = !!reward.mint && reward.mint.trim() !== '';
+            const isNFT = rewardType === 'nft';
+            const isItem = rewardType === 'item';
+            const isSol = rewardType === 'sol';
+
+            // Exclude item rewards
+            if (isItem) {
+                console.log(`🚫 Filtering out item reward from sidebar:`, reward.name);
+                return false;
+            }
+
+            // Exclude SOL rewards (they're handled separately)
+            if (isSol) {
+                return false;
+            }
+
+            // If reward_type is explicitly 'nft', require mint address
+            if (isNFT) {
+                if (!hasMint) {
+                    console.log(`⚠️ NFT reward without mint address:`, reward);
+                    return false;
+                }
+                return true;
+            }
+
+            // Legacy entries: if reward_type is NULL/empty but has a mint address, treat as NFT
+            // Also exclude if name contains "SOL" (likely a SOL reward)
+            if (!rewardType && hasMint) {
+                const nameLower = (reward.name || '').toLowerCase();
+                if (nameLower.includes('sol')) {
+                    return false; // Likely a SOL reward, not NFT
+                }
+                console.log(`🔄 Legacy entry treated as NFT (has mint but no reward_type):`, reward.name);
+                return true;
+            }
+
+            return false;
+        });
+        const solRewards = response.data.filter((reward: any) => {
+            const rewardType = (reward.reward_type || '').toLowerCase();
+            const hasMint = !!reward.mint && reward.mint.trim() !== '';
+            const isItem = rewardType === 'item';
+            const isSol = rewardType === 'sol';
+
+            // Exclude item rewards
+            if (isItem) {
+                return false;
+            }
+
+            // Explicit SOL reward type
+            if (isSol) {
+                return true;
+            }
+
+            // Legacy entries: if reward_type is NULL/empty and name contains "SOL", treat as SOL
+            if (!rewardType && !hasMint) {
+                const nameLower = (reward.name || '').toLowerCase();
+                if (nameLower.includes('sol')) {
+                    console.log(`🔄 Legacy entry treated as SOL (name contains SOL but no reward_type):`, reward.name);
+                    return true;
+                }
+            }
+
+            return false;
+        });
 
         console.log(`📊 Found ${nftRewards.length} NFT rewards and ${solRewards.length} SOL rewards`);
+        if (nftRewards.length > 0) {
+            console.log("🎨 NFT rewards details:", nftRewards.map((r: any) => ({
+                id: r.id,
+                name: r.name,
+                mint: r.mint,
+                reward_type: r.reward_type,
+                hasMint: !!r.mint && r.mint.trim() !== ''
+            })));
+        } else {
+            console.log("⚠️ No NFT rewards found. Checking why...");
+            const allWithMint = response.data?.filter((r: any) => !!r.mint && r.mint.trim() !== '') || [];
+            const allWithNFTType = response.data?.filter((r: any) => (r.reward_type || '').toLowerCase() === 'nft') || [];
+            console.log(`   - Entries with mint address: ${allWithMint.length}`);
+            console.log(`   - Entries with reward_type='nft': ${allWithNFTType.length}`);
+            if (allWithMint.length > 0) {
+                console.log("   - Sample entries with mint:", allWithMint.slice(0, 3).map((r: any) => ({
+                    id: r.id,
+                    name: r.name,
+                    reward_type: r.reward_type,
+                    mint: r.mint?.substring(0, 20) + '...'
+                })));
+            }
+        }
 
-        // Get actually deposited NFTs from vault (only for NFT rewards)
+        // Get actually deposited NFTs from vault (only for NFT rewards) - for verification only
         let depositedMints: string[] = [];
         if (nftRewards.length > 0) {
             try {
                 const { getDepositedNFTs } = await import("@/lib/nft-metadata");
                 depositedMints = await getDepositedNFTs();
                 console.log("📦 Actually deposited NFTs in vault:", depositedMints);
+                console.log("📦 Won NFT mints:", nftRewards.map((r: any) => r.mint));
             } catch (error) {
                 console.warn("⚠️ Could not fetch deposited NFTs from vault:", error);
-                // If we can't check vault, return only SOL rewards to be safe
-                return { ...response, data: solRewards };
+                // Continue anyway - show all won NFTs even if we can't verify vault
+                depositedMints = [];
             }
         }
 
-        // Filter NFT rewards to only show those that are actually deposited in vault
+        // Filter NFT rewards - show all won NFTs (not just those in vault)
+        // Only filter out placeholder mints
         const validWonNFTs = nftRewards.filter((nft: any) => {
+            // Normalize mint address for comparison (trim whitespace, lowercase)
+            const mintAddress = (nft.mint || '').trim();
+
             // Skip placeholder mints (11111111111111111111111111111111)
-            if (nft.mint === "11111111111111111111111111111111") {
-                console.log("🚫 Filtering out placeholder mint:", nft.mint);
+            if (mintAddress === "11111111111111111111111111111111" || !mintAddress) {
+                console.log("🚫 Filtering out placeholder or empty mint:", mintAddress);
                 return false;
             }
 
-            // Only include if actually deposited in vault
-            const isDeposited = depositedMints.includes(nft.mint);
-            if (!isDeposited) {
-                console.log("🚫 Won NFT not in vault, filtering out:", nft.mint);
+            // Show all won NFTs - don't filter by vault availability
+            // The vault check is just for logging/info purposes
+            const isDeposited = depositedMints.some((depMint: string) =>
+                depMint.trim().toLowerCase() === mintAddress.toLowerCase()
+            );
+
+            if (!isDeposited && depositedMints.length > 0) {
+                console.log(`⚠️ Won NFT ${mintAddress} not found in vault (but showing anyway)`);
+            } else if (isDeposited) {
+                console.log(`✅ Won NFT ${mintAddress} verified in vault`);
             }
-            return isDeposited;
+
+            // Return true for all valid mints (not placeholders)
+            return true;
         });
 
         // Combine valid NFT rewards with SOL rewards
@@ -105,7 +276,10 @@ export default function SidebarCart() {
         manual: true,
     });
     const [user, setCart] = useUserState();
+    const { getProjectId } = useProject();
+    const projectId = getProjectId();
     const [claimingReward, setClaimingReward] = useState<string | null>(null);
+    const [claimingAll, setClaimingAll] = useState(false);
 
     useEffect(() => {
         if (user) {
@@ -114,15 +288,56 @@ export default function SidebarCart() {
         }
     }, [user, run]);
 
+    // Real-time subscription to prizeWin table for automatic cart updates
+    useEffect(() => {
+        if (!user) return;
+
+        console.log("🔄 Setting up real-time subscription for prizeWin changes...");
+
+        const subscription = supabase
+            .channel('prizeWin_changes')
+            .on('postgres_changes',
+                {
+                    event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+                    schema: 'public',
+                    table: 'prizeWin',
+                    filter: `userId=eq.${user.id}` // Only listen to changes for this user
+                },
+                (payload) => {
+                    console.log('🔄 PrizeWin database changed for user:', payload);
+                    // Refresh cart when prizeWin changes
+                    if (user) {
+                        console.log("🔄 Auto-refreshing cart due to prizeWin change...");
+                        run(user.id);
+                    }
+                }
+            )
+            .subscribe();
+
+        // Cleanup subscription on unmount
+        return () => {
+            console.log("🔄 Cleaning up prizeWin subscription...");
+            subscription.unsubscribe();
+        };
+    }, [user, run]);
+
     // Claim NFT reward function
-    const claimNFTReward = async (rewardId: string, rewardName: string, mintAddress?: string) => {
-        if (claimingReward) {
+    const claimNFTReward = async (rewardId: string, rewardName: string, mintAddress?: string, bulkMode: boolean = false) => {
+        if (claimingReward && !bulkMode) {
             console.log("⚠️ Claim already in progress, ignoring duplicate request");
             return;
         }
 
+        // Declare variables outside try block so they're accessible in catch block
+        let userPublicKey: PublicKey | undefined;
+        let nftMint: PublicKey | undefined;
+        let projectId: string | null = null;
+        let isMainProject = false;
+
         try {
-            setClaimingReward(rewardId);
+            if (!bulkMode) {
+                setClaimingReward(rewardId);
+            }
             console.log(`🎨 Starting NFT claim for reward ${rewardId} with mint ${mintAddress}`);
 
             // Check if this reward is already withdrawn
@@ -139,10 +354,36 @@ export default function SidebarCart() {
 
             if (existingReward?.isWithdraw) {
                 console.log("⚠️ Reward already withdrawn, skipping claim");
-                alert(`🎉 NFT Already Claimed!\n\nYou already claimed ${rewardName}!\n\nCheck your wallet for the NFT!`);
-                run(user?.id); // Refresh to update UI
+                if (!bulkMode) {
+                    alert(`🎉 NFT Already Claimed!\n\nYou already claimed ${rewardName}!\n\nCheck your wallet for the NFT!`);
+                    run(user?.id); // Refresh to update UI
+                }
                 return;
             }
+
+            // Get current project ID and check if main project (before wallet connection)
+            projectId = typeof window !== 'undefined'
+                ? localStorage.getItem('currentProjectId')
+                : null;
+            const projectSlug = typeof window !== 'undefined'
+                ? localStorage.getItem('currentProjectSlug')
+                : null;
+
+            // Check if this is the main project (no projectId or no projectSlug in URL)
+            if (typeof window !== 'undefined') {
+                const pathParts = window.location.pathname.split('/').filter(Boolean);
+                const firstSegment = pathParts[0];
+                isMainProject = !firstSegment ||
+                    firstSegment === 'lootboxes' ||
+                    firstSegment === 'live-draw' ||
+                    firstSegment === 'leaderboard' ||
+                    (!projectSlug && !projectId);
+            }
+
+            // Use the actual mint address from the database, or fallback to placeholder
+            nftMint = mintAddress ? new PublicKey(mintAddress) : new PublicKey("11111111111111111111111111111111");
+
+            console.log(`🎨 Claiming NFT with mint: ${nftMint.toString()}`);
 
             // Connect wallet
             //@ts-ignore
@@ -153,20 +394,43 @@ export default function SidebarCart() {
             }
 
             const walletAddress = await wallet.connect();
-            const userPublicKey = new PublicKey(walletAddress.publicKey.toString());
+            userPublicKey = new PublicKey(walletAddress.publicKey.toString());
 
-            // Use the actual mint address from the database, or fallback to placeholder
-            const nftMint = mintAddress ? new PublicKey(mintAddress) : new PublicKey("11111111111111111111111111111111");
-
-            console.log(`🎨 Claiming NFT with mint: ${nftMint.toString()}`);
-
-            // Use the NFT withdrawal functionality
-            const signature = await solanaProgramService.withdrawNFT(userPublicKey, nftMint, wallet);
+            // First, check if user already has the NFT in their wallet
+            // If they do, just mark it as claimed without attempting transfer
+            const userHasNFT = await solanaProgramService.checkUserHasNFT(userPublicKey, nftMint);
+            
+            let signature: string;
+            if (userHasNFT) {
+                console.log("✅ User already has the NFT, marking as claimed without transfer");
+                signature = "NFT_ALREADY_IN_WALLET";
+            } else {
+                // Withdraw NFT from admin wallet directly to user's wallet
+                // Main project: use main website admin wallet (pass undefined)
+                // Sub-project: use project-specific admin wallet (pass projectId)
+                signature = await solanaProgramService.withdrawNFTFromAdminWallet(
+                    userPublicKey, 
+                    nftMint,
+                    isMainProject ? undefined : (projectId ? parseInt(projectId) : undefined)
+                );
+            }
 
             // Update ALL instances of this mint as claimed (not just this specific reward)
-            const updateResult = await supabase.from("prizeWin").update({
+            let updateQuery = supabase.from("prizeWin").update({
                 isWithdraw: true
             }).eq("userId", user.id).eq("mint", mintAddress);
+
+            // Main project: filter for project_id IS NULL
+            // Sub-project: filter by specific project_id
+            if (isMainProject) {
+                console.log("🏠 Main project: Marking NFT as claimed (project_id IS NULL)");
+                updateQuery = updateQuery.is("project_id", null);
+            } else if (projectId) {
+                console.log(`📦 Sub-project: Marking NFT as claimed (project_id = ${projectId})`);
+                updateQuery = updateQuery.eq("project_id", parseInt(projectId));
+            }
+
+            const updateResult = await updateQuery;
 
             if (updateResult.error) {
                 console.error("Error updating mint status:", updateResult.error);
@@ -177,25 +441,25 @@ export default function SidebarCart() {
 
             // Mark NFT as available again using backend API
             try {
-              const response = await fetch('/api/nft-status', {
-                method: 'DELETE',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  mint: mintAddress
-                }),
-              });
-              
-              const result = await response.json();
-              
-              if (result.success) {
-                console.log(`✅ NFT marked as available again: ${mintAddress}`);
-              } else {
-                console.warn("⚠️ Backend NFT availability update failed:", result.error);
-              }
+                const response = await fetch('/api/nft-status', {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        mint: mintAddress
+                    }),
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    console.log(`✅ NFT marked as available again: ${mintAddress}`);
+                } else {
+                    console.warn("⚠️ Backend NFT availability update failed:", result.error);
+                }
             } catch (error) {
-              console.warn("⚠️ Error calling backend API:", error);
+                console.warn("⚠️ Error calling backend API:", error);
             }
 
             // Remove claimed NFT reward from the wheel DB (nft_reward_percentages)
@@ -213,19 +477,77 @@ export default function SidebarCart() {
                 console.warn('⚠️ DB cleanup error (claimed NFT):', dbErr);
             }
 
-            alert(`🎉 NFT Reward Claimed!\n\nYou claimed ${rewardName}!\n\nTransaction: ${signature}\n\nCheck your wallet for the NFT!`);
-
-            // Refresh the cart
-            run(user?.id);
+            if (!bulkMode) {
+                if (signature === "NFT_ALREADY_IN_WALLET") {
+                    alert(`🎉 NFT Already in Your Wallet!\n\n${rewardName} is already in your wallet!\n\nThe reward has been marked as claimed.`);
+                } else {
+                    alert(`🎉 NFT Reward Claimed!\n\nYou claimed ${rewardName}!\n\nTransaction: ${signature}\n\nCheck your wallet for the NFT!`);
+                }
+                // Refresh the cart
+                run(user?.id);
+            }
 
         } catch (error) {
             console.error("Error claiming NFT reward:", error);
 
             // Handle specific error cases
             if (error instanceof Error) {
+                // Handle case where admin wallet doesn't have NFT - check if user already has it
+                if (error.message.includes("Admin wallet does not have this NFT") || 
+                    error.message.includes("NFT not found in admin wallet")) {
+                    console.log("⚠️ Admin wallet doesn't have NFT, checking if user already has it...");
+                    
+                    // Only check if we have the necessary variables (wallet was connected)
+                    if (userPublicKey && nftMint) {
+                        try {
+                            // Check if user already has the NFT in their wallet
+                            const userHasNFT = await solanaProgramService.checkUserHasNFT(userPublicKey, nftMint);
+                            
+                            if (userHasNFT) {
+                                console.log("✅ User already has the NFT, marking as claimed in database");
+                                
+                                // Mark as claimed in database
+                                let updateQuery = supabase.from("prizeWin").update({
+                                    isWithdraw: true
+                                }).eq("userId", user.id).eq("mint", mintAddress);
+
+                                if (isMainProject) {
+                                    updateQuery = updateQuery.is("project_id", null);
+                                } else if (projectId) {
+                                    updateQuery = updateQuery.eq("project_id", parseInt(projectId));
+                                }
+
+                                await updateQuery;
+                                
+                                // Refresh cart
+                                run(user?.id);
+                                
+                                if (!bulkMode) {
+                                    alert(`🎉 NFT Already in Your Wallet!\n\n${rewardName} is already in your wallet!\n\nThe reward has been marked as claimed.`);
+                                }
+                                setClaimingReward(null);
+                                return;
+                            }
+                        } catch (checkError) {
+                            console.error("Error checking if user has NFT:", checkError);
+                            // Fall through to show error
+                        }
+                    }
+                    
+                    // User doesn't have it and admin doesn't have it - NFT is missing
+                    alert(
+                        `⚠️ NFT Not Available!\n\n` +
+                        `${rewardName} is not available in the admin wallet.\n\n` +
+                        `The NFT may have already been claimed or is missing.\n\n` +
+                        `Please contact support if you believe this is an error.`
+                    );
+                    setClaimingReward(null);
+                    return;
+                }
+
                 // Handle new user account initialization error
                 if (error.message.includes("NFT CLAIM UNAVAILABLE") ||
-                    error.message.includes("account needs initialization") || 
+                    error.message.includes("account needs initialization") ||
                     error.message.includes("AccountNotInitialized") ||
                     error.message.includes("NFT tracking account")) {
                     alert(
@@ -241,29 +563,82 @@ export default function SidebarCart() {
                         `Contact support for manual initialization.\n\n` +
                         `This is a known limitation of the current Solana program design.`
                     );
-                    
+
                     setClaimingReward(null);
                     return;
                 }
-                
+
                 if (error.message.includes("already been processed")) {
                     console.log("✅ Transaction was already processed successfully");
+                    // Get current project ID and check if main project
+                    const projectId = typeof window !== 'undefined'
+                        ? localStorage.getItem('currentProjectId')
+                        : null;
+
+                    let isMainProjectCheck = false;
+                    if (typeof window !== 'undefined') {
+                        const pathParts = window.location.pathname.split('/').filter(Boolean);
+                        const firstSegment = pathParts[0];
+                        isMainProjectCheck = !firstSegment ||
+                            firstSegment === 'lootboxes' ||
+                            firstSegment === 'live-draw' ||
+                            firstSegment === 'leaderboard' ||
+                            (!projectId || projectId === 'null' || projectId === '');
+                    }
+
                     // Update ALL instances of this mint as claimed
-                    await supabase.from("prizeWin").update({
+                    let updateQuery = supabase.from("prizeWin").update({
                         isWithdraw: true
                     }).eq("userId", user.id).eq("mint", mintAddress);
 
-                    alert(`🎉 NFT Reward Already Claimed!\n\nYou already claimed ${rewardName}!\n\nCheck your wallet for the NFT!`);
+                    // Main project: filter for project_id IS NULL
+                    // Sub-project: filter by specific project_id
+                    if (isMainProjectCheck) {
+                        updateQuery = updateQuery.is("project_id", null);
+                    } else if (projectId) {
+                        updateQuery = updateQuery.eq("project_id", parseInt(projectId));
+                    }
 
-                    // Refresh the cart
-                    run(user?.id);
+                    await updateQuery;
+
+                    if (!bulkMode) {
+                        alert(`🎉 NFT Reward Already Claimed!\n\nYou already claimed ${rewardName}!\n\nCheck your wallet for the NFT!`);
+                        // Refresh the cart
+                        run(user?.id);
+                    }
                     return;
                 } else if (error.message.includes("NoNftDeposited") || error.message.includes("No NFT deposited")) {
                     console.log("⚠️ NFT not available in vault, marking as claimed");
+                    // Get current project ID and check if main project
+                    const projectId = typeof window !== 'undefined'
+                        ? localStorage.getItem('currentProjectId')
+                        : null;
+
+                    let isMainProjectCheck = false;
+                    if (typeof window !== 'undefined') {
+                        const pathParts = window.location.pathname.split('/').filter(Boolean);
+                        const firstSegment = pathParts[0];
+                        isMainProjectCheck = !firstSegment ||
+                            firstSegment === 'lootboxes' ||
+                            firstSegment === 'live-draw' ||
+                            firstSegment === 'leaderboard' ||
+                            (!projectId || projectId === 'null' || projectId === '');
+                    }
+
                     // Update ALL instances of this mint as claimed since it's not available
-                    await supabase.from("prizeWin").update({
+                    let updateQuery = supabase.from("prizeWin").update({
                         isWithdraw: true
                     }).eq("userId", user.id).eq("mint", mintAddress);
+
+                    // Main project: filter for project_id IS NULL
+                    // Sub-project: filter by specific project_id
+                    if (isMainProjectCheck) {
+                        updateQuery = updateQuery.is("project_id", null);
+                    } else if (projectId) {
+                        updateQuery = updateQuery.eq("project_id", parseInt(projectId));
+                    }
+
+                    await updateQuery;
                     // Also ensure it's removed from wheel DB so it doesn't appear again
                     try {
                         const { error: delErr } = await supabase
@@ -289,29 +664,200 @@ export default function SidebarCart() {
                 }
             }
 
-            alert(`Error claiming NFT reward: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            if (!bulkMode) {
+                alert(`Error claiming NFT reward: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            } else {
+                // In bulk mode, re-throw error so claimAllRewards can handle it
+                throw error;
+            }
         } finally {
-            setClaimingReward(null);
+            if (!bulkMode) {
+                setClaimingReward(null);
+            }
         }
     };
 
-    // Claim SOL reward function
-    const claimSOLReward = async (rewardId: string, rewardName: string, solAmount: string) => {
-        if (claimingReward) {
-            console.log("⚠️ Claim already in progress, ignoring duplicate request");
+    // Claim all rewards function
+    const claimAllRewards = async () => {
+        if (claimingAll) {
+            console.log("⚠️ Bulk claim already in progress, ignoring duplicate request");
+            return;
+        }
+
+        const rewards = (data as any)?.data || [];
+        const unclaimedRewards = rewards.filter((r: any) => !r.isWithdraw);
+
+        if (unclaimedRewards.length === 0) {
+            alert("✅ All rewards have already been claimed!");
+            return;
+        }
+
+        const confirmClaim = confirm(
+            `🎯 Claim All Rewards?\n\n` +
+            `You are about to claim ${unclaimedRewards.length} reward(s):\n` +
+            `${unclaimedRewards.filter((r: any) => r.reward_type === 'nft').length} NFT(s)\n` +
+            `${unclaimedRewards.filter((r: any) => r.reward_type === 'sol').length} SOL reward(s)\n\n` +
+            `This will process ${unclaimedRewards.length} transaction(s). Continue?`
+        );
+
+        if (!confirmClaim) {
             return;
         }
 
         try {
-            setClaimingReward(rewardId);
+            setClaimingAll(true);
+            console.log(`🚀 Starting bulk claim for ${unclaimedRewards.length} rewards`);
+
+            let successCount = 0;
+            let failCount = 0;
+            const failedRewards: string[] = [];
+
+            // Process rewards one by one
+            for (let i = 0; i < unclaimedRewards.length; i++) {
+                const reward = unclaimedRewards[i];
+                console.log(`📦 Processing reward ${i + 1}/${unclaimedRewards.length}: ${reward.name}`);
+
+                try {
+                    if (reward.reward_type === 'sol') {
+                        await claimSOLReward(
+                            reward.id?.toString() || i.toString(),
+                            reward.name,
+                            reward.sol,
+                            true // bulk mode - don't show individual alerts
+                        );
+                        successCount++;
+                    } else {
+                        await claimNFTReward(
+                            reward.id?.toString() || i.toString(),
+                            reward.name,
+                            reward.mint,
+                            true // bulk mode - don't show individual alerts
+                        );
+                        successCount++;
+                    }
+
+                    // Small delay between claims to avoid rate limiting
+                    if (i < unclaimedRewards.length - 1) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                } catch (error) {
+                    console.error(`❌ Failed to claim reward ${reward.name}:`, error);
+
+                    // Check if it's insufficient SOL balance error - stop immediately
+                    if (error instanceof Error && error.message === "INSUFFICIENT_SOL_BALANCE") {
+                        console.log("🛑 Stopping bulk claim due to insufficient SOL balance");
+                        failCount++;
+                        failedRewards.push(reward.name);
+
+                        // Calculate remaining unclaimed rewards
+                        const remainingRewards = unclaimedRewards.length - (i + 1);
+
+                        // Refresh cart
+                        run(user?.id);
+
+                        // Show alert and stop
+                        if (successCount > 0) {
+                            alert(
+                                `⚠️ Claiming Stopped - Insufficient SOL!\n\n` +
+                                `✅ Successfully claimed: ${successCount} reward(s)\n` +
+                                `🛑 Stopped at: ${reward.name}\n` +
+                                `⏳ Remaining: ${remainingRewards} reward(s) will be claimed later\n\n` +
+                                `The vault does not have enough SOL to continue.\n` +
+                                `Please try again later when the vault has sufficient SOL balance.`
+                            );
+                        } else {
+                            alert(
+                                `⚠️ Insufficient SOL in Vault!\n\n` +
+                                `There is not enough SOL in the vault to claim ${reward.name}.\n\n` +
+                                `⏳ ${remainingRewards + 1} reward(s) will be claimed later.\n\n` +
+                                `Please try again later when the vault has sufficient SOL balance.`
+                            );
+                        }
+
+                        return; // Stop the loop immediately
+                    }
+
+                    // For other errors, continue with next reward
+                    failCount++;
+                    failedRewards.push(reward.name);
+                }
+            }
+
+            // Refresh cart after all claims
+            run(user?.id);
+
+            // Show summary alert
+            if (successCount > 0 && failCount === 0) {
+                alert(`🎉 Success!\n\nAll ${successCount} reward(s) have been claimed successfully!\n\nCheck your wallet for the rewards!`);
+            } else if (successCount > 0 && failCount > 0) {
+                alert(
+                    `⚠️ Partial Success\n\n` +
+                    `✅ Successfully claimed: ${successCount} reward(s)\n` +
+                    `❌ Failed: ${failCount} reward(s)\n\n` +
+                    `Failed rewards:\n${failedRewards.join('\n')}\n\n` +
+                    `You can try claiming the failed rewards individually.`
+                );
+            } else {
+                alert(`❌ Failed to claim rewards\n\nAll ${failCount} reward(s) failed to claim.\n\nPlease try claiming them individually.`);
+            }
+
+        } catch (error) {
+            console.error("Error in bulk claim:", error);
+            alert(`Error claiming all rewards: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        } finally {
+            setClaimingAll(false);
+        }
+    };
+
+    // Claim SOL reward function
+    const claimSOLReward = async (rewardId: string, rewardName: string, solAmount: string, bulkMode: boolean = false) => {
+        if (claimingReward && !bulkMode) {
+            console.log("⚠️ Claim already in progress, ignoring duplicate request");
+            return;
+        }
+
+        // Get current project ID and slug (outside try block so accessible in catch)
+        const projectId = typeof window !== 'undefined'
+            ? localStorage.getItem('currentProjectId')
+            : null;
+        const projectSlug = typeof window !== 'undefined'
+            ? localStorage.getItem('currentProjectSlug')
+            : null;
+
+        // Check if we're on the main project by checking URL pathname (outside try block so accessible in catch)
+        let isMainProject = false;
+        if (typeof window !== 'undefined') {
+            const pathParts = window.location.pathname.split('/').filter(Boolean);
+            const firstSegment = pathParts[0];
+            isMainProject = !firstSegment ||
+                firstSegment === 'lootboxes' ||
+                firstSegment === 'live-draw' ||
+                firstSegment === 'leaderboard' ||
+                (!projectSlug && !projectId);
+        }
+
+        try {
+            if (!bulkMode) {
+                setClaimingReward(rewardId);
+            }
             console.log(`💰 Starting SOL claim for reward ${rewardId} with amount ${solAmount}`);
 
             // Check if this reward is already withdrawn
-            const { data: existingReward, error: checkError } = await supabase
+            let checkQuery = supabase
                 .from("prizeWin")
                 .select("isWithdraw")
-                .eq("id", rewardId)
-                .single();
+                .eq("id", rewardId);
+
+            // Filter by project_id based on whether we're on main project or sub-project
+            if (isMainProject) {
+                // Main project: only check rewards where project_id IS NULL
+                checkQuery = checkQuery.is("project_id", null);
+            } else if (projectId) {
+                // Sub-project: filter by specific project_id
+                checkQuery = checkQuery.eq("project_id", parseInt(projectId));
+            }
+
+            const { data: existingReward, error: checkError } = await checkQuery.single();
 
             if (checkError) {
                 console.error("Error checking reward status:", checkError);
@@ -320,8 +866,10 @@ export default function SidebarCart() {
 
             if (existingReward?.isWithdraw) {
                 console.log("⚠️ SOL reward already withdrawn, skipping claim");
-                alert(`🎉 SOL Already Claimed!\n\nYou already claimed ${rewardName}!\n\nCheck your wallet for the SOL!`);
-                run(user?.id); // Refresh to update UI
+                if (!bulkMode) {
+                    alert(`🎉 SOL Already Claimed!\n\nYou already claimed ${rewardName}!\n\nCheck your wallet for the SOL!`);
+                    run(user?.id); // Refresh to update UI
+                }
                 return;
             }
 
@@ -338,13 +886,30 @@ export default function SidebarCart() {
 
             console.log(`💰 Claiming SOL: ${solAmount} SOL`);
 
-            // Use the SOL withdrawal functionality from the vault
-            const signature = await solanaProgramService.withdrawSOL(userPublicKey, parseFloat(solAmount), wallet);
+            // Withdraw SOL from admin wallet directly to user's wallet
+            // Main project: use main website admin wallet (pass undefined)
+            // Sub-project: use project-specific admin wallet (pass projectId)
+            const signature = await solanaProgramService.withdrawSOLFromAdminWallet(
+                userPublicKey, 
+                parseFloat(solAmount), 
+                isMainProject ? undefined : (projectId ? parseInt(projectId) : undefined)
+            );
 
             // Update this specific SOL reward as claimed
-            const updateResult = await supabase.from("prizeWin").update({
+            let updateQuery = supabase.from("prizeWin").update({
                 isWithdraw: true
             }).eq("id", rewardId);
+
+            // Filter by project_id based on whether we're on main project or sub-project
+            if (isMainProject) {
+                // Main project: only update rewards where project_id IS NULL
+                updateQuery = updateQuery.is("project_id", null);
+            } else if (projectId) {
+                // Sub-project: filter by specific project_id
+                updateQuery = updateQuery.eq("project_id", parseInt(projectId));
+            }
+
+            const updateResult = await updateQuery;
 
             if (updateResult.error) {
                 console.error("Error updating SOL reward status:", updateResult.error);
@@ -353,10 +918,11 @@ export default function SidebarCart() {
 
             console.log(`✅ Marked SOL reward ${rewardId} as claimed`);
 
-            alert(`🎉 SOL Reward Claimed!\n\nYou claimed ${rewardName}!\n\nTransaction: ${signature}\n\nCheck your wallet for the SOL!`);
-
-            // Refresh the cart
-            run(user?.id);
+            if (!bulkMode) {
+                alert(`🎉 SOL Reward Claimed!\n\nYou claimed ${rewardName}!\n\nTransaction: ${signature}\n\nCheck your wallet for the SOL!`);
+                // Refresh the cart
+                run(user?.id);
+            }
 
         } catch (error) {
             console.error("Error claiming SOL reward:", error);
@@ -366,32 +932,36 @@ export default function SidebarCart() {
                 if (error.message.includes("already been processed")) {
                     console.log("✅ Transaction was already processed successfully");
                     // Update this specific SOL reward as claimed
-                    await supabase.from("prizeWin").update({
+                    let updateQuery = supabase.from("prizeWin").update({
                         isWithdraw: true
                     }).eq("id", rewardId);
 
-                    alert(`🎉 SOL Reward Already Claimed!\n\nYou already claimed ${rewardName}!\n\nCheck your wallet for the SOL!`);
+                    // Filter by project_id based on whether we're on main project or sub-project
+                    if (isMainProject) {
+                        // Main project: only update rewards where project_id IS NULL
+                        updateQuery = updateQuery.is("project_id", null);
+                    } else if (projectId) {
+                        // Sub-project: filter by specific project_id
+                        updateQuery = updateQuery.eq("project_id", parseInt(projectId));
+                    }
 
-                    // Refresh the cart
-                    run(user?.id);
+                    await updateQuery;
+
+                    if (!bulkMode) {
+                        alert(`🎉 SOL Reward Already Claimed!\n\nYou already claimed ${rewardName}!\n\nCheck your wallet for the SOL!`);
+                        // Refresh the cart
+                        run(user?.id);
+                    }
                     return;
                 } else if (error.message.includes("Insufficient balance") || error.message.includes("InsufficientBalance") || error.message.includes("0x1771") || error.message.includes("6001")) {
-                    console.log("⚠️ Insufficient SOL in vault, converting to OGX");
-                    // Convert SOL to OGX equivalent (1 SOL = 1000 OGX)
-                    const ogxEquivalent = parseFloat(solAmount) * 1000;
-                    const newBalance = (user.apes || 0) + ogxEquivalent;
+                    console.log("⚠️ Insufficient SOL in vault, stopping claim");
 
-                    // Update user balance
-                    await supabase.from("user").update({ apes: newBalance }).eq("id", user.id);
+                    if (!bulkMode) {
+                        alert(`⚠️ Insufficient SOL in Vault!\n\nThere is not enough SOL in the vault to claim ${rewardName}.\n\nPlease try again later when the vault has sufficient SOL balance.`);
+                    }
 
-                    // Mark SOL reward as claimed
-                    await supabase.from("prizeWin").update({ isWithdraw: true }).eq("id", rewardId);
-
-                    alert(`⚠️ Vault has insufficient SOL!\n\nYou received ${ogxEquivalent} OGX instead of ${solAmount} SOL.\n\nYou can sell this OGX to get SOL in your wallet!`);
-
-                    // Refresh the cart
-                    run(user?.id);
-                    return;
+                    // Re-throw error to stop bulk claiming
+                    throw new Error("INSUFFICIENT_SOL_BALANCE");
                 } else if (error.message.includes("User rejected")) {
                     alert("❌ Transaction cancelled by user");
                     return;
@@ -401,9 +971,16 @@ export default function SidebarCart() {
                 }
             }
 
-            alert(`Error claiming SOL reward: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            if (!bulkMode) {
+                alert(`Error claiming SOL reward: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            } else {
+                // In bulk mode, re-throw error so claimAllRewards can handle it
+                throw error;
+            }
         } finally {
-            setClaimingReward(null);
+            if (!bulkMode) {
+                setClaimingReward(null);
+            }
         }
     };
 
@@ -438,7 +1015,14 @@ export default function SidebarCart() {
                 <div className="absolute inset-0 overflow-hidden">
                     <div className="pointer-events-none fixed inset-y-0 right-0 flex max-w-full pl-10">
                         <div className="pointer-events-auto w-screen max-w-md">
-                            <div className="flex h-full flex-col bg-[#ff914d]/90" style={{ margin: '10px 10px 10px 10px' }}>
+                            <div
+                                className="flex h-full flex-col"
+                                style={{
+                                    margin: '10px 10px 10px 10px',
+                                    backgroundColor: 'var(--wheel-segment-fill, #ff914d)',
+                                    opacity: 0.9
+                                }}
+                            >
                                 <div className="flex items-center justify-between p-4 relative">
                                     <h2 className="text-2xl font-bold text-white w-full text-center">
                                         Available Rewards
@@ -478,15 +1062,30 @@ export default function SidebarCart() {
                                 <div className="flex-1 overflow-y-auto pr-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-white/10 [&::-webkit-scrollbar-thumb]:bg-white/40 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-white/50">
                                     <div className="px-4 py-2">
                                         <div className="space-y-4">
-                                            {(data as any)?.data?.map((item: any, index: number) => (
+                                            {(data as any)?.data?.map((item: any, index: number) => {
+                                                // Determine image source based on reward type
+                                                let imageSource: string | null = null;
+                                                if (item?.reward_type === 'sol') {
+                                                    // For SOL rewards, use default SOL logo
+                                                    imageSource = 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png';
+                                                } else if (item?.mint) {
+                                                    // For NFT rewards, use mint address
+                                                    imageSource = item.mint;
+                                                } else if (item?.image) {
+                                                    // Fallback to image field
+                                                    imageSource = item.image;
+                                                }
+                                                
+                                                return (
                                                 <div key={index} className="flex items-center bg-white/10 rounded-lg p-4 ">
                                                     <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg">
-                                                        <img
-                                                            src={`${item?.image}`}
-                                                            alt={item?.name}
+                                                        <JackpotImage
+                                                            image={imageSource}
+                                                            name={item?.name}
                                                             width={64}
                                                             height={64}
                                                             className="h-full w-full object-cover object-center"
+                                                            fallbackSrc="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
                                                         />
                                                     </div>
                                                     <div className="ml-4 flex justify-between w-full">
@@ -531,11 +1130,23 @@ export default function SidebarCart() {
                                                                         claimNFTReward(item.id?.toString() || index.toString(), item.name, item.mint);
                                                                     }
                                                                 }}
-                                                                disabled={claimingReward === (item.id?.toString() || index.toString()) || claimingReward !== null}
-                                                                className={`mt-2  disabled:bg-gray-500 text-white py-2 px-4 rounded-lg text-sm font-bold transition-colors ${item?.reward_type === 'sol'
-                                                                        ? 'bg-red-600 hover:bg-red-700'
-                                                                        : 'bg-red-600 hover:bg-red-700'
-                                                                    }`}
+                                                                disabled={claimingReward === (item.id?.toString() || index.toString()) || claimingReward !== null || claimingAll}
+                                                                className="mt-2 disabled:bg-gray-500 text-white py-2 px-4 rounded-lg text-sm font-bold transition-colors"
+                                                                style={{
+                                                                    backgroundColor: claimingReward === (item.id?.toString() || index.toString()) || claimingReward !== null || claimingAll
+                                                                        ? undefined
+                                                                        : 'var(--wheel-button-bg, #f74e14)'
+                                                                }}
+                                                                onMouseEnter={(e) => {
+                                                                    if (claimingReward !== (item.id?.toString() || index.toString()) && claimingReward === null && !claimingAll) {
+                                                                        e.currentTarget.style.backgroundColor = 'var(--wheel-button-hover, #e63900)';
+                                                                    }
+                                                                }}
+                                                                onMouseLeave={(e) => {
+                                                                    if (claimingReward !== (item.id?.toString() || index.toString()) && claimingReward === null && !claimingAll) {
+                                                                        e.currentTarget.style.backgroundColor = 'var(--wheel-button-bg, #f74e14)';
+                                                                    }
+                                                                }}
                                                             >
                                                                 {claimingReward === (item.id?.toString() || index.toString())
                                                                     ? "Claiming..."
@@ -554,7 +1165,8 @@ export default function SidebarCart() {
                                                         )}
                                                     </div>
                                                 </div>
-                                            ))}
+                                                );
+                                            })}
 
                                             {(!(data as any)?.data || (data as any).data.length === 0) && (
                                                 <div className="text-center text-white/60 py-8">
@@ -576,6 +1188,42 @@ export default function SidebarCart() {
                                         <p>Total Rewards</p>
                                         <p>{(data as any)?.data?.length || 0} items</p>
                                     </div>
+
+                                    {/* Claim All Button */}
+                                    {((data as any)?.data?.filter((r: any) => !r.isWithdraw) || []).length > 0 && (
+                                        <div className="mb-4">
+                                            <button
+                                                onClick={claimAllRewards}
+                                                disabled={claimingAll || claimingReward !== null}
+                                                className="w-full disabled:bg-gray-500 disabled:cursor-not-allowed text-white py-3 px-4 rounded-lg text-base font-bold transition-colors"
+                                                style={{
+                                                    backgroundColor: claimingAll || claimingReward !== null
+                                                        ? undefined
+                                                        : 'var(--wheel-button-bg, #f74e14)'
+                                                }}
+                                                onMouseEnter={(e) => {
+                                                    if (!claimingAll && claimingReward === null) {
+                                                        e.currentTarget.style.backgroundColor = 'var(--wheel-button-hover, #e63900)';
+                                                    }
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                    if (!claimingAll && claimingReward === null) {
+                                                        e.currentTarget.style.backgroundColor = 'var(--wheel-button-bg, #f74e14)';
+                                                    }
+                                                }}
+                                            >
+                                                {claimingAll ? (
+                                                    <span className="flex items-center justify-center gap-2">
+                                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                                        Claiming All Rewards...
+                                                    </span>
+                                                ) : (
+                                                    `🎯 Claim All (${((data as any)?.data?.filter((r: any) => !r.isWithdraw) || []).length} rewards)`
+                                                )}
+                                            </button>
+                                        </div>
+                                    )}
+
                                     {/* <div className="text-center text-white/60 mb-4">
                                         <p className="text-sm">NFT rewards appear here only after winning them</p>
                                         <p className="text-sm">OGX tokens are automatically added to your balance</p>

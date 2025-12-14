@@ -13,7 +13,12 @@ import DepositedNFTs from "./components/DepositedNFTs";
 import Loader from "../../Components/Loader";
 
 const getProducts = async () => {
-  const response = await supabase.from("products").select();
+  // MAIN PROJECT ONLY: Filter for products where project_id IS NULL (legacy main project data)
+  // This isolates the main project from sub-projects
+  const response = await supabase
+    .from("products")
+    .select()
+    .is("project_id", null);
   return response;
 };
 
@@ -73,7 +78,7 @@ export default function Details() {
           <p className="text-3xl font-bold w-full text-center mt-10">Loot In the Box</p>
         </div>
         <div className="w-full mt-5">
-          <DepositedNFTs />
+          <DepositedNFTs productId={newData?.id} />
         </div>
       </div>
 

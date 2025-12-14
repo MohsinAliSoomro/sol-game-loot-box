@@ -9,7 +9,12 @@ const supabase = createClient(
 );
 export async function POST(req: Request) {
   const body = await req.json();
-  const { publicKey, signature, message } = body;
+  const { publicKey, signature, message, project_id } = body;
+  
+  // Try to get project_id from body, headers, or URL
+  const projectId = project_id || 
+    req.headers.get('x-project-id') || 
+    (typeof window !== 'undefined' ? localStorage.getItem('currentProjectId') : null);
 
   if (!publicKey || !signature || !message) {
     return Response.json({ error: "Missing fields" }, { status: 400 });
@@ -71,7 +76,7 @@ export async function POST(req: Request) {
     // Create user record in database with proper UUID
     if (sessionData.session?.user) {
       try {
-        const userData = {
+        const userData: any = {
           id: sessionData.session.user.id, // Use the auth UUID
           uid: sessionData.session.user.id,
           email: sessionData.session.user.email,
@@ -81,6 +86,12 @@ export async function POST(req: Request) {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
+
+        // Add project_id if available
+        if (projectId) {
+          userData.project_id = parseInt(projectId);
+          console.log(`Creating user with project_id: ${projectId}`);
+        }
 
         // Insert or update user record
         const { error: upsertError } = await supabase
@@ -113,7 +124,7 @@ export async function POST(req: Request) {
       
       // If no user record exists, create one
       if (fetchError && fetchError.code === "PGRST116") {
-        const userData = {
+        const userData: any = {
           id: data.session.user.id, // Use the auth UUID
           uid: data.session.user.id,
           email: data.session.user.email,
@@ -123,6 +134,12 @@ export async function POST(req: Request) {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
+
+        // Add project_id if available
+        if (projectId) {
+          userData.project_id = parseInt(projectId);
+          console.log(`Creating existing user with project_id: ${projectId}`);
+        }
 
         const { error: insertError } = await supabase
           .from("user")

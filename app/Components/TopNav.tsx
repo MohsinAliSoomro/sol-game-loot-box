@@ -4,12 +4,17 @@ import { useUserState } from "@/state/useUserState";
 import { useWallet } from "@solana/wallet-adapter-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useEffectOnce } from "react-use";
 // @ts-ignore
 import bs58 from "bs58";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
+import { getWebsiteLogo } from "@/service/websiteSettings";
+import { useProject } from "@/lib/project-context";
+import { getOrCreateProjectUser, getProjectUser } from "@/service/projectUserService";
+import { generateEmailFromWallet } from "@/lib/email-utils";
+
 function formatNumber(num: number | undefined) {
   if (num === undefined || num === null) return 0;
   if (num >= 1000000)
@@ -20,14 +25,46 @@ function formatNumber(num: number | undefined) {
 
 export default function TopNav() {
   const [user, setUser] = useUserState();
+  const { getProjectTokenSymbol, getProjectId, currentProject, loading: projectLoading } = useProject();
+  const projectTokenSymbol = getProjectTokenSymbol();
+  const projectId = getProjectId();
   const [open, setOpen] = useState(false);
   const [isLogin, setIsLogin] = useState(false);
   const [totalVolumeOGX, setTotalVolumeOGX] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isAutoLoggingIn, setIsAutoLoggingIn] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string>("/logo.png");
   const hasAttemptedLogin = useRef(false);
+  const isLoadingUser = useRef(false); // Prevent duplicate API calls
+  const lastLoadedProjectId = useRef<number | null>(null); // Track which project we last loaded
   const router = useRouter();
+  const params = useParams();
+  // Get project slug ONLY from URL params (not from currentProject context)
+  // For main project (root URL), params?.projectSlug will be undefined
+  // For sub-projects, params?.projectSlug will contain the project slug
+  const projectSlug = params?.projectSlug as string | undefined;
+  const isMainProject = !projectSlug; // True if no projectSlug in URL (main project)
   const { publicKey, connect, signMessage, connected, disconnect } = useWallet();
+
+  // Build navigation paths with project slug if available
+  // For main project, don't add project slug to paths
+  const getNavPath = (path: string) => {
+    if (projectSlug && !isMainProject) {
+      return `/${projectSlug}${path}`;
+    }
+    return path;
+  };
+
+  // Fetch dynamic logo
+  useEffect(() => {
+    const fetchLogo = async () => {
+      const logo = await getWebsiteLogo();
+      if (logo) {
+        setLogoUrl(logo);
+      }
+    };
+    fetchLogo();
+  }, []);
 
   const handleSocialLogin = async (provider: "google" | "discord") => {
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -43,81 +80,216 @@ export default function TopNav() {
       return;
     }
 
+    // For sub-projects, wait for project context to load before proceeding
+    // This prevents treating sub-project as main project due to race condition
+    if (projectSlug && projectLoading) {
+      console.log("⏳ Waiting for project context to load before login...");
+      return;
+    }
+
+    // Get project slug from context if not in URL (for root page)
+    const activeProjectSlug = projectSlug || currentProject?.slug;
+    
     setIsAutoLoggingIn(true);
     
     try {
-      console.log("Creating/loading user for wallet:", publicKey.toBase58());
+      const walletAddress = publicKey.toBase58();
       
-      // Try to find existing user by wallet address
-      const { data: existingUser, error: fetchError } = await supabase
-        .from("user")
-        .select()
-        .eq("walletAddress", publicKey.toBase58())
-        .single();
-      
-      if (existingUser && !fetchError) {
-        console.log("Found existing user:", existingUser);
-        setUser(prevUser => ({ ...prevUser, ...existingUser }));
+      // Main project works independently - use legacy user table
+      if (isMainProject || !activeProjectSlug) {
+        console.log(`🏠 Main project: Creating/loading user for wallet: ${walletAddress}`);
         
-        // Load user volume
+        // Get email from auth session, or generate from wallet address
+        const sessionResponse = await supabase.auth.getSession();
+        let email = sessionResponse.data.session?.user.email || null;
+        
+        // If no email from session, generate one from wallet address
+        if (!email) {
+          email = await generateEmailFromWallet(walletAddress);
+          console.log(`📧 Generated email from wallet: ${email}`);
+        }
+        
+        // Check if user exists in legacy user table by walletAddress (main project uses walletAddress)
+        let legacyUser = null;
+        const { data: existingUser } = await supabase
+          .from('user')
+          .select('*')
+          .eq('walletAddress', walletAddress)
+          .single();
+        
+        legacyUser = existingUser;
+        
+        // If user doesn't exist, create one (generate UUID for id/uid)
+        // NOTE: Main project user table doesn't have total_spending column
+        if (!legacyUser) {
+          // Generate UUID for id and uid columns
+          const userId = crypto.randomUUID();
+          const { data: newUser, error: createError } = await supabase
+            .from('user')
+            .insert({
+              id: userId,
+              uid: userId,
+              walletAddress: walletAddress,
+              email: email,
+              apes: 0,
+              provider: 'wallet'
+            })
+            .select()
+            .single();
+          
+          if (createError) {
+            console.error('Error creating user:', createError);
+            alert('Login failed. Please try again.');
+            return;
+          }
+          
+          legacyUser = newUser;
+          console.log(`✅ Created new user for wallet: ${walletAddress}, ID: ${legacyUser.id || legacyUser.uid}`);
+        } else {
+          // If existing user has NULL id/uid, backfill with generated UUID
+          if (!legacyUser.id || !legacyUser.uid) {
+            const userId = crypto.randomUUID();
+            const { data: updatedUser, error: updateError } = await supabase
+              .from('user')
+              .update({
+                id: userId,
+                uid: userId,
+              })
+              .eq('walletAddress', walletAddress)
+              .select()
+              .single();
+            
+            if (!updateError && updatedUser) {
+              legacyUser = updatedUser;
+              console.log(`✅ Backfilled id/uid for wallet: ${walletAddress}, new ID: ${userId}`);
+            } else if (updateError) {
+              console.warn('⚠️ Failed to backfill id/uid:', updateError);
+            }
+          }
+          console.log(`✅ Found existing user for wallet: ${walletAddress}, balance: ${legacyUser.apes}, ID: ${legacyUser.id || legacyUser.uid}`);
+        }
+        
+        // Set user state
+        // NOTE: Main project user table doesn't have total_spending, so set to 0
+        setUser({
+          ...user,
+          id: legacyUser.id || walletAddress,
+          uid: legacyUser.uid || walletAddress,
+          walletAddress: walletAddress,
+          apes: legacyUser.apes || 0,
+          totalSpending: 0, // Main project user table doesn't have total_spending column
+          email: legacyUser.email,
+          full_name: legacyUser.full_name,
+          username: legacyUser.username,
+          avatar_url: legacyUser.avatar_url,
+          provider: legacyUser.provider,
+          created_at: legacyUser.created_at,
+          updated_at: legacyUser.updated_at
+        });
+        console.log(`🔐 User state set - ID: ${legacyUser.id}, Wallet: ${walletAddress}`);
+        
+        // Load user volume for main project
         try {
           const { data: txs } = await supabase
             .from('transaction')
             .select('ogx')
-            .eq('userId', existingUser.id);
+            .eq('userId', legacyUser.id)
+            .is('project_id', null); // Main project transactions have NULL project_id
+          
           const volume = (txs || []).reduce((sum: number, t: any) => sum + (Number(t?.ogx) || 0), 0);
           setTotalVolumeOGX(volume);
+          console.log(`📊 Loaded volume for main project: ${volume}`);
         } catch (volErr) {
           console.warn('Failed to load user volume:', volErr);
-        }
-      } else {
-        console.log("Creating new user for wallet");
-        // Create new user record with UUID
-        const userId = crypto.randomUUID(); // Generate UUID
-        const walletAddress = publicKey.toBase58();
-        
-        // Create deterministic email from wallet address
-        const emailHash = walletAddress.substring(0, 8);
-        const email = `${emailHash}@wallet.local`;
-        
-        const newUser = {
-          uid: userId,  // Primary UUID field
-          id: userId,   // Keep both fields with same UUID
-          walletAddress: walletAddress,
-          email: email,
-          provider: 'wallet',
-          apes: 0,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        
-        console.log("Creating new user with UUID:", userId);
-        
-        const { data: insertedUser, error: insertError } = await supabase
-          .from("user")
-          .insert(newUser)
-          .select()
-          .single();
-        
-        if (insertedUser && !insertError) {
-          console.log("Created new user:", insertedUser);
-          setUser(prevUser => ({ ...prevUser, ...insertedUser }));
           setTotalVolumeOGX(0);
-        } else {
-          console.error("Error creating user:", insertError);
         }
+        
+        setIsLogin(true);
+        setOpen(false);
+        console.log("✅ Main project wallet login completed successfully!");
+        
+      } else {
+        // Sub-project: use project-specific API
+        console.log(`🔐 Creating/loading project user for wallet: ${walletAddress} in project: ${activeProjectSlug}`);
+        
+        // Get email from auth session, or generate from wallet address
+        const sessionResponse = await supabase.auth.getSession();
+        let email = sessionResponse.data.session?.user.email || null;
+        
+        // If no email from session, generate one from wallet address
+        if (!email) {
+          email = await generateEmailFromWallet(walletAddress);
+          console.log(`📧 Generated email from wallet: ${email}`);
+        }
+        
+        // Use new multi-tenant project_users system
+        const result = await getOrCreateProjectUser(
+          activeProjectSlug,
+          walletAddress,
+          {
+            email: email,
+            username: undefined,
+            avatar: undefined,
+            full_name: undefined
+          }
+        );
+
+        if (result.success && result.user) {
+          console.log(`✅ ${result.isNew ? 'Created' : 'Found'} project user:`, result.user);
+          
+          // Map project_user to user state format
+          const projectUser = result.user;
+          setUser({
+            ...user,
+            id: projectUser.id,
+            uid: projectUser.id,
+            walletAddress: projectUser.wallet_address,
+            apes: projectUser.apes || 0,
+            totalSpending: projectUser.total_spending || 0,
+            email: projectUser.email || "",
+            full_name: projectUser.full_name || "",
+            username: projectUser.username || "",
+            avatar_url: projectUser.avatar || "",
+            provider: projectUser.provider,
+            created_at: projectUser.created_at,
+            updated_at: projectUser.updated_at
+          });
+
+          // Load user volume for this project
+          try {
+            const { data: txs } = await supabase
+              .from('transaction')
+              .select('ogx')
+              .eq('userId', projectUser.id)
+              .eq('project_id', projectUser.project_id);
+            
+            const volume = (txs || []).reduce((sum: number, t: any) => sum + (Number(t?.ogx) || 0), 0);
+            setTotalVolumeOGX(volume);
+            console.log(`📊 Loaded volume for project ${projectUser.project_id}: ${volume}`);
+          } catch (volErr) {
+            console.warn('Failed to load user volume:', volErr);
+            setTotalVolumeOGX(0);
+          }
+        } else {
+          console.error('Failed to get or create project user:', result.error);
+          const errorMsg = result.error || 'Unknown error';
+          console.error('Full error details:', { result, walletAddress, activeProjectSlug });
+          alert(`Login failed: ${errorMsg}`);
+          return;
+        }
+        
+        setIsLogin(true);
+        setOpen(false);
+        console.log("✅ Project-specific wallet login completed successfully!");
       }
       
-      setIsLogin(true);
-      setOpen(false);
-      console.log("Simple wallet login completed successfully!");
-      
     } catch (error) {
-      console.error("Error during simple wallet login:", error);
+      console.error("Error during wallet login:", error);
+      alert('Login failed. Please try again.');
     } finally {
       setIsAutoLoggingIn(false);
     }
-  }, [connected, publicKey, isAutoLoggingIn, isLogin, setUser, setTotalVolumeOGX]);
+  }, [connected, publicKey, isAutoLoggingIn, isLogin, projectSlug, currentProject, projectLoading, isMainProject, setUser, setTotalVolumeOGX]);
 
   const handleLogin = async () => {
     // This is now just a wrapper for manual login if needed
@@ -155,10 +327,21 @@ export default function TopNav() {
       };
 
       if (!existingUser) {
-        const { error: insertError } = await supabase.from("user").insert({
+        // Get project ID from context
+        const activeProjectId = currentProject?.id || projectId || 
+          (typeof window !== 'undefined' ? parseInt(localStorage.getItem('currentProjectId') || '0') : null);
+        
+        const insertData: any = {
           ...userData,
           created_at: new Date().toISOString(),
-        });
+        };
+        
+        // Add project_id if available
+        if (activeProjectId) {
+          insertData.project_id = activeProjectId;
+        }
+        
+        const { error: insertError } = await supabase.from("user").insert(insertData);
         if (insertError) throw insertError;
       }
     } catch (error) {
@@ -171,23 +354,132 @@ export default function TopNav() {
       try {
         const response = await supabase.auth.getSession();
         const userId = response.data.session?.user.id;
-        if (userId) {
-          const userGet = await supabase
-            .from("user")
-            .select()
-            .eq("id", userId)
-            .single();
-          setUser({ ...user, ...userGet.data });
-          // Load user's spending volume (sum of OGX from transactions)
-          try {
-            const { data: txs } = await supabase
-              .from('transaction')
-              .select('ogx')
-              .eq('userId', userId);
-            const volume = (txs || []).reduce((sum: number, t: any) => sum + (Number(t?.ogx) || 0), 0);
-            setTotalVolumeOGX(volume);
-          } catch (volErr) {
-            console.warn('Failed to load user volume:', volErr);
+        // Load project-specific user if project slug is available
+        // Get project slug from context if not in URL (for root page)
+        const activeProjectSlug = projectSlug || currentProject?.slug;
+        
+        // Main project works independently - use legacy user table
+        // Sub-projects use project_users table via API
+        if (publicKey) {
+          const walletAddress = publicKey.toBase58();
+          
+          // For main project (no projectSlug), use legacy user table
+          if (isMainProject || !activeProjectSlug) {
+            console.log('🏠 Main project: Using legacy user table');
+            
+            // Try to load by userId first (if user has session)
+            let legacyUser = null;
+            if (userId) {
+              const { data: userById } = await supabase
+                .from('user')
+                .select('*')
+                .eq('id', userId)
+                .single();
+              legacyUser = userById;
+            }
+            
+            // If not found by userId, try by walletAddress (main project uses walletAddress)
+            if (!legacyUser && walletAddress) {
+              const { data: userByWallet } = await supabase
+                .from('user')
+                .select('*')
+                .eq('walletAddress', walletAddress)
+                .single();
+              legacyUser = userByWallet;
+            }
+            
+            if (legacyUser) {
+              setUser({
+                ...user,
+                id: legacyUser.id,
+                uid: legacyUser.id,
+                walletAddress: walletAddress,
+                apes: legacyUser.apes || 0,
+                totalSpending: 0, // Main project user table doesn't have total_spending column
+                email: legacyUser.email,
+                full_name: legacyUser.full_name,
+                username: legacyUser.username,
+                avatar_url: legacyUser.avatar_url,
+                provider: legacyUser.provider,
+                created_at: legacyUser.created_at,
+                updated_at: legacyUser.updated_at
+              });
+              // Set login state for main project
+              setIsLogin(true);
+              
+              // Load user volume for main project
+              try {
+                const { data: txs } = await supabase
+                  .from('transaction')
+                  .select('ogx')
+                  .eq('userId', legacyUser.id)
+                  .is('project_id', null); // Main project transactions have NULL project_id
+                
+                const volume = (txs || []).reduce((sum: number, t: any) => sum + (Number(t?.ogx) || 0), 0);
+                setTotalVolumeOGX(volume);
+                console.log(`📊 Loaded volume for main project: ${volume}`);
+              } catch (volErr) {
+                console.warn('Failed to load user volume:', volErr);
+                setTotalVolumeOGX(0);
+              }
+            }
+          } else if (activeProjectSlug && userId) {
+            // For sub-projects, use project-specific API
+            console.log(`📦 Sub-project: Using project_users for ${activeProjectSlug}`);
+            // Get email from session or generate from wallet address
+            let email = response.data.session?.user.email || null;
+            
+            // If no email from session, generate one from wallet address
+            if (!email) {
+              email = await generateEmailFromWallet(walletAddress);
+              console.log(`📧 Generated email from wallet on load: ${email}`);
+            }
+            
+            // Use new multi-tenant system - create user if doesn't exist
+            const result = await getOrCreateProjectUser(
+              activeProjectSlug,
+              walletAddress,
+              {
+                email: email,
+                full_name: undefined,
+                username: undefined,
+                avatar: undefined
+              }
+            );
+            
+            if (result.success && result.user) {
+              const projectUser = result.user;
+              setUser({
+                ...user,
+                id: projectUser.id,
+                uid: projectUser.id,
+                walletAddress: projectUser.wallet_address,
+                apes: projectUser.apes || 0,
+                totalSpending: projectUser.total_spending || 0,
+                email: projectUser.email || "",
+                full_name: projectUser.full_name || "",
+                username: projectUser.username || "",
+                avatar_url: projectUser.avatar || "",
+                provider: projectUser.provider,
+                created_at: projectUser.created_at,
+                updated_at: projectUser.updated_at
+              });
+              
+              // Load user's spending volume (sum of project token from transactions)
+              try {
+                const { data: txs } = await supabase
+                  .from('transaction')
+                  .select('ogx')
+                  .eq('userId', projectUser.id)
+                  .eq('project_id', projectUser.project_id);
+                
+                const volume = (txs || []).reduce((sum: number, t: any) => sum + (Number(t?.ogx) || 0), 0);
+                setTotalVolumeOGX(volume);
+              } catch (volErr) {
+                console.warn('Failed to load user volume:', volErr);
+                setTotalVolumeOGX(0);
+              }
+            }
           }
         }
         // Only set login state based on Supabase session if wallet is not connected
@@ -202,41 +494,328 @@ export default function TopNav() {
     onLoad();
   });
 
-  // Load user data when wallet connects (but don't create - that's handled by auto-login)
+  // Load project-specific user data when wallet connects OR when project changes
   useEffect(() => {
     const loadUserData = async () => {
-      if (connected && publicKey && isLogin) {
+      // Prevent duplicate calls
+      if (isLoadingUser.current) {
+        console.log("⏸️ Already loading user, skipping...");
+        return;
+      }
+      
+      // Get project slug from URL params first (most reliable), then fallback to currentProject or localStorage
+      let activeProjectSlug = projectSlug || currentProject?.slug || 
+        (typeof window !== 'undefined' ? localStorage.getItem('currentProjectSlug') : null);
+      let activeProjectId = projectId || 
+        (typeof window !== 'undefined' ? parseInt(localStorage.getItem('currentProjectId') || '0') || null : null);
+      
+      // Main project works independently - doesn't need project slug or ID
+      // For main project, use legacy user table
+      if (isMainProject || (!activeProjectSlug && !activeProjectId)) {
+        // Main project: use legacy user table
+        if (connected && publicKey) {
+          isLoadingUser.current = true;
+          try {
+            const walletAddress = publicKey.toBase58();
+            const sessionResponse = await supabase.auth.getSession();
+            const userId = sessionResponse.data.session?.user.id;
+            
+            if (userId) {
+              // Load from legacy user table
+              const { data: legacyUser, error: legacyError } = await supabase
+                .from('user')
+                .select('*')
+                .eq('id', userId)
+                .single();
+              
+              if (legacyUser && !legacyError) {
+                setUser({
+                  ...user,
+                  id: legacyUser.id,
+                  uid: legacyUser.id,
+                  walletAddress: walletAddress,
+                  apes: legacyUser.apes || 0,
+                  totalSpending: 0, // Main project user table doesn't have total_spending column
+                  email: legacyUser.email,
+                  full_name: legacyUser.full_name,
+                  username: legacyUser.username,
+                  avatar_url: legacyUser.avatar_url,
+                  provider: legacyUser.provider,
+                  created_at: legacyUser.created_at,
+                  updated_at: legacyUser.updated_at
+                });
+                // Set login state for main project
+                setIsLogin(true);
+                
+                // Load user volume for main project
+                try {
+                  const { data: txs } = await supabase
+                    .from('transaction')
+                    .select('ogx')
+                    .eq('userId', legacyUser.id)
+                    .is('project_id', null); // Main project transactions have NULL project_id
+                  
+                  const volume = (txs || []).reduce((sum: number, t: any) => sum + (Number(t?.ogx) || 0), 0);
+                  setTotalVolumeOGX(volume);
+                  console.log(`📊 Loaded volume for main project: ${volume}`);
+                } catch (volErr) {
+                  console.warn('Failed to load user volume:', volErr);
+                  setTotalVolumeOGX(0);
+                }
+              } else {
+                // No user found - user needs to login
+                setIsLogin(false);
+              }
+            } else {
+              // No session - user needs to login
+              setIsLogin(false);
+            }
+          } catch (error) {
+            console.error('Error loading main project user:', error);
+            setIsLogin(false);
+          } finally {
+            isLoadingUser.current = false;
+          }
+        } else {
+          // Wallet not connected
+          setIsLogin(false);
+          isLoadingUser.current = false;
+        }
+        return;
+      }
+      
+      // For sub-projects, we need both slug and ID
+      if (!activeProjectSlug || !activeProjectId) {
+        // If we have a projectSlug in URL but no projectId, we can't proceed
+        if (projectSlug && !activeProjectId) {
+          console.log('⏳ Waiting for project ID to load...', { projectSlug, activeProjectId });
+          isLoadingUser.current = false;
+          return;
+        }
+        
+        console.log('⏳ Missing project context, cannot load user data', { activeProjectSlug, activeProjectId });
+        isLoadingUser.current = false;
+        return;
+      }
+      
+      // Always reload user data to ensure we have the latest balance
+      // Don't skip reload - balance might have changed from other operations
+      // Only skip if we're in the middle of loading to prevent duplicate calls
+      if (isLoadingUser.current) {
+        console.log(`⏳ Already loading user, skipping duplicate call...`);
+        return;
+      }
+      
+      // Clear user state when project changes to prevent showing wrong project's balance
+      if (lastLoadedProjectId.current && lastLoadedProjectId.current !== activeProjectId) {
+        console.log(`🔄 Project changed from ${lastLoadedProjectId.current} to ${activeProjectId}, clearing user state`);
+        setUser({
+          ...user,
+          apes: 0,
+          totalSpending: 0
+        });
+        lastLoadedProjectId.current = null; // Reset so we reload for new project
+      }
+      
+      // Load user data if wallet is connected (regardless of isLogin state)
+      // This ensures users stay logged in after page refresh
+      if (connected && publicKey && activeProjectSlug && activeProjectId) {
+        isLoadingUser.current = true;
         try {
-          // Try to find user by wallet address (only if already logged in)
-          const { data: userData, error } = await supabase
-            .from("user")
-            .select()
-            .eq("walletAddress", publicKey.toBase58())
-            .single();
+          // Get email from auth session, or generate from wallet address
+          const sessionResponse = await supabase.auth.getSession();
+          let email = sessionResponse.data.session?.user.email || null;
+          const walletAddress = publicKey.toBase58();
           
-          if (userData && !error) {
-            console.log("Found existing user by wallet address:", userData);
-            setUser(prevUser => ({ ...prevUser, ...userData }));
-            // Also load volume for this wallet's user
+          // If no email from session, generate one from wallet address
+          if (!email) {
+            email = await generateEmailFromWallet(walletAddress);
+            console.log(`📧 Generated email from wallet on refresh: ${email}`);
+          }
+          
+          console.log(`🔄 Loading user for project: ${activeProjectSlug} (ID: ${activeProjectId})`);
+          console.log(`🔍 Wallet address: ${walletAddress}`);
+          
+          // Use getOrCreateProjectUser to ensure user exists and is up-to-date
+          const result = await getOrCreateProjectUser(
+            activeProjectSlug,
+            walletAddress,
+            {
+              email: email,
+              username: undefined,
+              avatar: undefined,
+              full_name: undefined
+            }
+          );
+          
+          // If project not found, clear stale localStorage data
+          if (!result.success && result.error?.includes('Project not found')) {
+            console.warn(`⚠️ Project ${activeProjectSlug} not found, clearing stale data`);
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('currentProjectSlug');
+              localStorage.removeItem('currentProjectId');
+            }
+            isLoadingUser.current = false;
+            return;
+          }
+          
+          if (result.success && result.user) {
+            const projectUser = result.user;
+            const userProjectId = typeof projectUser.project_id === 'string' 
+              ? parseInt(projectUser.project_id) 
+              : projectUser.project_id;
+            
+            console.log(`📊 User data from API:`, {
+              userId: projectUser.id,
+              projectId: userProjectId,
+              expectedProjectId: activeProjectId,
+              apes: projectUser.apes,
+              wallet: projectUser.wallet_address
+            });
+            
+            // Verify this user belongs to the current project
+            if (userProjectId !== activeProjectId) {
+              console.error(`❌ Project mismatch! User belongs to project ${userProjectId}, but current project is ${activeProjectId}`);
+              console.error(`   This can cause balance inconsistencies. User record:`, projectUser);
+              // Clear user state and return
+              setUser({
+                ...user,
+                apes: 0,
+                totalSpending: 0
+              });
+              return;
+            }
+            
+            // Double-check: Fetch directly from database to ensure we have the latest balance
+            console.log(`🔍 Double-checking balance from database for project_id=${userProjectId}, wallet=${walletAddress}`);
+            const { data: verifyUser, error: verifyError } = await supabase
+              .from('project_users')
+              .select('id, project_id, wallet_address, apes, total_spending')
+              .eq('project_id', userProjectId)
+              .eq('wallet_address', walletAddress)
+              .single();
+            
+            if (verifyError) {
+              console.error(`⚠️ Error verifying user balance:`, verifyError);
+            } else if (verifyUser) {
+              console.log(`✅ Verified balance from DB:`, {
+                userId: verifyUser.id,
+                projectId: verifyUser.project_id,
+                apes: verifyUser.apes,
+                totalSpending: verifyUser.total_spending
+              });
+              
+              // Use verified balance from database (most up-to-date)
+              if (verifyUser.apes !== projectUser.apes) {
+                console.warn(`⚠️ Balance mismatch! API returned ${projectUser.apes}, but DB has ${verifyUser.apes}. Using DB value.`);
+              }
+              
+              // Map project_user to user state format using verified data
+              setUser({
+                ...user,
+                id: verifyUser.id,
+                uid: verifyUser.id,
+                walletAddress: verifyUser.wallet_address,
+                apes: verifyUser.apes || 0,
+                totalSpending: verifyUser.total_spending || 0,
+                email: projectUser.email || "",
+                full_name: projectUser.full_name || "",
+                username: projectUser.username || "",
+                avatar_url: projectUser.avatar || "",
+                provider: projectUser.provider,
+                created_at: projectUser.created_at,
+                updated_at: projectUser.updated_at
+              });
+            } else {
+              // Fallback to API data if verification fails
+              console.warn(`⚠️ Could not verify user from DB, using API data`);
+              setUser({
+                ...user,
+                id: projectUser.id,
+                uid: projectUser.id,
+                walletAddress: projectUser.wallet_address,
+                apes: projectUser.apes || 0,
+                totalSpending: projectUser.total_spending || 0,
+                email: projectUser.email || "",
+                full_name: projectUser.full_name || "",
+                username: projectUser.username || "",
+                avatar_url: projectUser.avatar || "",
+                provider: projectUser.provider,
+                created_at: projectUser.created_at,
+                updated_at: projectUser.updated_at
+              });
+            }
+            
+            // Set login state to true when user data is successfully loaded
+            // This ensures users stay logged in after page refresh
+            setIsLogin(true);
+            
+            // Mark this project as loaded
+            lastLoadedProjectId.current = activeProjectId;
+            
+            // Load user volume for this project
             try {
               const { data: txs } = await supabase
                 .from('transaction')
                 .select('ogx')
-                .eq('userId', userData.id);
+                .eq('userId', projectUser.id)
+                .eq('project_id', userProjectId);
+              
               const volume = (txs || []).reduce((sum: number, t: any) => sum + (Number(t?.ogx) || 0), 0);
               setTotalVolumeOGX(volume);
+              console.log(`📊 Loaded volume for project ${userProjectId}: ${volume}`);
             } catch (volErr) {
               console.warn('Failed to load user volume:', volErr);
+              setTotalVolumeOGX(0);
             }
+          } else {
+            console.log("No project user found - will be created on next action");
+            // Clear user state if no user found for this project
+            setUser({
+              ...user,
+              apes: 0,
+              totalSpending: 0
+            });
+            lastLoadedProjectId.current = null;
           }
         } catch (error) {
-          console.error("Error loading user data:", error);
+          console.error("Error loading project user data:", error);
+        } finally {
+          isLoadingUser.current = false;
         }
+      } else if (!connected || !publicKey) {
+        // Wallet disconnected - clear login state and user data
+        console.log("Wallet disconnected, clearing login state");
+        setIsLogin(false);
+        setUser({
+          ...user,
+          apes: 0,
+          totalSpending: 0,
+          id: "",
+          uid: "",
+          walletAddress: ""
+        });
+        lastLoadedProjectId.current = null;
+        isLoadingUser.current = false;
+      } else if (!activeProjectSlug || !activeProjectId) {
+        // Clear user state if no project context
+        if (user.apes > 0 || user.totalSpending > 0) {
+          console.log("No project context, clearing user state");
+          setUser({
+            ...user,
+            apes: 0,
+            totalSpending: 0
+          });
+          lastLoadedProjectId.current = null;
+        }
+        isLoadingUser.current = false;
+      } else {
+        isLoadingUser.current = false;
       }
     };
 
     loadUserData();
-  }, [connected, publicKey, isLogin, setUser]);
+  }, [connected, publicKey, projectSlug, currentProject, projectId, setUser]); // Removed isLogin from deps to allow auto-login on wallet connect
 
   const logout = async () => {
     try {
@@ -249,7 +828,12 @@ export default function TopNav() {
       }
 
       await supabase.auth.signOut();
-      router.push("/");
+      // Redirect to root or project home based on current route
+      if (projectSlug) {
+        router.push(`/${projectSlug}`);
+      } else {
+        router.push("/");
+      }
       setIsLogin(false);
       setIsAutoLoggingIn(false);
       hasAttemptedLogin.current = false;
@@ -310,13 +894,14 @@ export default function TopNav() {
       {open && <div className="backdrop-blur"></div>}
       {/* Logo and Mobile Menu Button */}
       <div className="w-full md:w-1/4 flex items-center justify-between md:justify-start">
-        <Link href={"/"} className="relative inline-block">
+        <Link href={getNavPath("/")} className="relative inline-block">
           <Image
-            src={"/logo.png"}
+            src={logoUrl}
             alt="logo"
             width={600}
             height={400}
-            className="w-full h-16 md:h-24"
+            className="w-full h-16 md:h-24 object-contain"
+            unoptimized={logoUrl.startsWith("http")}
           />
           <span className="absolute -top-1 -right-1 md:-top-2 md:-right-2 bg-red-600 text-white text-[10px] md:text-[11px] leading-none px-1 md:mt-4 mt-0  py-0.5 rounded">BETA</span>
         </Link>
@@ -359,19 +944,19 @@ export default function TopNav() {
       >
         <div className="flex flex-col md:flex-row gap-4 md:gap-8 w-full md:w-auto items-center">
           <Link
-            href="/"
+            href={getNavPath("/")}
             className="text-base font-bold text-white hover:text-gray-300 transition-colors w-full text-center py-2 md:py-0"
           >
             Spinloot
           </Link>
           <Link
-            href="/live-draw"
+            href={getNavPath("/live-draw")}
             className="text-base font-bold text-white hover:text-gray-300 transition-colors w-full text-center py-2 md:py-0"
           >
             Jackpot
           </Link>
           <Link
-            href="/leaderboard"
+            href={getNavPath("/leaderboard")}
             className="text-base font-bold text-white hover:text-gray-300 transition-colors w-full text-center py-2 md:py-0"
           >
             Leaderboard
@@ -394,12 +979,12 @@ export default function TopNav() {
                 </div>
                 <div className="items flex justify-between text-white">
                   <div className="text-xs pt-2 pb-2">
-                    <p>OGX</p>
+                    <p>{projectTokenSymbol}</p>
                     <p className="text-center">{formatNumber(user?.apes)}</p>
                   </div>
                   <div className="text-xs pt-2">
-                    <p className="text-center">Volume</p>
-                    <p className="text-center">{formatNumber(totalVolumeOGX)}</p>
+                    <p className="text-center">Volume ({projectTokenSymbol})</p>
+                    <p className="text-center">{totalVolumeOGX.toFixed(3)}</p>
                   </div>
                   <div className="text-xs pt-2">
                     <p>SOL</p>
