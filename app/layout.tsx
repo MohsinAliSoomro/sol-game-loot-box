@@ -4,13 +4,10 @@ import "./globals.css";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "./Components/ThemeProvider";
 import Footer from "./Components/Footer";
-import SidebarCart from "./Components/SidebarCart";
-import PurchaseModal from "./Components/Purchase";
-import WithdrawModal from "./Components/Withdraw";
 import dynamic from "next/dynamic";
 import { ProjectProvider } from "@/lib/project-context";
-// import { SolanaWalletProvider } from "./Components/SolanaWalletProvider";
-// Dynamically import the component
+
+// Dynamically import heavy components to reduce initial bundle size
 const SolanaWalletProvider = dynamic(
   () => import("./Components/SolanaWalletProvider"),
   { ssr: false } // disable SSR because wallet providers usually depend on window
@@ -19,6 +16,22 @@ const SolanaWalletProvider = dynamic(
 const WebsiteTheme = dynamic(
   () => import("./Components/WebsiteTheme"),
   { ssr: false } // disable SSR because theme needs browser APIs
+);
+
+// Lazy load cart and modals - only load when needed
+const SidebarCart = dynamic(
+  () => import("./Components/SidebarCart"),
+  { ssr: false }
+);
+
+const PurchaseModal = dynamic(
+  () => import("./Components/Purchase"),
+  { ssr: false }
+);
+
+const WithdrawModal = dynamic(
+  () => import("./Components/Withdraw"),
+  { ssr: false }
 );
 
 // const fontSans = Princess_Sofia({
