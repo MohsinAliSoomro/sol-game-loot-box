@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useProject } from "@/lib/project-context";
 import Loader from "@/app/Components/Loader";
 
-const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001/api";
+const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_URL
 
 // Global flag to prevent multiple simultaneous checks
 const globalAuthCheckInProgress = new Map<string, boolean | number>();

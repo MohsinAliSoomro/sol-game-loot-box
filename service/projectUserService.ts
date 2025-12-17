@@ -5,7 +5,7 @@
  * Ensures same wallet gets different profiles per project
  */
 
-const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:3001';
+const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL
 
 export interface ProjectUser {
   id: string;

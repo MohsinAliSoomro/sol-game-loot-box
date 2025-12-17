@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useProject } from "@/lib/project-context";
 import Loader from "@/app/Components/Loader";
 
-const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001/api";
+const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_URL
 
 // Global cache to track completed auth checks - survives re-renders and component remounts
 // Key: slugKey, Value: { completed: boolean, timestamp: number, adminUser: any }
