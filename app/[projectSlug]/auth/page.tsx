@@ -5,7 +5,13 @@ import { useParams, useRouter } from "next/navigation";
 import { useProject } from "@/lib/project-context";
 import Loader from "@/app/Components/Loader";
 
-const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_URL
+// Ensure BACKEND_API_URL includes /api if not already present
+const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_API_URL || '';
+const BACKEND_API_URL = BACKEND_BASE_URL.endsWith('/api') 
+  ? BACKEND_BASE_URL 
+  : BACKEND_BASE_URL.endsWith('/') 
+    ? `${BACKEND_BASE_URL}api` 
+    : `${BACKEND_BASE_URL}/api`;
 
 // Global flag to prevent multiple simultaneous checks
 const globalAuthCheckInProgress = new Map<string, boolean | number>();
