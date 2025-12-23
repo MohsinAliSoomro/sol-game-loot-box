@@ -43,11 +43,12 @@ const getProducts = async () => {
   const [mustSpin, setMustSpin] = useState(false);
   const [prizeNumber, setPrizeNumber] = useState(0);
   const [openModal, setOpenModal] = useState(false);
-  const pathname = useParams();
+  const slug = params?.slug as string | undefined;
 
   const newData = useMemo(() => {
-    return products?.data?.find((i) => i.id === Number(pathname.slug));
-  }, [pathname.slug, products]);
+    if (!slug) return undefined;
+    return products?.data?.find((i) => i.id === Number(slug));
+  }, [slug, products]);
 
   const handleSpinClick = () => {
     if (!mustSpin) {

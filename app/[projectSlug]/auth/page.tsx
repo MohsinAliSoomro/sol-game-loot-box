@@ -490,7 +490,7 @@ export default function ProjectAuthPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-3 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-white"
+                className="w-full px-4 py-3 rounded-lg text-white placeholder-gray-300 bg-white/20 border border-white/30 focus:outline-none focus:ring-2 focus:ring-white"
                 placeholder="admin@example.com"
               />
             </div>
@@ -505,7 +505,7 @@ export default function ProjectAuthPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full px-4 py-3 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-white"
+                className="w-full px-4 py-3 rounded-lg text-white placeholder-gray-300 bg-white/20 border border-white/30 focus:outline-none focus:ring-2 focus:ring-white"
                 placeholder="••••••••"
               />
             </div>

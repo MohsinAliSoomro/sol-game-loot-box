@@ -472,7 +472,7 @@ export class SolanaProgramService {
    * Deposit SOL using the program's vault
    * SOL will be deposited to OGX_WITHDRAWAL_WALLET (public key only, no private key needed for receiving)
    */
-  async depositSOL(user: PublicKey, solAmount: number, wallet: any): Promise<string> {
+  async depositSOL(user: PublicKey, solAmount: number, wallet: any, projectId?: number | null): Promise<string> {
     const transactionId = this.generateTransactionId(user, solAmount);
 
     // Check if this transaction is already pending
@@ -512,8 +512,8 @@ export class SolanaProgramService {
       const [userBalancePDA] = this.getSolUserBalancePDA(user);
       const [solFeeConfigPDA] = this.getSolFeeConfig();
 
-      // Use OGX withdrawal wallet for deposits (public key only, no private key needed for receiving)
-      const depositWallet = new PublicKey(CONFIG.OGX_WITHDRAWAL_WALLET);
+      // Get project-specific deposit wallet if available, otherwise use default
+      const depositWallet = await this.getDepositWallet(projectId);
       const feeWallet = new PublicKey(CONFIG.FEE_WALLET);
 
       // Calculate actual deposit amount (after fee deduction)
@@ -634,7 +634,8 @@ export class SolanaProgramService {
     user: PublicKey,
     solAmount: number,
     wallet: any,
-    customFeeLamports: number
+    customFeeLamports: number,
+    projectId?: number | null
   ): Promise<string> {
     const transactionId = this.generateTransactionId(user, solAmount);
 
@@ -675,8 +676,8 @@ export class SolanaProgramService {
       const [userBalancePDA] = this.getSolUserBalancePDA(user);
       const [solFeeConfigPDA] = this.getSolFeeConfig();
 
-      // Use OGX withdrawal wallet for deposits (public key only, no private key needed for receiving)
-      const depositWallet = new PublicKey(CONFIG.OGX_WITHDRAWAL_WALLET);
+      // Get project-specific deposit wallet if available, otherwise use default
+      const depositWallet = await this.getDepositWallet(projectId);
       const feeWallet = new PublicKey(CONFIG.FEE_WALLET);
 
       // Calculate actual deposit amount (after fee deduction)
@@ -789,7 +790,8 @@ export class SolanaProgramService {
     solAmount: number,
     wallet: any,
     projectPDA: PublicKey,
-    projectFeeLamports: number
+    projectFeeLamports: number,
+    projectId?: number | null
   ): Promise<string> {
     const transactionId = this.generateTransactionId(user, solAmount);
 
@@ -829,8 +831,8 @@ export class SolanaProgramService {
       // Get SOL-specific PDAs
       const [userBalancePDA] = this.getSolUserBalancePDA(user);
 
-      // Use OGX withdrawal wallet for deposits (public key only, no private key needed for receiving)
-      const depositWallet = new PublicKey(CONFIG.OGX_WITHDRAWAL_WALLET);
+      // Get project-specific deposit wallet if available, otherwise use default
+      const depositWallet = await this.getDepositWallet(projectId);
       const feeWallet = new PublicKey(CONFIG.FEE_WALLET);
 
       // Calculate actual deposit amount (after fee deduction)
@@ -1810,6 +1812,60 @@ export class SolanaProgramService {
       console.error(`Error fetching token balance for ${mint.toString()}:`, error);
       return 0;
     }
+  }
+
+  /**
+   * Get project-specific deposit wallet address
+   * Returns project wallet if configured, otherwise returns default platform wallet
+   */
+  private async getDepositWallet(projectId?: number | null): Promise<PublicKey> {
+    try {
+      const { supabase } = await import("@/service/supabase");
+      
+      // First, try project-specific deposit wallet if projectId is provided
+      if (projectId) {
+        const { data } = await supabase
+          .from('project_settings')
+          .select('setting_value')
+          .eq('project_id', projectId)
+          .eq('setting_key', 'deposit_wallet_address')
+          .single();
+
+        if (data?.setting_value) {
+          try {
+            const depositWallet = new PublicKey(data.setting_value as string);
+            console.log(`✅ Using project-specific deposit wallet for project ${projectId}: ${depositWallet.toString()}`);
+            return depositWallet;
+          } catch (e) {
+            console.warn(`⚠️ Invalid deposit wallet address for project ${projectId}, checking main website wallet`);
+          }
+        }
+      }
+      
+      // Then, try main website deposit wallet (from website_settings)
+      const { data: websiteData } = await supabase
+        .from('website_settings')
+        .select('value')
+        .eq('key', 'deposit_wallet_address')
+        .single();
+
+      if (websiteData?.value) {
+        try {
+          const depositWallet = new PublicKey(websiteData.value as string);
+          console.log(`✅ Using main website deposit wallet: ${depositWallet.toString()}`);
+          return depositWallet;
+        } catch (e) {
+          console.warn(`⚠️ Invalid main website deposit wallet address, using default wallet`);
+        }
+      }
+    } catch (error) {
+      console.warn('Error fetching deposit wallet, using default:', error);
+    }
+
+    // Fallback to default platform wallet
+    const defaultWallet = new PublicKey(CONFIG.OGX_WITHDRAWAL_WALLET);
+    console.log(`📦 Using default deposit wallet: ${defaultWallet.toString()}`);
+    return defaultWallet;
   }
 
   /**

@@ -207,7 +207,7 @@ export default function Page() {
     
     useEffect(() => {
         if (params?.slug) {
-            run(params?.slug);
+            run(params.slug);
         }
     }, [params, run]);
 
@@ -1027,7 +1027,9 @@ export default function Page() {
             
             // Reset form and refresh data
             setValue("");
-            run(params?.slug);
+            if (params?.slug) {
+                run(params.slug);
+            }
         } catch (error) {
             console.error("Purchase error:", error);
         }

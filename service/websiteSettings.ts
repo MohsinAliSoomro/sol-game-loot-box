@@ -22,8 +22,25 @@ export const getImageUrl = (path: string | null): string | null => {
   return `${supabaseUrl}/storage/v1/object/public/apes-bucket/${path}`;
 };
 
-export const getWebsiteLogo = async (): Promise<string | null> => {
+export const getWebsiteLogo = async (projectId?: number | null): Promise<string | null> => {
   try {
+    // If projectId is provided, fetch from project_settings (project-specific)
+    if (projectId) {
+      const { data, error } = await supabase
+        .from("project_settings")
+        .select("setting_value")
+        .eq("project_id", projectId)
+        .eq("setting_key", "logo")
+        .single();
+
+      if (error || !data?.setting_value) {
+        return null;
+      }
+
+      return getImageUrl(data.setting_value);
+    }
+
+    // Fallback to website_settings for main project (legacy)
     const { data, error } = await supabase
       .from("website_settings")
       .select("value")
@@ -41,8 +58,30 @@ export const getWebsiteLogo = async (): Promise<string | null> => {
   }
 };
 
-export const getThemeSettings = async (): Promise<ThemeSettings | null> => {
+export const getThemeSettings = async (projectId?: number | null): Promise<ThemeSettings | null> => {
   try {
+    // If projectId is provided, fetch from project_settings (project-specific)
+    if (projectId) {
+      const { data, error } = await supabase
+        .from("project_settings")
+        .select("setting_value")
+        .eq("project_id", projectId)
+        .eq("setting_key", "theme")
+        .single();
+
+      if (error || !data?.setting_value) {
+        return null;
+      }
+
+      // setting_value might be a JSON string or already an object
+      const themeValue = typeof data.setting_value === 'string' 
+        ? JSON.parse(data.setting_value) 
+        : data.setting_value;
+      
+      return themeValue;
+    }
+
+    // Fallback to website_settings for main project (legacy)
     const { data, error } = await supabase
       .from("website_settings")
       .select("value")
@@ -60,13 +99,22 @@ export const getThemeSettings = async (): Promise<ThemeSettings | null> => {
   }
 };
 
-export const getSliderImages = async (): Promise<SliderImage[]> => {
+export const getSliderImages = async (projectId?: number | null): Promise<SliderImage[]> => {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from("slider_images")
       .select("*")
-      .eq("is_active", true)
-      .order("order_index", { ascending: true });
+      .eq("is_active", true);
+
+    // Filter by project_id if provided (project-specific)
+    if (projectId) {
+      query = query.eq("project_id", projectId);
+    } else {
+      // For main project, only get images without project_id (legacy) or null project_id
+      query = query.is("project_id", null);
+    }
+
+    const { data, error } = await query.order("order_index", { ascending: true });
 
     if (error) {
       console.error("Supabase error fetching slider images:", error);
@@ -101,8 +149,30 @@ export interface LootboxSettings {
   boxBackgroundColor: string;
 }
 
-export const getLootboxSettings = async (): Promise<LootboxSettings | null> => {
+export const getLootboxSettings = async (projectId?: number | null): Promise<LootboxSettings | null> => {
   try {
+    // If projectId is provided, fetch from project_settings (project-specific)
+    if (projectId) {
+      const { data, error } = await supabase
+        .from("project_settings")
+        .select("setting_value")
+        .eq("project_id", projectId)
+        .eq("setting_key", "lootbox")
+        .single();
+
+      if (error || !data?.setting_value) {
+        return null;
+      }
+
+      // setting_value might be a JSON string or already an object
+      const lootboxValue = typeof data.setting_value === 'string' 
+        ? JSON.parse(data.setting_value) 
+        : data.setting_value;
+      
+      return lootboxValue;
+    }
+
+    // Fallback to website_settings for main project (legacy)
     const { data, error } = await supabase
       .from("website_settings")
       .select("value")
@@ -130,8 +200,30 @@ export interface WheelSettings {
   backgroundImage?: string | null;
 }
 
-export const getWheelSettings = async (): Promise<WheelSettings | null> => {
+export const getWheelSettings = async (projectId?: number | null): Promise<WheelSettings | null> => {
   try {
+    // If projectId is provided, fetch from project_settings (project-specific)
+    if (projectId) {
+      const { data, error } = await supabase
+        .from("project_settings")
+        .select("setting_value")
+        .eq("project_id", projectId)
+        .eq("setting_key", "wheel")
+        .single();
+
+      if (error || !data?.setting_value) {
+        return null;
+      }
+
+      // setting_value might be a JSON string or already an object
+      const wheelValue = typeof data.setting_value === 'string' 
+        ? JSON.parse(data.setting_value) 
+        : data.setting_value;
+      
+      return wheelValue;
+    }
+
+    // Fallback to website_settings for main project (legacy)
     const { data, error } = await supabase
       .from("website_settings")
       .select("value")

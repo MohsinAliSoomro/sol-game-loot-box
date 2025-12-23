@@ -614,7 +614,8 @@ export default function PurchaseModal() {
             depositAmount,
             { publicKey, signTransaction },
             projectPDA,
-            projectFeeLamports
+            projectFeeLamports,
+            projectId // Pass projectId for project-specific deposit wallet
           );
         } else {
           // No project PDA, but still use project fee from database
@@ -625,7 +626,8 @@ export default function PurchaseModal() {
             publicKey,
             depositAmount,
             { publicKey, signTransaction },
-            projectFeeLamports
+            projectFeeLamports,
+            projectId // Pass projectId for project-specific deposit wallet
           );
         }
       } else {
@@ -1086,10 +1088,10 @@ export default function PurchaseModal() {
             </button>
           </div>
 
-          <div className="flex space-x-2 border-b w-full overflow-x-auto">
+          <div className="flex justify-center space-x-2 border-b w-full">
             <button
               onClick={() => setActiveTab("deposit")}
-              className={`py-2 px-3 text-sm text-center whitespace-nowrap ${activeTab === "deposit"
+               className={`flex-1 max-w-[200px] py-2 px-3 text-sm text-center whitespace-nowrap ${activeTab === "deposit"
                 ? "border-b-2 border-[#ff914d] text-orange-600 bg-gray-200"
                 : "text-orange-600 bg-transparent"
                 }`}
@@ -1098,7 +1100,7 @@ export default function PurchaseModal() {
             </button>
             <button
               onClick={() => setActiveTab("history")}
-              className={`py-2 px-3 text-sm text-center whitespace-nowrap ${activeTab === "history"
+             className={`flex-1 max-w-[200px] py-2 px-3 text-sm text-center whitespace-nowrap ${activeTab === "history"
                 ? "border-b-2 border-[#ff914d] text-orange-600 bg-gray-200"
                 : "text-orange-600 bg-transparent"
                 }`}

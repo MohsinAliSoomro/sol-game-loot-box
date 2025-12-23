@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { getSliderImages, SliderImage } from '@/service/websiteSettings';
+import { useProject } from '@/lib/project-context';
 
 // Fallback images if no slider images are found in database
 const fallbackImages = [
@@ -11,6 +12,8 @@ const fallbackImages = [
 ];
 
 export default function ImageSlider() {
+    const { getProjectId } = useProject();
+    const projectId = getProjectId();
     const [currentIndex, setCurrentIndex] = useState(0);
     const [sliderImages, setSliderImages] = useState<SliderImage[]>([]);
     const [loading, setLoading] = useState(true);
@@ -18,7 +21,8 @@ export default function ImageSlider() {
     const fetchSliderImages = async () => {
         try {
             setLoading(true);
-            const images = await getSliderImages();
+            // Pass project ID to fetch project-specific slider images
+            const images = await getSliderImages(projectId || undefined);
             console.log('Fetched slider images:', images); // Debug log
             if (images && images.length > 0) {
                 setSliderImages(images);
@@ -54,7 +58,7 @@ export default function ImageSlider() {
         }, 30000);
 
         return () => clearInterval(refreshInterval);
-    }, []);
+    }, [projectId]); // Refetch when project changes
 
     // Reset to first image when sliderImages change
     useEffect(() => {

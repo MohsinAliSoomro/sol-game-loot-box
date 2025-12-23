@@ -63,11 +63,15 @@ export default function WebsiteSettings() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   const [currentLogo, setCurrentLogo] = useState<string | null>(null);
   const [sliderImages, setSliderImages] = useState<any[]>([]);
   const [sliderFile1, setSliderFile1] = useState<File | null>(null);
   const [sliderFile2, setSliderFile2] = useState<File | null>(null);
   const [sliderFile3, setSliderFile3] = useState<File | null>(null);
+  const [sliderPreviewUrl1, setSliderPreviewUrl1] = useState<string | null>(null);
+  const [sliderPreviewUrl2, setSliderPreviewUrl2] = useState<string | null>(null);
+  const [sliderPreviewUrl3, setSliderPreviewUrl3] = useState<string | null>(null);
   const [uploadingSlot, setUploadingSlot] = useState<number | null>(null);
   const [themeSettings, setThemeSettings] = useState({
     primaryColor: '#FF6B35',
@@ -95,11 +99,35 @@ export default function WebsiteSettings() {
   const [adminPrivateKey, setAdminPrivateKey] = useState('');
   const [savingAdminKey, setSavingAdminKey] = useState(false);
   const { adminWalletAddress, loading: adminWalletLoading, error: adminWalletError, refreshAdminWallet } = useAdminWallet();
+  
+  // Deposit wallet settings
+  const [depositWalletAddress, setDepositWalletAddress] = useState('');
+  const [savingDepositWallet, setSavingDepositWallet] = useState(false);
+  const [showDepositWalletSettings, setShowDepositWalletSettings] = useState(false);
 
   useEffect(() => {
     fetchSettings();
     fetchAdminKey();
+    fetchDepositWallet();
   }, [projectId]);
+
+  // Cleanup preview URLs on unmount
+  useEffect(() => {
+    return () => {
+      if (logoPreviewUrl) {
+        URL.revokeObjectURL(logoPreviewUrl);
+      }
+      if (sliderPreviewUrl1) {
+        URL.revokeObjectURL(sliderPreviewUrl1);
+      }
+      if (sliderPreviewUrl2) {
+        URL.revokeObjectURL(sliderPreviewUrl2);
+      }
+      if (sliderPreviewUrl3) {
+        URL.revokeObjectURL(sliderPreviewUrl3);
+      }
+    };
+  }, [logoPreviewUrl, sliderPreviewUrl1, sliderPreviewUrl2, sliderPreviewUrl3]);
 
   const fetchSettings = async () => {
     if (!projectId) return;
@@ -293,6 +321,11 @@ export default function WebsiteSettings() {
 
       setCurrentLogo(filePath);
       setLogoFile(null);
+      // Clear preview URL after successful upload
+      if (logoPreviewUrl) {
+        URL.revokeObjectURL(logoPreviewUrl);
+        setLogoPreviewUrl(null);
+      }
       alert('Logo uploaded successfully!');
     } catch (error: any) {
       console.error('Error uploading logo:', error);
@@ -317,17 +350,26 @@ export default function WebsiteSettings() {
 
       const { error: uploadError } = await supabase.storage
         .from('apes-bucket')
-        .upload(filePath, file);
+        .upload(filePath, file, { upsert: true });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('Supabase storage upload error:', uploadError);
+        throw new Error(uploadError.message || 'Failed to upload image to storage');
+      }
 
       // Check if image already exists for this slot in this project
-      const { data: existingImage } = await supabase
+      const { data: existingImages, error: checkError } = await supabase
         .from('slider_images')
         .select('*')
         .eq('project_id', projectId)
-        .eq('order_index', slotNumber)
-        .single();
+        .eq('order_index', slotNumber);
+
+      if (checkError) {
+        console.error('Error checking for existing slider image:', checkError);
+        throw new Error(checkError.message || 'Failed to check for existing image');
+      }
+
+      const existingImage = existingImages && existingImages.length > 0 ? existingImages[0] : null;
 
       if (existingImage) {
         const { data, error: dbError } = await supabase
@@ -340,7 +382,10 @@ export default function WebsiteSettings() {
           .eq('project_id', projectId) // Ensure we only update this project's image
           .select();
 
-        if (dbError) throw dbError;
+        if (dbError) {
+          console.error('Error updating slider image:', dbError);
+          throw new Error(dbError.message || 'Failed to update slider image in database');
+        }
         setSliderImages(prev => 
           prev.map(img => img.id === existingImage.id ? data[0] : img)
         );
@@ -355,25 +400,49 @@ export default function WebsiteSettings() {
           }])
           .select();
 
-        if (dbError) throw dbError;
+        if (dbError) {
+          console.error('Error inserting slider image:', dbError);
+          throw new Error(dbError.message || 'Failed to save slider image to database');
+        }
         setSliderImages(prev => {
           const updated = [...prev, data[0]];
           return updated.sort((a, b) => a.order_index - b.order_index);
         });
       }
 
-      if (slotNumber === 1) setSliderFile1(null);
-      if (slotNumber === 2) setSliderFile2(null);
-      if (slotNumber === 3) setSliderFile3(null);
+      // Clear file and preview after successful upload
+      if (slotNumber === 1) {
+        setSliderFile1(null);
+        if (sliderPreviewUrl1) {
+          URL.revokeObjectURL(sliderPreviewUrl1);
+          setSliderPreviewUrl1(null);
+        }
+      }
+      if (slotNumber === 2) {
+        setSliderFile2(null);
+        if (sliderPreviewUrl2) {
+          URL.revokeObjectURL(sliderPreviewUrl2);
+          setSliderPreviewUrl2(null);
+        }
+      }
+      if (slotNumber === 3) {
+        setSliderFile3(null);
+        if (sliderPreviewUrl3) {
+          URL.revokeObjectURL(sliderPreviewUrl3);
+          setSliderPreviewUrl3(null);
+        }
+      }
       
       alert(`Slider Image ${slotNumber} uploaded successfully!`);
+      // Refresh the slider images list
+      fetchSettings();
     } catch (error: any) {
       console.error('Error uploading slider image:', error);
-      alert(`Error uploading Slider Image ${slotNumber}. Please try again.`);
+      const errorMessage = error?.message || error?.error?.message || 'Unknown error occurred';
+      alert(`Error uploading Slider Image ${slotNumber}: ${errorMessage}. Please try again.`);
     } finally {
       setSaving(false);
       setUploadingSlot(null);
-      fetchSettings();
     }
   };
 
@@ -715,6 +784,73 @@ export default function WebsiteSettings() {
     }
   };
 
+  const fetchDepositWallet = async () => {
+    if (!projectId) return;
+    
+    try {
+      // Fetch deposit wallet address from project_settings
+      const { data } = await supabase
+        .from('project_settings')
+        .select('setting_value')
+        .eq('project_id', projectId)
+        .eq('setting_key', 'deposit_wallet_address')
+        .single();
+
+      if (data?.setting_value) {
+        setDepositWalletAddress(data.setting_value as string);
+      }
+    } catch (error) {
+      console.error('Error fetching deposit wallet:', error);
+    }
+  };
+
+  const handleSaveDepositWallet = async () => {
+    if (!depositWalletAddress || depositWalletAddress.trim() === '' || !projectId) {
+      alert('Please enter a valid wallet address');
+      return;
+    }
+
+    try {
+      // Validate wallet address format
+      const { PublicKey } = await import('@solana/web3.js');
+      try {
+        new PublicKey(depositWalletAddress.trim());
+      } catch (e) {
+        alert('Invalid Solana wallet address format. Please check and try again.');
+        return;
+      }
+      
+      setSavingDepositWallet(true);
+      
+      // Save to project_settings (project-scoped)
+      const { error } = await supabase
+        .from('project_settings')
+        .upsert({
+          project_id: projectId,
+          setting_key: 'deposit_wallet_address',
+          setting_value: depositWalletAddress.trim()
+        }, {
+          onConflict: 'project_id,setting_key'
+        });
+
+      if (error) {
+        console.error('Error saving deposit wallet:', error);
+        alert('Error saving deposit wallet address. Please try again.');
+        setSavingDepositWallet(false);
+        return;
+      }
+
+      alert(`✅ Deposit wallet address saved successfully!\n\nWallet Address: ${depositWalletAddress.trim()}\n\nAll SOL and token deposits will now be sent to this wallet.`);
+      setShowDepositWalletSettings(false);
+      setSavingDepositWallet(false);
+      await fetchDepositWallet();
+    } catch (error: any) {
+      console.error('Error validating wallet address:', error);
+      alert('Invalid wallet address format. Please check and try again.');
+      setSavingDepositWallet(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-6">
@@ -737,7 +873,19 @@ export default function WebsiteSettings() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">Website Logo</h2>
           
-          {currentLogo && (
+          {/* Show preview if file is selected, otherwise show current logo */}
+          {logoPreviewUrl ? (
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">Preview (New Logo):</p>
+              <div className="inline-block p-4 bg-gray-50 rounded-lg border-2 border-orange-500 border-dashed">
+                <img 
+                  src={logoPreviewUrl} 
+                  alt="Logo Preview" 
+                  className="max-h-32 max-w-64 object-contain"
+                />
+              </div>
+            </div>
+          ) : currentLogo && (
             <div className="mb-4">
               <p className="text-sm text-gray-600 mb-2">Current Logo:</p>
               <div className="inline-block p-4 bg-gray-50 rounded-lg border border-gray-200">
@@ -754,7 +902,26 @@ export default function WebsiteSettings() {
             <input
               type="file"
               accept="image/*"
-              onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
+              onChange={(e) => {
+                const file = e.target.files?.[0] || null;
+                setLogoFile(file);
+                
+                // Create preview URL for selected file
+                if (file) {
+                  // Clean up previous preview URL if exists
+                  if (logoPreviewUrl) {
+                    URL.revokeObjectURL(logoPreviewUrl);
+                  }
+                  const previewUrl = URL.createObjectURL(file);
+                  setLogoPreviewUrl(previewUrl);
+                } else {
+                  // Clear preview if no file selected
+                  if (logoPreviewUrl) {
+                    URL.revokeObjectURL(logoPreviewUrl);
+                    setLogoPreviewUrl(null);
+                  }
+                }
+              }}
               className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
             />
             <button
@@ -778,13 +945,25 @@ export default function WebsiteSettings() {
               const currentImage = sliderImages.find(img => img.order_index === slotNumber);
               const fileState = slotNumber === 1 ? sliderFile1 : slotNumber === 2 ? sliderFile2 : sliderFile3;
               const setFileState = slotNumber === 1 ? setSliderFile1 : slotNumber === 2 ? setSliderFile2 : setSliderFile3;
+              const previewUrl = slotNumber === 1 ? sliderPreviewUrl1 : slotNumber === 2 ? sliderPreviewUrl2 : sliderPreviewUrl3;
+              const setPreviewUrl = slotNumber === 1 ? setSliderPreviewUrl1 : slotNumber === 2 ? setSliderPreviewUrl2 : setSliderPreviewUrl3;
               const isUploading = uploadingSlot === slotNumber;
 
               return (
                 <div key={slotNumber} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
                   <div className="flex items-start space-x-4">
                     <div className="flex-shrink-0">
-                      {currentImage ? (
+                      {/* Show preview if file is selected, otherwise show current image or placeholder */}
+                      {previewUrl ? (
+                        <div className="relative">
+                          <img 
+                            src={previewUrl} 
+                            alt={`Slider Image ${slotNumber} Preview`}
+                            className="w-32 h-20 object-cover rounded-lg border-2 border-orange-500 border-dashed"
+                          />
+                          <span className="absolute bottom-0 left-0 right-0 bg-orange-500/80 text-white text-xs px-1 py-0.5 text-center">Preview</span>
+                        </div>
+                      ) : currentImage ? (
                         <div className="relative">
                           <img 
                             src={getImageUrl(currentImage.image_path)} 
@@ -816,7 +995,26 @@ export default function WebsiteSettings() {
                           <input
                             type="file"
                             accept="image/*"
-                            onChange={(e) => setFileState(e.target.files?.[0] || null)}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0] || null;
+                              setFileState(file);
+                              
+                              // Create preview URL for selected file
+                              if (file) {
+                                // Clean up previous preview URL if exists
+                                if (previewUrl) {
+                                  URL.revokeObjectURL(previewUrl);
+                                }
+                                const preview = URL.createObjectURL(file);
+                                setPreviewUrl(preview);
+                              } else {
+                                // Clear preview if no file selected
+                                if (previewUrl) {
+                                  URL.revokeObjectURL(previewUrl);
+                                  setPreviewUrl(null);
+                                }
+                              }
+                            }}
                             className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 text-sm"
                             id={`slider-input-${slotNumber}`}
                           />
@@ -1385,6 +1583,50 @@ export default function WebsiteSettings() {
             </div>
           )}
         </div>
+
+        {/* Deposit Wallet Settings Section */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800">Deposit Wallet Settings</h2>
+              <p className="text-sm text-gray-600 mt-1">Configure the wallet address where SOL and token deposits will be received</p>
+            </div>
+            <button
+              onClick={() => setShowDepositWalletSettings(true)}
+              className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors flex items-center space-x-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+              </svg>
+              <span>Configure Deposit Wallet</span>
+            </button>
+          </div>
+
+          {depositWalletAddress && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <p className="text-sm text-green-800">
+                <strong>✅ Current Deposit Wallet:</strong>
+              </p>
+              <p className="text-xs font-mono text-green-700 mt-1 break-all">
+                {depositWalletAddress}
+              </p>
+              <p className="text-xs text-green-600 mt-2">
+                All SOL and token deposits from users will be sent to this wallet address.
+              </p>
+            </div>
+          )}
+
+          {!depositWalletAddress && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <p className="text-sm text-yellow-800">
+                <strong>⚠️ No Deposit Wallet Configured</strong>
+              </p>
+              <p className="text-xs text-yellow-700 mt-1">
+                Please configure a deposit wallet address. If not configured, deposits will use the default platform wallet.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Admin Wallet Settings Modal */}
@@ -1452,6 +1694,78 @@ export default function WebsiteSettings() {
                   className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
                   {savingAdminKey ? 'Saving...' : 'Save Admin Key'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Deposit Wallet Settings Modal */}
+      {showDepositWalletSettings && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-lg max-w-2xl w-full p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-semibold text-gray-800">Deposit Wallet Settings</h2>
+              <button 
+                onClick={() => setShowDepositWalletSettings(false)}
+                className="text-gray-400 hover:text-gray-500"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-800">
+                  <strong>ℹ️ Information:</strong> This is the wallet address where all SOL and token deposits from users will be sent. 
+                  You only need to provide the public wallet address (not the private key).
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Deposit Wallet Address (Public Key)
+                </label>
+                <input
+                  type="text"
+                  value={depositWalletAddress}
+                  onChange={(e) => setDepositWalletAddress(e.target.value)}
+                  placeholder="Enter Solana wallet address (e.g., 5arqJxyZFKf4UCCL9JXa1nf79J4kkxzAXNu2icRfnBB6)"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-green-500 font-mono text-sm"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  This wallet will receive all SOL and token deposits from users. Make sure you have access to this wallet.
+                </p>
+              </div>
+
+              {depositWalletAddress && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <p className="text-sm text-gray-800">
+                    <strong>Wallet Address Preview:</strong>
+                  </p>
+                  <p className="text-xs font-mono text-gray-700 mt-1 break-all">
+                    {depositWalletAddress}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowDepositWalletSettings(false)}
+                  className="px-4 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveDepositWallet}
+                  disabled={savingDepositWallet || !depositWalletAddress.trim()}
+                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  {savingDepositWallet ? 'Saving...' : 'Save Deposit Wallet'}
                 </button>
               </div>
             </div>

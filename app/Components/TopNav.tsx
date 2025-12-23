@@ -55,16 +55,21 @@ export default function TopNav() {
     return path;
   };
 
-  // Fetch dynamic logo
+  // Fetch dynamic logo - refetch when projectId changes
   useEffect(() => {
     const fetchLogo = async () => {
-      const logo = await getWebsiteLogo();
+      // Only fetch logo if we have a projectId (for project-specific pages)
+      // For main project, projectId will be null/undefined, so it will use legacy website_settings
+      const logo = await getWebsiteLogo(projectId || undefined);
       if (logo) {
         setLogoUrl(logo);
+      } else {
+        // Fallback to default logo if no custom logo found
+        setLogoUrl("/logo.png");
       }
     };
     fetchLogo();
-  }, []);
+  }, [projectId]);
 
   const handleSocialLogin = async (provider: "google" | "discord") => {
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -1134,12 +1139,19 @@ export default function TopNav() {
 
             {/* Wallet connection */}
             {!connected ? (
-              <div className="space-y-3">
-                <div className="wallet-button-wrapper">
+              <div className="space-y-3 relative z-10">
+                <div className="wallet-button-wrapper w-full max-w-full overflow-hidden">
                   <WalletMultiButton />
                   <style jsx>{`
+                     .wallet-button-wrapper {
+                       width: 100% !important;
+                       max-width: 100% !important;
+                       overflow: hidden !important;
+                     }
                      .wallet-button-wrapper :global(.wallet-adapter-button) {
-                       width: 350px !important;
+                       width: 100% !important;
+                       max-width: 100% !important;
+                       box-sizing: border-box !important;
                        background-color: #4B5563 !important;
                        color: white !important;
                        border: 1px solid #6B7280 !important;
@@ -1152,14 +1164,18 @@ export default function TopNav() {
                        text-align: center !important;
                        justify-content: center !important;
                      }
+                     .wallet-button-wrapper :global(.wallet-adapter-dropdown) {
+                       width: 100% !important;
+                       max-width: 100% !important;
+                     }
                     .wallet-button-wrapper :global(.wallet-adapter-button:hover) {
                       background-color: #374151 !important;
                     }
                   `}</style>
                 </div>
-                <p className="text-xs text-gray-400 text-center">
+                {/* <p className="text-xs text-gray-400 text-center">
                   Connect your wallet to automatically create your account
-                </p>
+                </p> */}
               </div>
             ) : (
               <div className="space-y-3">

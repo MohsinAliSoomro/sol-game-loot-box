@@ -122,7 +122,9 @@ export default function WebsiteTheme() {
 
       try {
         // Check cache first for faster application
-        const cacheKey = 'website-theme-cache';
+        // Make cache key project-specific
+        const projectId = currentProject?.id || 'main';
+        const cacheKey = `website-theme-cache-${projectId}`;
         let theme = null;
         
         // Apply cached theme IMMEDIATELY (synchronously) before async fetch
@@ -167,7 +169,8 @@ export default function WebsiteTheme() {
         }
         
         // Fetch fresh theme data (only once, not repeatedly)
-        const freshTheme = await getThemeSettings();
+        // Pass project ID if available to fetch project-specific theme
+        const freshTheme = await getThemeSettings(currentProject?.id || undefined);
         
         if (freshTheme) {
           const themeString = JSON.stringify(freshTheme);
@@ -239,7 +242,9 @@ export default function WebsiteTheme() {
     let lastAppliedLootbox: string | null = null;
     const applyLootboxColors = async () => {
       try {
-        const lootboxCacheKey = 'website-lootbox-cache';
+        // Make cache key project-specific
+        const projectId = currentProject?.id || 'main';
+        const lootboxCacheKey = `website-lootbox-cache-${projectId}`;
         
         // Apply cached lootbox box background color IMMEDIATELY (synchronously)
         try {
@@ -260,7 +265,8 @@ export default function WebsiteTheme() {
         }
         
         // Fetch fresh lootbox settings
-        const freshLootboxSettings = await getLootboxSettings();
+        // Pass project ID if available to fetch project-specific settings
+        const freshLootboxSettings = await getLootboxSettings(currentProject?.id || undefined);
         if (freshLootboxSettings) {
           const lootboxString = JSON.stringify(freshLootboxSettings);
           
@@ -291,7 +297,9 @@ export default function WebsiteTheme() {
     // Wheel theme application
     const applyWheelColors = async () => {
       try {
-        const wheelCacheKey = 'website-wheel-cache';
+        // Make cache key project-specific
+        const projectId = currentProject?.id || 'main';
+        const wheelCacheKey = `website-wheel-cache-${projectId}`;
         let lastAppliedWheel: string | null = null;
         
         // Apply cached wheel colors IMMEDIATELY (synchronously)
@@ -318,7 +326,9 @@ export default function WebsiteTheme() {
         }
         
         // Fetch fresh wheel settings
-        const freshWheelSettings = await getWheelSettings();
+        // Fetch fresh wheel settings
+        // Pass project ID if available to fetch project-specific settings
+        const freshWheelSettings = await getWheelSettings(currentProject?.id || undefined);
         if (freshWheelSettings) {
           const wheelString = JSON.stringify(freshWheelSettings);
           
@@ -365,7 +375,9 @@ export default function WebsiteTheme() {
         timeoutId = setTimeout(() => {
           // Only apply to new elements, don't call full applyTheme
           try {
-            const cacheKey = 'website-theme-cache';
+            // Make cache key project-specific
+            const projectId = currentProject?.id || 'main';
+            const cacheKey = `website-theme-cache-${projectId}`;
             const cached = localStorage.getItem(cacheKey);
             if (cached) {
               const theme = JSON.parse(cached);
@@ -377,7 +389,9 @@ export default function WebsiteTheme() {
 
           // Re-apply lootbox box background color to new elements
           try {
-            const lootboxCacheKey = 'website-lootbox-cache';
+            // Make cache key project-specific
+            const projectId = currentProject?.id || 'main';
+            const lootboxCacheKey = `website-lootbox-cache-${projectId}`;
             const cached = localStorage.getItem(lootboxCacheKey);
             if (cached) {
               const lootboxSettings = JSON.parse(cached);
@@ -390,7 +404,9 @@ export default function WebsiteTheme() {
 
           // Re-apply wheel colors to new elements
           try {
-            const wheelCacheKey = 'website-wheel-cache';
+            // Make cache key project-specific
+            const projectId = currentProject?.id || 'main';
+            const wheelCacheKey = `website-wheel-cache-${projectId}`;
             const cached = localStorage.getItem(wheelCacheKey);
             if (cached) {
               const wheelSettings = JSON.parse(cached);
@@ -420,7 +436,7 @@ export default function WebsiteTheme() {
       clearTimeout(timeoutId);
       observer.disconnect();
     };
-  }, [pathname]); // Re-run when pathname changes (navigation)
+  }, [pathname, currentProject?.id]); // Re-run when pathname or project changes
 
   return null; // This component doesn't render anything
 }

@@ -3,7 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "./Components/ThemeProvider";
-import Footer from "./Components/Footer";
+import ConditionalFooter from "./Components/ConditionalFooter";
 import dynamic from "next/dynamic";
 import { ProjectProvider } from "@/lib/project-context";
 
@@ -155,7 +155,7 @@ export default function RootLayout({
             >
               <WebsiteTheme />
               {children}
-              <Footer />
+              <ConditionalFooter />
               <SidebarCart />
               <PurchaseModal />
               <WithdrawModal />

@@ -5,11 +5,22 @@
  */
 
 import { Connection, PublicKey } from "@solana/web3.js";
-import { Metaplex } from "@metaplex-foundation/js";
 
-// Initialize connection and Metaplex
-const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com");
-const metaplex = Metaplex.make(connection);
+// Lazy load Metaplex to avoid build-time dependency issues with @irys/sdk
+let metaplexInstance: any = null;
+const getMetaplex = async () => {
+  if (!metaplexInstance) {
+    try {
+      const { Metaplex } = await import("@metaplex-foundation/js");
+      const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com");
+      metaplexInstance = Metaplex.make(connection);
+    } catch (error) {
+      console.error("Failed to load Metaplex:", error);
+      throw error;
+    }
+  }
+  return metaplexInstance;
+};
 
 /**
  * Fetch NFT metadata from mint address
@@ -21,6 +32,7 @@ export const fetchNFTMetadata = async (mintAddress: string) => {
     console.log("🔍 Fetching NFT metadata for:", mintAddress);
     console.log("🌐 Using RPC:", process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com");
     
+    const metaplex = await getMetaplex();
     const mint = new PublicKey(mintAddress);
     const nft = await metaplex.nfts().findByMint({ mintAddress: mint });
     

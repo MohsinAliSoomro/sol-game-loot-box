@@ -969,10 +969,10 @@ export default function WithdrawModal() {
                                 <span className="sr-only">Close modal</span>
                             </button>
                         </div>
-                        <div className="flex space-x-2 border-b w-full overflow-x-auto">
+                        <div className="flex justify-center space-x-2 border-b w-full">
                             <button
                                 onClick={() => setTab("withdraw")}
-                                className={`py-2 px-3 text-sm text-center whitespace-nowrap ${tab === "withdraw"
+                             className={`flex-1 max-w-[200px] py-2 px-3 text-sm text-center whitespace-nowrap ${tab === "withdraw"
                                         ? "border-b-2 border-[#ff914d] text-orange-600 bg-gray-200"
                                         : "text-orange-600 bg-transparent"
                                     }`}
@@ -981,7 +981,7 @@ export default function WithdrawModal() {
                             </button>
                             <button
                                 onClick={() => setTab("history")}
-                                className={`py-2 px-3 text-sm text-center whitespace-nowrap ${tab === "history"
+                            className={`flex-1 max-w-[200px] py-2 px-3 text-sm text-center whitespace-nowrap ${tab === "history"
                                         ? "border-b-2 border-[#ff914d] text-orange-600 bg-gray-200"
                                         : "text-orange-600 bg-transparent"
                                     }`}

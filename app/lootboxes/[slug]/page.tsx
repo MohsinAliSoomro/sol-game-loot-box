@@ -31,8 +31,10 @@ export default function Details() {
   const pathname = useParams();
 
   const newData = useMemo(() => {
-    return products?.data?.find((i) => i.id === Number(pathname.slug));
-  }, [pathname.slug, products]);
+    const slug = pathname?.slug as string | undefined;
+    if (!slug) return undefined;
+    return products?.data?.find((i) => i.id === Number(slug));
+  }, [pathname?.slug, products]);
 
   const handleSpinClick = () => {
     if (!mustSpin) {

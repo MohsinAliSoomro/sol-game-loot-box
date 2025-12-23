@@ -545,7 +545,9 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
     // Load wheel background image
     const loadWheelBgImage = async () => {
       try {
-        const wheelSettings = await getWheelSettings();
+        // Pass project ID to fetch project-specific wheel settings
+        const projectId = getProjectId();
+        const wheelSettings = await getWheelSettings(projectId || undefined);
         if (wheelSettings?.backgroundImage) {
           const bgImageUrl = getImageUrl(wheelSettings.backgroundImage);
           if (bgImageUrl) {
