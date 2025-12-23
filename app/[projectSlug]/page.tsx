@@ -276,7 +276,7 @@ export default function ProjectHomePage() {
                                 // NFT reward - use mint address to fetch NFT image
                                 // Prefer mint field, fallback to image if it's a mint address
                                 imageSource = hasMint ? win.mint : (imageIsMint ? win.image : null);
-                                fallbackImage = "/default-nft.png"; // NFT fallback
+                                fallbackImage = "/NFT-Logo.png"; // NFT fallback
                                 console.log(`🎨 Using NFT image source:`, imageSource);
                             } else if (isSOL) {
                                 // SOL/token reward - use SOL logo

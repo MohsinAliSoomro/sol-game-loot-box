@@ -50,7 +50,7 @@ export const fetchNFTMetadata = async (mintAddress: string) => {
     });
     
     // Convert IPFS URLs to HTTP gateway URLs
-    let imageUrl = nft.json?.image || "/default-nft.png";
+    let imageUrl = nft.json?.image || "/NFT-Logo.png";
     if (imageUrl && typeof imageUrl === 'string') {
       console.log("🖼️ Original image URL:", imageUrl);
       // Handle IPFS URLs (ipfs://... or ipfs/...)

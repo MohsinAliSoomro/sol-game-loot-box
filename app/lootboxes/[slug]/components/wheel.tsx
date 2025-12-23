@@ -118,7 +118,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       const nftSegments: WheelItem[] = nftRewards.map((r: any, idx: number) => ({
         id: r.id || (2000 + idx),
         name: r.reward_name || 'NFT Reward',
-        image: r.reward_image || '/default-nft.png',
+        image: r.reward_image || '/NFT-Logo.png',
         color: `hsl(${(idx * 120) % 360}, 70%, 60%)`,
         textColor: '#ffffff',
         percentage: Math.max(r.percentage || 0, 1), // Ensure minimum 1% for visibility
@@ -173,7 +173,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
         .filter(nft => !existingMints.has(nft.mint))
         .map(nft => ({
           reward_name: nft.name || 'NFT Reward',
-          reward_image: nft.image || '/default-nft.png',
+          reward_image: nft.image || '/NFT-Logo.png',
           reward_price: '100',
           percentage: 1.0, // default; admin can adjust later
           mint_address: nft.mint,
@@ -631,7 +631,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       // Fallback to default reward
       return {
         name: "OGX NFT Reward",
-        image: "/default-nft.png",
+        image: "/NFT-Logo.png",
         mint: "11111111111111111111111111111111",
         price: "100"
       };
@@ -723,7 +723,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
         const prizeWinResult = await supabase.from("prizeWin").insert({
           userId: user.id,
           name: winnerItem.name,
-          image: nftImage || '/default-nft.png', // Use fetched image or fallback
+          image: nftImage || '/NFT-Logo.png', // Use fetched image or fallback
           sol: winnerItem.price, // Keep as string to match varchar type
           isWithdraw: false, // Use correct field name from table
           reward_type: 'nft', // Add reward type

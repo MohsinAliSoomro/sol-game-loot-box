@@ -111,7 +111,7 @@ export default function DepositedNFTs({ productId }: DepositedNFTsProps) {
           return {
             mint: dbReward.mint_address,
             name: metadataMatch?.name || dbReward.reward_name || dbReward.mint_address.substring(0, 8) + '...',
-            image: dbReward.reward_image ? getImageUrl(dbReward.reward_image) : (metadataMatch?.image || '/default-nft.png'), // Prefer DB image, then metadata, then fallback
+            image: dbReward.reward_image ? getImageUrl(dbReward.reward_image) : (metadataMatch?.image || '/NFT-Logo.png'), // Prefer DB image, then metadata, then fallback
             description: metadataMatch?.description || '',
             symbol: metadataMatch?.symbol || 'NFT',
             attributes: metadataMatch?.attributes || [],
@@ -321,7 +321,7 @@ export default function DepositedNFTs({ productId }: DepositedNFTsProps) {
                 className="object-contain drop-shadow-md rounded-lg"
                 onError={(e) => {
                   // Fallback to default image if NFT image fails to load
-                  e.currentTarget.src = "/default-nft.png";
+                  e.currentTarget.src = "/NFT-Logo.png";
                 }}
               />
             </div>
