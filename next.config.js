@@ -228,6 +228,10 @@ const nextConfig = {
             '@walletconnect/solana-adapter': emptyModulePath,
             '@reown/appkit/networks': emptyModulePath,
             '@solana/wallet-adapter-walletconnect': emptyModulePath,
+            // Fix Metaplex IrysStorageDriver import errors
+            '@metaplex-foundation/js/dist/esm/plugins/irysStorage/IrysStorageDriver.mjs': emptyModulePath,
+            '@metaplex-foundation/js/dist/esm/plugins/irysStorage/plugin.mjs': emptyModulePath,
+            '@metaplex-foundation/js/dist/esm/plugins/irysStorage/index.mjs': emptyModulePath,
         };
         
         // Fix for @irys/sdk and arbundles compatibility issue
@@ -304,9 +308,20 @@ const nextConfig = {
         // Replace IrysStorageDriver with empty module to prevent @irys/sdk dependency
         // This allows Metaplex to load without the broken Irys storage driver
         // Note: emptyModulePath is already declared above
+        
+        // First, replace IrysStorageDriver.mjs itself
         config.plugins.push(
             new webpack.NormalModuleReplacementPlugin(
                 /@metaplex-foundation\/js\/dist\/esm\/plugins\/irysStorage\/IrysStorageDriver\.mjs$/,
+                emptyModulePath
+            )
+        );
+        
+        // Replace plugin.mjs that tries to import IrysStorageDriver
+        // This is the file causing the build error: "Attempted import error: 'IrysStorageDriver' is not exported"
+        config.plugins.push(
+            new webpack.NormalModuleReplacementPlugin(
+                /@metaplex-foundation\/js\/dist\/esm\/plugins\/irysStorage\/plugin\.mjs$/,
                 emptyModulePath
             )
         );
@@ -315,6 +330,15 @@ const nextConfig = {
         config.plugins.push(
             new webpack.NormalModuleReplacementPlugin(
                 /@metaplex-foundation\/js\/dist\/esm\/plugins\/irysStorage\/index\.mjs$/,
+                emptyModulePath
+            )
+        );
+        
+        // Replace the entire irysStorage plugin directory to prevent any imports
+        // This is a more aggressive approach to ensure no Irys-related code is loaded
+        config.plugins.push(
+            new webpack.NormalModuleReplacementPlugin(
+                /@metaplex-foundation\/js\/dist\/esm\/plugins\/irysStorage\/.*\.mjs$/,
                 emptyModulePath
             )
         );
