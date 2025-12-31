@@ -1294,6 +1294,7 @@ export class SolanaProgramService {
         let adminKeyData: any = null;
         let adminKeyError: any = null;
         
+        // For projects, ONLY check project-specific admin key (no fallback to website_settings)
         if (projectId) {
           // Try project-specific admin key first
           const { data: projectKeyData, error: projectKeyError } = await supabase
@@ -1301,27 +1302,33 @@ export class SolanaProgramService {
             .select('setting_value')
             .eq('project_id', projectId)
             .eq('setting_key', 'admin_private_key')
-            .single();
+            .maybeSingle();
           
           if (!projectKeyError && projectKeyData?.setting_value) {
             adminKeyData = { value: projectKeyData.setting_value };
             console.log(`✅ Using project-specific admin wallet for project ID: ${projectId}`);
+          } else {
+            // No project admin wallet configured - throw error (don't fall back)
+            throw new Error(
+              `⚠️ ADMIN PRIVATE KEY NOT CONFIGURED FOR THIS PROJECT\n\n` +
+              `Please configure the admin private key in the admin dashboard:\n` +
+              `Website Settings > Admin Wallet Settings\n\n` +
+              `The private key must be set in project_settings for this project (project_id: ${projectId}) for withdrawals to work.`
+            );
           }
-        }
-        
-        // Fallback to main website admin key if project key not found
-        if (!adminKeyData) {
+        } else {
+          // For main project (no projectId), check website_settings
           const { data: websiteKeyData, error: websiteKeyError } = await supabase
             .from('website_settings')
             .select('value')
             .eq('key', 'admin_private_key')
-            .single();
+            .maybeSingle();
           
           adminKeyData = websiteKeyData;
           adminKeyError = websiteKeyError;
           
           if (!adminKeyError && adminKeyData?.value) {
-            console.log(`✅ Using main website admin wallet (fallback)`);
+            console.log(`✅ Using main website admin wallet`);
           }
         }
         
@@ -1816,20 +1823,26 @@ export class SolanaProgramService {
 
   /**
    * Get project-specific deposit wallet address
-   * Returns project wallet if configured, otherwise returns default platform wallet
+   * For projects: ONLY checks project_settings (no fallback to website_settings)
+   * For main project: checks website_settings
+   * Throws error if no deposit wallet is configured (no fallback to default)
    */
   private async getDepositWallet(projectId?: number | null): Promise<PublicKey> {
     try {
       const { supabase } = await import("@/service/supabase");
       
-      // First, try project-specific deposit wallet if projectId is provided
+      // For projects, ONLY check project-specific deposit wallet (no fallback to website_settings)
       if (projectId) {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('project_settings')
           .select('setting_value')
           .eq('project_id', projectId)
           .eq('setting_key', 'deposit_wallet_address')
-          .single();
+          .maybeSingle();
+
+        if (error && error.code !== 'PGRST116') {
+          console.error(`Error fetching project deposit wallet:`, error);
+        }
 
         if (data?.setting_value) {
           try {
@@ -1837,17 +1850,25 @@ export class SolanaProgramService {
             console.log(`✅ Using project-specific deposit wallet for project ${projectId}: ${depositWallet.toString()}`);
             return depositWallet;
           } catch (e) {
-            console.warn(`⚠️ Invalid deposit wallet address for project ${projectId}, checking main website wallet`);
+            console.warn(`⚠️ Invalid deposit wallet address for project ${projectId}`);
+            throw new Error(`Deposit wallet is not configured for this project. Please configure a deposit wallet in the admin panel.`);
           }
+        } else {
+          // No project wallet configured - throw error (don't fall back to website_settings)
+          throw new Error(`Deposit wallet is not configured for this project. Please configure a deposit wallet in the admin panel.`);
         }
       }
       
-      // Then, try main website deposit wallet (from website_settings)
-      const { data: websiteData } = await supabase
+      // For main project (no projectId), check website_settings
+      const { data: websiteData, error: websiteError } = await supabase
         .from('website_settings')
         .select('value')
         .eq('key', 'deposit_wallet_address')
-        .single();
+        .maybeSingle();
+
+      if (websiteError && websiteError.code !== 'PGRST116') {
+        console.error(`Error fetching website deposit wallet:`, websiteError);
+      }
 
       if (websiteData?.value) {
         try {
@@ -1855,17 +1876,20 @@ export class SolanaProgramService {
           console.log(`✅ Using main website deposit wallet: ${depositWallet.toString()}`);
           return depositWallet;
         } catch (e) {
-          console.warn(`⚠️ Invalid main website deposit wallet address, using default wallet`);
+          console.warn(`⚠️ Invalid main website deposit wallet address`);
+          throw new Error(`Deposit wallet is not configured. Please configure a deposit wallet in the admin panel.`);
         }
+      } else {
+        throw new Error(`Deposit wallet is not configured. Please configure a deposit wallet in the admin panel.`);
       }
     } catch (error) {
-      console.warn('Error fetching deposit wallet, using default:', error);
+      // If it's already our error message, re-throw it
+      if (error instanceof Error && error.message.includes('Deposit wallet is not configured')) {
+        throw error;
+      }
+      console.error('Error fetching deposit wallet:', error);
+      throw new Error(`Deposit wallet is not configured. Please configure a deposit wallet in the admin panel.`);
     }
-
-    // Fallback to default platform wallet
-    const defaultWallet = new PublicKey(CONFIG.OGX_WITHDRAWAL_WALLET);
-    console.log(`📦 Using default deposit wallet: ${defaultWallet.toString()}`);
-    return defaultWallet;
   }
 
   /**
@@ -3796,6 +3820,7 @@ export class SolanaProgramService {
         let adminKeyData: any = null;
         let adminKeyError: any = null;
         
+        // For projects, ONLY check project-specific admin key (no fallback to website_settings)
         if (projectId) {
           // Try project-specific admin key first
           const { data: projectKeyData, error: projectKeyError } = await supabase
@@ -3803,27 +3828,33 @@ export class SolanaProgramService {
             .select('setting_value')
             .eq('project_id', projectId)
             .eq('setting_key', 'admin_private_key')
-            .single();
+            .maybeSingle();
           
           if (!projectKeyError && projectKeyData?.setting_value) {
             adminKeyData = { value: projectKeyData.setting_value };
             console.log(`✅ Using project-specific admin wallet for project ID: ${projectId}`);
+          } else {
+            // No project admin wallet configured - throw error (don't fall back)
+            throw new Error(
+              `⚠️ ADMIN PRIVATE KEY NOT CONFIGURED FOR THIS PROJECT\n\n` +
+              `Please configure the admin private key in the admin dashboard:\n` +
+              `Website Settings > Admin Wallet Settings\n\n` +
+              `The private key must be set in project_settings for this project (project_id: ${projectId}) for withdrawals to work.`
+            );
           }
-        }
-        
-        // Fallback to main website admin key if project key not found
-        if (!adminKeyData) {
+        } else {
+          // For main project (no projectId), check website_settings
           const { data: websiteKeyData, error: websiteKeyError } = await supabase
             .from('website_settings')
             .select('value')
             .eq('key', 'admin_private_key')
-            .single();
+            .maybeSingle();
           
           adminKeyData = websiteKeyData;
           adminKeyError = websiteKeyError;
           
           if (!adminKeyError && adminKeyData?.value) {
-            console.log(`✅ Using main website admin wallet (fallback)`);
+            console.log(`✅ Using main website admin wallet`);
           }
         }
         
@@ -4119,6 +4150,7 @@ export class SolanaProgramService {
         let adminKeyData: any = null;
         let adminKeyError: any = null;
         
+        // For projects, ONLY check project-specific admin key (no fallback to website_settings)
         if (projectId) {
           // Try project-specific admin key first
           const { data: projectKeyData, error: projectKeyError } = await supabase
@@ -4126,27 +4158,33 @@ export class SolanaProgramService {
             .select('setting_value')
             .eq('project_id', projectId)
             .eq('setting_key', 'admin_private_key')
-            .single();
+            .maybeSingle();
           
           if (!projectKeyError && projectKeyData?.setting_value) {
             adminKeyData = { value: projectKeyData.setting_value };
             console.log(`✅ Using project-specific admin wallet for project ID: ${projectId}`);
+          } else {
+            // No project admin wallet configured - throw error (don't fall back)
+            throw new Error(
+              `⚠️ ADMIN PRIVATE KEY NOT CONFIGURED FOR THIS PROJECT\n\n` +
+              `Please configure the admin private key in the admin dashboard:\n` +
+              `Website Settings > Admin Wallet Settings\n\n` +
+              `The private key must be set in project_settings for this project (project_id: ${projectId}) for withdrawals to work.`
+            );
           }
-        }
-        
-        // Fallback to main website admin key if project key not found
-        if (!adminKeyData) {
+        } else {
+          // For main project (no projectId), check website_settings
           const { data: websiteKeyData, error: websiteKeyError } = await supabase
             .from('website_settings')
             .select('value')
             .eq('key', 'admin_private_key')
-            .single();
+            .maybeSingle();
           
           adminKeyData = websiteKeyData;
           adminKeyError = websiteKeyError;
           
           if (!adminKeyError && adminKeyData?.value) {
-            console.log(`✅ Using main website admin wallet (fallback)`);
+            console.log(`✅ Using main website admin wallet`);
           }
         }
         
@@ -4858,7 +4896,7 @@ export class SolanaProgramService {
       console.log(`💰 Database OGX balance: ${databaseOGXBalance.toFixed(4)} OGX`);
 
       // Fetch admin private key for token transfer
-      // Try project-specific admin key first, then fallback to main website admin key
+      // For projects, ONLY check project-specific admin key (no fallback to website_settings)
       const { supabase: supabaseSync } = await import("@/service/supabase");
       let adminKeyData: any = null;
       let adminKeyError: any = null;
@@ -4870,27 +4908,33 @@ export class SolanaProgramService {
           .select('setting_value')
           .eq('project_id', projectId)
           .eq('setting_key', 'admin_private_key')
-          .single();
+          .maybeSingle();
         
         if (!projectKeyError && projectKeyData?.setting_value) {
           adminKeyData = { value: projectKeyData.setting_value };
           console.log(`✅ Using project-specific admin wallet for project ID: ${projectId}`);
+        } else {
+          // No project admin wallet configured - throw error (don't fall back)
+          throw new Error(
+            `⚠️ ADMIN PRIVATE KEY NOT CONFIGURED FOR THIS PROJECT\n\n` +
+            `Please configure the admin private key in the admin dashboard:\n` +
+            `Website Settings > Admin Wallet Settings\n\n` +
+            `The private key must be set in project_settings for this project (project_id: ${projectId}) for withdrawals to work.`
+          );
         }
-      }
-      
-      // Fallback to main website admin key if project key not found
-      if (!adminKeyData) {
+      } else {
+        // For main project (no projectId), check website_settings
         const { data: websiteKeyData, error: websiteKeyError } = await supabaseSync
           .from('website_settings')
           .select('value')
           .eq('key', 'admin_private_key')
-          .single();
+          .maybeSingle();
         
         adminKeyData = websiteKeyData;
         adminKeyError = websiteKeyError;
         
         if (!adminKeyError && adminKeyData?.value) {
-          console.log(`✅ Using main website admin wallet (fallback)`);
+          console.log(`✅ Using main website admin wallet`);
         }
       }
 

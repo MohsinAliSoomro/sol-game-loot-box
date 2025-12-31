@@ -18,6 +18,11 @@ const WebsiteTheme = dynamic(
   { ssr: false } // disable SSR because theme needs browser APIs
 );
 
+const FaviconManager = dynamic(
+  () => import("./Components/FaviconManager"),
+  { ssr: false } // disable SSR because favicon needs browser APIs
+);
+
 // Lazy load cart and modals - only load when needed
 const SidebarCart = dynamic(
   () => import("./Components/SidebarCart"),
@@ -153,6 +158,7 @@ export default function RootLayout({
               // enableSystem
               // disableTransitionOnChange
             >
+              <FaviconManager />
               <WebsiteTheme />
               {children}
               <ConditionalFooter />

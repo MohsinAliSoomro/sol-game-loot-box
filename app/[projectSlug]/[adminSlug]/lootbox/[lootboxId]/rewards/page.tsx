@@ -31,6 +31,7 @@ export default function LootboxRewards() {
   const [solBalanceLoading, setSolBalanceLoading] = useState(false);
   const [selectedSOLAmount, setSelectedSOLAmount] = useState<number | null>(null);
   const [jackpotNFTMints, setJackpotNFTMints] = useState<string[]>([]);
+  const [allLootboxNFTMints, setAllLootboxNFTMints] = useState<string[]>([]); // NFTs used in ANY project's lootboxes
   
   // Get admin wallet address from database
   const { adminWalletAddress, loading: adminWalletLoading, error: adminWalletError, refreshAdminWallet } = useAdminWallet();
@@ -68,19 +69,40 @@ export default function LootboxRewards() {
     }
   }, [lootboxId]);
 
-  // Fetch jackpot NFT mints when component mounts or admin wallet changes
+  // Fetch jackpot NFT mints and ALL lootbox NFT mints (across all projects)
   useEffect(() => {
-    const fetchJackpotNFTs = async () => {
+    const fetchNFTs = async () => {
       try {
+        // Get NFTs used in jackpots (project-filtered)
         const usedMints = await getUsedNFTMints();
         setJackpotNFTMints(usedMints);
+        
+        // Get ALL NFTs used in ANY project's lootboxes (not just current project)
+        // This prevents the same NFT from being used in multiple projects
+        const { data, error } = await supabase
+          .from('nft_reward_percentages')
+          .select('mint_address')
+          .not('mint_address', 'is', null);
+        
+        if (error) {
+          console.error('Error fetching all lootbox NFT mints:', error);
+          return;
+        }
+        
+        const allMints = (data || [])
+          .map((r: any) => r.mint_address)
+          .filter(Boolean)
+          .filter((mint: string, index: number, self: string[]) => self.indexOf(mint) === index); // Unique
+        
+        setAllLootboxNFTMints(allMints);
+        console.log(`📋 Found ${allMints.length} NFTs used in lootboxes across ALL projects`);
       } catch (error) {
-        console.error('Error fetching jackpot NFT mints:', error);
+        console.error('Error fetching NFT mints:', error);
       }
     };
     
     if (adminWalletAddress) {
-      fetchJackpotNFTs();
+      fetchNFTs();
     }
   }, [adminWalletAddress, getUsedNFTMints]);
 
@@ -182,6 +204,12 @@ export default function LootboxRewards() {
         // Check if NFT is already used in a jackpot
         if (jackpotNFTMints.includes(submissionData.mintAddress)) {
           alert('This NFT is already added to a jackpot. Please select a different NFT.');
+          return;
+        }
+        
+        // Check if NFT is already used in another project's lootbox
+        if (allLootboxNFTMints.includes(submissionData.mintAddress) && !rewards.some((r: any) => r.mintAddress === submissionData.mintAddress)) {
+          alert('This NFT is already used as a reward in another project and cannot be reused. Each NFT can only be used in one project.');
           return;
         }
 
@@ -495,15 +523,17 @@ export default function LootboxRewards() {
                         {walletNFTs.filter((nft: any) => {
                           const isInCurrentLootbox = rewards.some((r: any) => r.mintAddress === nft.mint);
                           const isInJackpot = jackpotNFTMints.includes(nft.mint);
-                          return !isInCurrentLootbox && !isInJackpot;
+                          const isUsedInOtherProject = allLootboxNFTMints.includes(nft.mint); // Check if used in ANY project
+                          return !isInCurrentLootbox && !isInJackpot && !isUsedInOtherProject;
                         }).length === 0 ? (
                           <div className="col-span-3 text-center py-6">
-                            <p className="text-gray-600">All available NFTs have already been added as rewards or are used in jackpots.</p>
+                            <p className="text-gray-600">All available NFTs have already been added as rewards, used in jackpots, or are used in other projects.</p>
                           </div>
                         ) : walletNFTs.filter((nft: any) => {
                           const isInCurrentLootbox = rewards.some((r: any) => r.mintAddress === nft.mint);
                           const isInJackpot = jackpotNFTMints.includes(nft.mint);
-                          return !isInCurrentLootbox && !isInJackpot;
+                          const isUsedInOtherProject = allLootboxNFTMints.includes(nft.mint); // Check if used in ANY project
+                          return !isInCurrentLootbox && !isInJackpot && !isUsedInOtherProject;
                         }).map((nft: any) => (
                           <div
                             key={nft.mint}
@@ -545,16 +575,23 @@ export default function LootboxRewards() {
                           {jackpotNFTMints.includes(selectedNFT.mint) && (
                             <p className="text-xs text-orange-600 mt-1 font-medium">⚠️ This NFT is already used in a jackpot and cannot be selected</p>
                           )}
+                          {allLootboxNFTMints.includes(selectedNFT.mint) && !rewards.some((r: any) => r.mintAddress === selectedNFT.mint) && (
+                            <p className="text-xs text-orange-600 mt-1 font-medium">⚠️ This NFT is already used as a reward in another project</p>
+                          )}
                         </div>
                       )}
                       {(walletNFTs.filter((nft: any) => {
                         const isInCurrentLootbox = rewards.some((r: any) => r.mintAddress === nft.mint);
                         const isInJackpot = jackpotNFTMints.includes(nft.mint);
-                        return isInCurrentLootbox || isInJackpot;
+                        const isUsedInOtherProject = allLootboxNFTMints.includes(nft.mint) && !isInCurrentLootbox;
+                        return isInCurrentLootbox || isInJackpot || isUsedInOtherProject;
                       }).length > 0) && (
                         <div className="mt-2 text-xs text-gray-500 space-y-1">
                           {walletNFTs.filter((nft: any) => jackpotNFTMints.includes(nft.mint)).length > 0 && (
                             <p>ℹ️ {walletNFTs.filter((nft: any) => jackpotNFTMints.includes(nft.mint)).length} NFT(s) are already used in jackpots and cannot be selected</p>
+                          )}
+                          {walletNFTs.filter((nft: any) => allLootboxNFTMints.includes(nft.mint) && !rewards.some((r: any) => r.mintAddress === nft.mint)).length > 0 && (
+                            <p>ℹ️ {walletNFTs.filter((nft: any) => allLootboxNFTMints.includes(nft.mint) && !rewards.some((r: any) => r.mintAddress === nft.mint)).length} NFT(s) are already used in other projects and cannot be selected</p>
                           )}
                           {walletNFTs.filter((nft: any) => rewards.some((r: any) => r.mintAddress === nft.mint) && !jackpotNFTMints.includes(nft.mint)).length > 0 && (
                             <p>ℹ️ {walletNFTs.filter((nft: any) => rewards.some((r: any) => r.mintAddress === nft.mint) && !jackpotNFTMints.includes(nft.mint)).length} NFT(s) are already added to this lootbox</p>

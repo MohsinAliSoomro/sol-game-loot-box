@@ -68,11 +68,50 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
   const [jackpotWin, setJackpotWin] = useState<any>(null);
   const [showJackpotWin, setShowJackpotWin] = useState(false);
   const segmentCount = shuffledData.length;
-  const segmentAngle = segmentCount > 0 ? 360 / segmentCount : 0;
+  // Use equal segment angles for visual display (all segments look the same size)
+  const equalSegmentAngle = segmentCount > 0 ? 360 / segmentCount : 0;
+  
+  // Calculate percentage-based cumulative probabilities for winner selection
+  // (Visual segments are equal, but probability is based on percentages)
+  const calculatePercentageProbabilities = () => {
+    if (segmentCount === 0) return { cumulativeProbabilities: [], totalPercentage: 0 };
+    
+    // Ensure all percentages are numbers and calculate total
+    const validData = shuffledData.map((item: any) => ({
+      ...item,
+      percentage: Number(item.percentage) || 0
+    }));
+    
+    const totalPercentage = validData.reduce((sum: number, item: any) => sum + item.percentage, 0);
+    
+    // If total is 0 or invalid, use equal distribution
+    if (totalPercentage <= 0) {
+      return {
+        cumulativeProbabilities: Array.from({ length: segmentCount }, (_, i) => ((i + 1) / segmentCount) * 100),
+        totalPercentage: 100
+      };
+    }
+    
+    // Calculate cumulative probabilities based on percentages
+    const cumulativeProbabilities: number[] = [];
+    let cumulative = 0;
+    for (const item of validData) {
+      cumulative += item.percentage;
+      cumulativeProbabilities.push(cumulative);
+    }
+    
+    return { cumulativeProbabilities, totalPercentage };
+  };
+  
+  const { cumulativeProbabilities, totalPercentage } = calculatePercentageProbabilities();
   
   // Debug logging
-  console.log("🎰 Wheel render - segmentCount:", segmentCount, "segmentAngle:", segmentAngle);
+  console.log("🎰 Wheel render - segmentCount:", segmentCount);
+  console.log("🎰 Wheel render - equalSegmentAngle:", equalSegmentAngle.toFixed(2), "° per segment");
   console.log("🎰 Wheel render - shuffledData:", shuffledData.length, "items");
+  console.log("🎰 Percentage probabilities:", shuffledData.map((r: any, i: number) => 
+    `${r.name}: ${r.percentage}% (cumulative: ${cumulativeProbabilities[i]?.toFixed(2)}%)`
+  ));
 
   // Connect wallet function
   const connectWallet = useCallback(async () => {
@@ -90,13 +129,34 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
     return null;
   }, []);
 
-  // Load NFT rewards from database (only active ones)
+  // Load NFT rewards from database (only active ones, excluding those in carts)
   const getNFTWheelSegments = useCallback(async () => {
     try {
       console.log(`🎨 Loading NFT rewards from database for lootbox: ${item.id}...`);
       
+      // First, get all NFTs that are in carts (won but not yet claimed)
+      const projectId = typeof window !== 'undefined' 
+        ? localStorage.getItem('currentProjectId') 
+        : null;
+      
+      let cartQuery = supabase
+        .from('prizeWin')
+        .select('mint')
+        .eq('reward_type', 'nft')
+        .eq('isWithdraw', false) // In cart but not yet claimed
+        .not('mint', 'is', null);
+      
+      if (projectId) {
+        cartQuery = cartQuery.eq('project_id', parseInt(projectId));
+      } else {
+        cartQuery = cartQuery.is('project_id', null); // Main project
+      }
+      
+      const { data: cartNFTs } = await cartQuery;
+      const cartMints = new Set((cartNFTs || []).map((w: any) => w.mint).filter(Boolean));
+      console.log(`📋 Found ${cartMints.size} NFTs in carts (will be excluded from wheel):`, Array.from(cartMints));
+      
       // Load ACTIVE NFT rewards from database for THIS specific lootbox
-      // Check if product_id column exists in nft_reward_percentages
       const query = supabase
         .from('nft_reward_percentages')
         .select('*')
@@ -116,11 +176,22 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
         return [];
       }
 
+      // Filter out NFTs that are in carts (already won by someone)
+      const availableNFTs = nftRewards.filter((r: any) => {
+        const isInCart = cartMints.has(r.mint_address);
+        if (isInCart) {
+          console.log(`🚫 Excluding NFT ${r.mint_address?.slice(0, 8)}... (already in cart)`);
+        }
+        return !isInCart;
+      });
+
+      console.log(`📊 Filtered NFTs: ${nftRewards.length} total → ${availableNFTs.length} available (${nftRewards.length - availableNFTs.length} in carts)`);
+
       // Convert database NFT rewards to wheel items
-      const nftSegments: WheelItem[] = nftRewards.map((r: any, idx: number) => ({
+      const nftSegments: WheelItem[] = availableNFTs.map((r: any, idx: number) => ({
         id: r.id || (2000 + idx),
         name: r.reward_name || 'NFT Reward',
-        image: r.reward_image || '/NFT-Logo.png',
+        image: r.reward_image || null, // No placeholder - only show real NFT images
         color: `hsl(${(idx * 120) % 360}, 70%, 60%)`,
         textColor: '#ffffff',
         percentage: Math.max(r.percentage || 0, 1), // Ensure minimum 1% for visibility
@@ -129,8 +200,8 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
         isNFT: true,
       }));
 
-      console.log(`✅ Loaded ${nftSegments.length} active NFT rewards from database for lootbox ${item.id}`);
-      console.log('🎨 Active NFT rewards:', nftSegments.map(nft => `${nft.name} (${nft.percentage}%) - ${nft.mint?.slice(0, 8)}...`));
+      console.log(`✅ Loaded ${nftSegments.length} available NFT rewards from database for lootbox ${item.id}`);
+      console.log('🎨 Available NFT rewards:', nftSegments.map(nft => `${nft.name} (${nft.percentage}%) - ${nft.mint?.slice(0, 8)}...`));
       
       return nftSegments;
     } catch (e) {
@@ -175,7 +246,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
         .filter(nft => !existingMints.has(nft.mint))
         .map(nft => ({
           reward_name: nft.name || 'NFT Reward',
-          reward_image: nft.image || '/NFT-Logo.png',
+          reward_image: nft.image || null, // No placeholder - only show real NFT images
           reward_price: '100',
           percentage: 1.0, // default; admin can adjust later
           mint_address: nft.mint,
@@ -335,7 +406,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       // Convert database rewards to wheel items
       const databaseRewards: WheelItem[] = (tokenRewards || []).map((reward, index) => ({
         id: reward.id,
-        name: reward.reward_name || 'OGX Token',
+        name: reward.reward_name || `${getProjectTokenSymbol()} Token`,
         image: reward.reward_image || 'ogx-token.png', // Use simple filename
         color: `hsl(${(index * 60) % 360}, 70%, 60%)`, // Different colors
         textColor: "#ffffff",
@@ -510,8 +581,21 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
 
         console.log(`📊 Loaded ${nftSegments.length} NFT rewards, ${solSegments.length} SOL rewards, and ${itemSegments.length} ITEM rewards`);
 
-        // Merge segments (percentages come from database)
-        let merged = [...nftSegments, ...solSegments, ...itemSegments];
+        // Group rewards by type instead of merging randomly
+        // This keeps NFT, SOL, and ITEM rewards visually grouped together on the wheel
+        let merged: WheelItem[] = [];
+        
+        // Add rewards grouped by type: NFTs first, then SOL, then ITEMs
+        // This makes it easier to see reward types on the wheel
+        if (nftSegments.length > 0) {
+          merged = [...merged, ...nftSegments];
+        }
+        if (solSegments.length > 0) {
+          merged = [...merged, ...solSegments];
+        }
+        if (itemSegments.length > 0) {
+          merged = [...merged, ...itemSegments];
+        }
 
         if (merged.length === 0) {
           console.warn("⚠️ No active rewards found in database. Wheel will be empty.");
@@ -522,9 +606,8 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
           const normalized = totalPct <= 0.001
             ? merged.map((r) => ({ ...r, percentage: 100 / merged.length }))
             : merged;
-          // Shuffle rewards
-          const shuffled = normalized.sort(() => Math.random() - 0.5);
-          setShuffledData(shuffled);
+          // Don't shuffle - keep rewards grouped by type for better visual organization
+          setShuffledData(normalized);
         }
         
         console.log(`🎯 Wheel loaded with ${merged.length} total segments (${nftSegments.length} NFT + ${solSegments.length} SOL + ${itemSegments.length} ITEM)`);
@@ -646,8 +729,8 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       console.error("❌ Error fetching NFT from vault:", error);
       // Fallback to default reward
       return {
-        name: "OGX NFT Reward",
-        image: "/NFT-Logo.png",
+        name: `${getProjectTokenSymbol()} NFT Reward`,
+        image: null, // No placeholder - only show real NFT images
         mint: "11111111111111111111111111111111",
         price: "100"
       };
@@ -757,7 +840,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
         const prizeWinData: any = {
           userId: user.id,
           name: winnerItem.name,
-          image: nftImage || '/NFT-Logo.png', // Use fetched image or fallback
+          image: nftImage || null, // No placeholder - only show real NFT images
           sol: winnerItem.price, // Keep as string to match varchar type
           isWithdraw: false, // Use correct field name from table
           reward_type: 'nft', // Add reward type
@@ -782,7 +865,32 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
         console.log("✅ Successfully inserted NFT into prizeWin:", prizeWinResult.data);
         console.log("✅ Insert result:", JSON.stringify(prizeWinResult.data, null, 2));
         
-        // Mark NFT as won using backend API
+        // IMMEDIATELY remove NFT from wheel (optimistic update)
+        console.log("🔄 Immediately removing won NFT from wheel...");
+        setShuffledData((prevData) => {
+          const filtered = prevData.filter((item) => {
+            // Remove if it's the same NFT (same mint address)
+            if (item.isNFT && item.mint === winnerItem.mint) {
+              console.log(`🗑️ Removing NFT ${item.mint?.slice(0, 8)}... from wheel immediately`);
+              return false;
+            }
+            return true;
+          });
+          
+          // Recalculate percentages after removal
+          if (filtered.length > 0) {
+            const totalPct = filtered.reduce((s, r:any) => s + (Number(r.percentage) || 0), 0);
+            const normalized = totalPct <= 0.001
+              ? filtered.map((r) => ({ ...r, percentage: 100 / filtered.length }))
+              : filtered;
+            const shuffled = normalized.sort(() => Math.random() - 0.5);
+            console.log(`✅ NFT removed immediately. Wheel now has ${shuffled.length} segments`);
+            return shuffled;
+          }
+          return filtered;
+        });
+
+        // Mark NFT as won using backend API (for database persistence)
         console.log("🔄 Marking NFT as won via backend...");
         try {
           const response = await fetch('/api/nft-status', {
@@ -802,18 +910,20 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
             console.error("❌ Backend NFT marking failed:", result.error);
           } else {
             console.log(`✅ NFT marked as won via backend: ${winnerItem.mint}`);
-            console.log("🔄 Forcing wheel reload after NFT win...");
-            
-            // Reload wheel data after successful API call
+            // Reload wheel data from database to ensure consistency
             setTimeout(async () => {
               try {
-                console.log("🔄 Reloading wheel data after NFT win...");
+                console.log("🔄 Syncing wheel data from database after NFT win...");
                 setIsReloading(true);
                 
                 const nftSegments = await getNFTWheelSegments();
                 const solSegments = await loadSolRewards();
                 const itemSegments = await loadItemRewards();
-                const merged = [...nftSegments, ...solSegments, ...itemSegments];
+                // Group rewards by type: NFTs first, then SOL, then ITEMs
+                let merged: WheelItem[] = [];
+                if (nftSegments.length > 0) merged = [...merged, ...nftSegments];
+                if (solSegments.length > 0) merged = [...merged, ...solSegments];
+                if (itemSegments.length > 0) merged = [...merged, ...itemSegments];
                 
                 if (merged.length === 0) {
                   setShuffledData([]);
@@ -822,29 +932,34 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
                   const normalized = totalPct <= 0.001
                     ? merged.map((r) => ({ ...r, percentage: 100 / merged.length }))
                     : merged;
-                  const shuffled = normalized.sort(() => Math.random() - 0.5);
-                  setShuffledData(shuffled);
+                  // Keep grouped by type, don't shuffle
+                  setShuffledData(normalized);
                 }
                 
-                console.log(`✅ Wheel reloaded with ${merged.length} segments after NFT win`);
+                console.log(`✅ Wheel synced with database (${merged.length} segments)`);
                 setIsReloading(false);
               } catch (error) {
-                console.error("❌ Error reloading wheel after NFT win:", error);
+                console.error("❌ Error syncing wheel data:", error);
                 setIsReloading(false);
               }
-            }, 500); // Wait 500ms after API success
+            }, 300); // Short delay for database sync
           }
         } catch (error) {
           console.error("❌ Error calling backend API:", error);
-          // Even if API fails, try to reload wheel
+          // Even if API fails, try to reload wheel from database
           setTimeout(async () => {
             try {
-              console.log("🔄 Reloading wheel data after NFT win (API failed, but trying anyway)...");
+              console.log("🔄 Reloading wheel data from database (API failed, but trying anyway)...");
               setIsReloading(true);
               
               const nftSegments = await getNFTWheelSegments();
               const solSegments = await loadSolRewards();
-              const merged = [...nftSegments, ...solSegments];
+              const itemSegments = await loadItemRewards();
+              // Group rewards by type: NFTs first, then SOL, then ITEMs
+              let merged: WheelItem[] = [];
+              if (nftSegments.length > 0) merged = [...merged, ...nftSegments];
+              if (solSegments.length > 0) merged = [...merged, ...solSegments];
+              if (itemSegments.length > 0) merged = [...merged, ...itemSegments];
               
               if (merged.length === 0) {
                 setShuffledData([]);
@@ -853,17 +968,17 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
                 const normalized = totalPct <= 0.001
                   ? merged.map((r) => ({ ...r, percentage: 100 / merged.length }))
                   : merged;
-                const shuffled = normalized.sort(() => Math.random() - 0.5);
-                setShuffledData(shuffled);
+                // Keep grouped by type, don't shuffle
+                setShuffledData(normalized);
               }
               
-              console.log(`✅ Wheel reloaded with ${merged.length} segments after NFT win`);
+              console.log(`✅ Wheel reloaded from database (${merged.length} segments)`);
               setIsReloading(false);
             } catch (reloadError) {
-              console.error("❌ Error reloading wheel after NFT win:", reloadError);
+              console.error("❌ Error reloading wheel data:", reloadError);
               setIsReloading(false);
             }
-          }, 1000);
+          }, 500);
         }
         
         console.log(`🎉 NFT reward added to cart: ${winnerItem.name} (Mint: ${winnerItem.mint})`);
@@ -954,19 +1069,63 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
   }, [user.id, item.id, setUser]); // Only include essential dependencies
 
   const getRandomReward = () => {
-    const totalProbability = data.reduce((sum: any, item: any) => sum + item.percentage, 0);
-    const random = Math.random() * totalProbability;
-    let cumulative = 0;
-    for (const reward of data) {
-      cumulative += reward.percentage;
-      if (random <= cumulative) return reward;
+    if (!data || data.length === 0) {
+      console.warn("⚠️ No rewards available for selection");
+      return null;
     }
-    return data[0];
+
+    // Ensure all percentages are numbers and filter out invalid entries
+    const validRewards = data
+      .map((reward: any) => ({
+        ...reward,
+        percentage: Number(reward.percentage) || 0
+      }))
+      .filter((reward: any) => reward.percentage > 0);
+
+    if (validRewards.length === 0) {
+      console.warn("⚠️ No rewards with valid percentages");
+      return data[0] || null;
+    }
+
+    // Calculate total probability (sum of all percentages)
+    const totalProbability = validRewards.reduce(
+      (sum: number, reward: any) => sum + reward.percentage,
+      0
+    );
+
+    if (totalProbability <= 0) {
+      console.warn("⚠️ Total probability is 0 or negative, using equal distribution");
+      const randomIndex = Math.floor(Math.random() * validRewards.length);
+      return validRewards[randomIndex];
+    }
+
+    // Generate random number between 0 and totalProbability
+    // Using high precision to handle small percentages (1%, 0.5%, etc.)
+    const random = Math.random() * totalProbability;
+
+    // Weighted random selection using cumulative probability
+    // This ensures proper probability distribution according to probability theory
+    let cumulative = 0;
+    for (const reward of validRewards) {
+      cumulative += reward.percentage;
+      // Use <= to include the upper bound of each range
+      // This ensures rewards with 1% or 0.5% have their exact probability
+      if (random <= cumulative) {
+        console.log(
+          `🎯 Selected reward: ${reward.name} (${reward.percentage}%) - Random: ${random.toFixed(4)}/${totalProbability.toFixed(4)}, Cumulative: ${cumulative.toFixed(4)}`
+        );
+        return reward;
+      }
+    }
+
+    // Fallback: should rarely reach here, but return last reward if it does
+    console.warn("⚠️ Fallback: returning last reward");
+    return validRewards[validRewards.length - 1];
   };
 
   const spinWheel = async () => {
     if (user.apes < Number(item.price)) {
-      alert("You need to purchase OGX");
+      alert(`You need to purchase ${getProjectTokenSymbol()}`);
       return;
     }
     const price = Number(item.price);
@@ -1020,25 +1179,76 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
     }
 
     setIsFreeSpin(false);
-    // Spin a random amount: 5-8 full spins + random offset
+    
+    // FIRST: Select winner based on percentage probability
+    const { cumulativeProbabilities: currentCumulativeProbabilities, totalPercentage: currentTotalPercentage } = calculatePercentageProbabilities();
+    
+    // Generate random number based on total percentage
+    const random = Math.random() * currentTotalPercentage;
+    
+    // Find winner using cumulative probabilities (percentage-based)
+    let winnerIndex = 0;
+    for (let i = 0; i < currentCumulativeProbabilities.length; i++) {
+      if (random <= currentCumulativeProbabilities[i]) {
+        winnerIndex = i;
+        break;
+      }
+    }
+    // Ensure index is valid
+    if (winnerIndex < 0) winnerIndex = 0;
+    if (winnerIndex >= segmentCount) winnerIndex = segmentCount - 1;
+    
+    const winnerItem = shuffledData[winnerIndex];
+    console.log("🎯 Winner selected (before spin):", winnerItem);
+    console.log("🎯 Random value:", random.toFixed(4), "/", currentTotalPercentage.toFixed(2));
+    console.log("🎯 Selected reward index:", winnerIndex, "with percentage:", winnerItem?.percentage, "%");
+    
+    // SECOND: Calculate rotation to point to the winner segment with realistic randomness
+    // In SVG: 0° = right (3 o'clock), 90° = bottom, 180° = left, 270° = top (pointer position)
+    // Segments start at 0° (right side) and go clockwise
+    // Segment i center angle (when rotation=0): i * equalSegmentAngle + equalSegmentAngle / 2
+    const winnerSegmentCenterAtZero = winnerIndex * equalSegmentAngle + equalSegmentAngle / 2;
+    
+    // Add random offset within the segment to make it look more realistic
+    // Use 35% of segment angle as max offset to ensure we stay within the segment bounds
+    // This creates natural variation while still landing on the correct reward
+    const maxOffset = equalSegmentAngle * 0.35; // 35% of segment angle
+    const randomOffset = (Math.random() * 2 - 1) * maxOffset; // Random between -maxOffset and +maxOffset
+    
+    // Calculate target rotation: align segment center + random offset with pointer at top (270°)
+    // After rotation R, segment position will be at: (R + winnerSegmentCenterAtZero + randomOffset) % 360
+    // We want: (R + winnerSegmentCenterAtZero + randomOffset) % 360 = 270°
+    // So: R = 270 - winnerSegmentCenterAtZero - randomOffset (mod 360)
+    let targetRotation = 270 - winnerSegmentCenterAtZero - randomOffset;
+    // Normalize to 0-360 range
+    targetRotation = ((targetRotation % 360) + 360) % 360;
+    
+    // Add multiple full spins for visual effect (5-8 full spins)
     const fullSpins = Math.floor(Math.random() * 4) + 5; // 5,6,7,8
-    const randomOffset = Math.random() * 460;
-    const spinAngle = fullSpins * 360 + randomOffset;
-    const newRotation = rotation + spinAngle;
-
+    // Calculate absolute final rotation: current rotation + full spins + adjustment to reach target
+    // We need to account for where we are now and where we want to be
+    const currentNormalized = ((rotation % 360) + 360) % 360;
+    const rotationNeeded = ((targetRotation - currentNormalized + 360) % 360);
+    const finalRotation = rotation + (fullSpins * 360) + rotationNeeded;
+    
+    console.log("🎯 Rotation calculation:", {
+      winnerIndex,
+      winnerSegmentCenterAtZero: winnerSegmentCenterAtZero.toFixed(2),
+      randomOffset: randomOffset.toFixed(2),
+      targetRotation: targetRotation.toFixed(2),
+      currentNormalized: currentNormalized.toFixed(2),
+      rotationNeeded: rotationNeeded.toFixed(2),
+      fullSpins,
+      finalRotation: finalRotation.toFixed(2)
+    });
+    
     setIsSpinning(true);
-    setRotation(newRotation);
+    setRotation(finalRotation);
 
     setTimeout(async () => {
-      // After spin, determine which segment is under the pointer (-90°)
-      const normalizedRotation = ((newRotation % 360) + 360) % 360;
-      const pointerAngle = -90;
-      const angleAtPointer = (pointerAngle - normalizedRotation + 360) % 360;
-      let pointerSegmentIndex = Math.floor(angleAtPointer / segmentAngle) % segmentCount;
-      if (pointerSegmentIndex < 0) pointerSegmentIndex += segmentCount;
-      if (pointerSegmentIndex >= segmentCount) pointerSegmentIndex = 0;
-      const winnerItem = shuffledData[pointerSegmentIndex];
       console.log("🎯 Winner determined:", winnerItem);
+      console.log("🎯 Random value:", random.toFixed(4), "/", currentTotalPercentage.toFixed(2));
+      console.log("🎯 Selected reward index:", winnerIndex, "with percentage:", winnerItem?.percentage, "%");
       console.log("🎯 Winner isNFT:", winnerItem?.isNFT);
       console.log("🎯 Winner mint:", winnerItem?.mint);
       console.log("🎯 Winner reward_type:", (winnerItem as any)?.reward_type);
@@ -1190,13 +1400,15 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
           
           let tokenAmount = 0;
           if (isItemPrize && jackpotResult.pool.item_price) {
-            // Item prize: credit item_price in OGX/tokens
+            // Item prize: credit item_price in tokens
+            const projectTokenSymbol = getProjectTokenSymbol();
             tokenAmount = jackpotResult.pool.item_price || 0;
-            console.log(`🎁 Item prize: Crediting ${tokenAmount} OGX/tokens (item_price)`);
+            console.log(`🎁 Item prize: Crediting ${tokenAmount} ${projectTokenSymbol} (item_price)`);
           } else {
-            // NFT or SOL prize: convert SOL to OGX (legacy behavior)
-            tokenAmount = jackpotResult.winAmount * 1000; // 1 SOL = 1000 OGX
-            console.log(`💰 NFT/SOL prize: Crediting ${tokenAmount} OGX (converted from ${jackpotResult.winAmount} SOL)`);
+            // NFT or SOL prize: convert SOL to tokens (legacy behavior)
+            const projectTokenSymbol = getProjectTokenSymbol();
+            tokenAmount = jackpotResult.winAmount * 1000; // 1 SOL = 1000 tokens
+            console.log(`💰 NFT/SOL prize: Crediting ${tokenAmount} ${projectTokenSymbol} (converted from ${jackpotResult.winAmount} SOL)`);
           }
           
           const newBalance = (user.apes || 0) + tokenAmount;
@@ -1238,24 +1450,63 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
 
   const handleFreeTry = async () => {
     setIsFreeSpin(true);
-    // Spin a random amount: 5-8 full spins + random offset
+    
+    // FIRST: Select winner based on percentage probability
+    const { cumulativeProbabilities: currentCumulativeProbabilities, totalPercentage: currentTotalPercentage } = calculatePercentageProbabilities();
+    
+    // Generate random number based on total percentage
+    const random = Math.random() * currentTotalPercentage;
+    
+    // Find winner using cumulative probabilities (percentage-based)
+    let winnerIndex = 0;
+    for (let i = 0; i < currentCumulativeProbabilities.length; i++) {
+      if (random <= currentCumulativeProbabilities[i]) {
+        winnerIndex = i;
+        break;
+      }
+    }
+    // Ensure index is valid
+    if (winnerIndex < 0) winnerIndex = 0;
+    if (winnerIndex >= segmentCount) winnerIndex = segmentCount - 1;
+    
+    const winnerItem = shuffledData[winnerIndex];
+    console.log("🎯 Free spin winner selected:", winnerItem);
+    
+    // SECOND: Calculate rotation to point to the winner segment
+    // In SVG: 0° = right (3 o'clock), 90° = bottom, 180° = left, 270° = top (pointer position)
+    // Segments start at 0° (right side) and go clockwise
+    // Segment i center angle (when rotation=0): i * equalSegmentAngle + equalSegmentAngle / 2
+    const winnerSegmentCenterAtZero = winnerIndex * equalSegmentAngle + equalSegmentAngle / 2;
+    
+    // To align winner segment center with pointer at top (270°):
+    // After rotation R, segment center will be at: (R + winnerSegmentCenterAtZero) % 360
+    // We want: (R + winnerSegmentCenterAtZero) % 360 = 270°
+    // So: R = 270 - winnerSegmentCenterAtZero (mod 360)
+    let targetRotation = 270 - winnerSegmentCenterAtZero;
+    // Normalize to 0-360 range
+    targetRotation = ((targetRotation % 360) + 360) % 360;
+    
+    // Add multiple full spins for visual effect (5-8 full spins)
     const fullSpins = Math.floor(Math.random() * 4) + 5; // 5,6,7,8
-    const randomOffset = Math.random() * 360;
-    const spinAngle = fullSpins * 360 + randomOffset;
-    const newRotation = rotation + spinAngle;
+    // Calculate absolute final rotation: current rotation + full spins + adjustment to reach target
+    const currentNormalized = ((rotation % 360) + 360) % 360;
+    const rotationNeeded = ((targetRotation - currentNormalized + 360) % 360);
+    const finalRotation = rotation + (fullSpins * 360) + rotationNeeded;
+    
+    console.log("🎯 Free spin rotation calculation:", {
+      winnerIndex,
+      winnerSegmentCenterAtZero: winnerSegmentCenterAtZero.toFixed(2),
+      targetRotation: targetRotation.toFixed(2),
+      currentNormalized: currentNormalized.toFixed(2),
+      rotationNeeded: rotationNeeded.toFixed(2),
+      fullSpins,
+      finalRotation: finalRotation.toFixed(2)
+    });
 
     setIsSpinning(true);
-    setRotation(newRotation);
+    setRotation(finalRotation);
 
     setTimeout(async () => {
-      // After spin, determine which segment is under the pointer (-90°)
-      const normalizedRotation = ((newRotation % 360) + 360) % 360;
-      const pointerAngle = -90;
-      const angleAtPointer = (pointerAngle - normalizedRotation + 360) % 360;
-      let pointerSegmentIndex = Math.floor(angleAtPointer / segmentAngle) % segmentCount;
-      if (pointerSegmentIndex < 0) pointerSegmentIndex += segmentCount;
-      if (pointerSegmentIndex >= segmentCount) pointerSegmentIndex = 0;
-      const winnerItem = shuffledData[pointerSegmentIndex];
       setWinner(winnerItem);
       setShowWinnerDialog(true);
       setIsSpinning(false);
@@ -1327,9 +1578,10 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
               viewBox="0 0 100 100"
             >
               {shuffledData.map((item, i) => {
-                const startAngle = i * segmentAngle;
-                const endAngle = startAngle + segmentAngle;
-                const largeArcFlag = segmentAngle > 180 ? 1 : 0;
+                // Use equal segment angles for visual display
+                const startAngle = i * equalSegmentAngle;
+                const endAngle = startAngle + equalSegmentAngle;
+                const largeArcFlag = equalSegmentAngle > 180 ? 1 : 0;
                 const startRad = (startAngle * Math.PI) / 180;
                 const endRad = (endAngle * Math.PI) / 180;
                 const outerRadius = 50;
@@ -1351,7 +1603,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
                   ` A${innerRadius},${innerRadius} 0 ${largeArcFlag},0 ${innerX2},${innerY2}` +
                   " Z";
 
-                const midAngle = startAngle + segmentAngle / 2;
+                const midAngle = startAngle + equalSegmentAngle / 2;
                 const midRad = (midAngle * Math.PI) / 180;
                 const imgX = 50 + 38 * Math.cos(midRad);
                 const imgY = 50 + 38 * Math.sin(midRad);
@@ -1456,7 +1708,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
               <span>SPINNING...</span>
             </div>
           ) : (
-            `SPIN FOR ${item?.price} OGX`
+            `SPIN FOR ${item?.price} ${getProjectTokenSymbol()}`
           )}
         </button>
         <button
@@ -1509,31 +1761,69 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
                   height={300}
                 />
               </div>
-              <p className="text-xl mb-2 text-gray-800">{winner.name}</p>
+              <p className="text-xl mb-2 text-gray-800 font-semibold">{winner.name}</p>
               
-              {/* Different messages for NFT vs token rewards */}
-              {winner.isNFT ? (
-                <div>
-                  <p className="text-sm text-purple-600 mb-2">🎨 NFT Reward: {winner.name}</p>
-                  <p className="text-sm text-gray-600 mb-2">Mint: {winner.mint?.slice(0, 8)}...</p>
-                </div>
-              ) : (
-                <div>
-                  {/* <p className="text-sm text-gray-600 mb-2">OGX Reward: {winner.price} (automatically added)</p> */}
-                  {/* <p className="text-sm text-blue-600 mb-2">NFT Reward: Random NFT from vault added to cart</p> */}
-                </div>
-              )}
-              
-              {/* Reward Added to Cart Message */}
-              <div className="mb-4">
-              
-                <p className="text-sm text-blue-600 mb-2 text-center">
-                  {winner.isNFT ? 
-                    `Check your sidebar cart to claim your ${winner.name} NFT` :
-                    'Check your sidebar cart to claim your NFT reward'
-                  }
-                </p>
-              </div>
+              {/* Display reward type and details based on actual reward_type */}
+              {(() => {
+                const rewardType = (winner as any).reward_type;
+                
+                if (rewardType === 'nft' || winner.isNFT) {
+                  return (
+                    <div className="mb-4">
+                      <p className="text-sm text-purple-600 mb-2 font-medium">🎨 NFT Reward</p>
+                      {winner.mint && (
+                        <p className="text-xs text-gray-500 mb-2">Mint: {winner.mint.slice(0, 8)}...{winner.mint.slice(-6)}</p>
+                      )}
+                      {winner.percentage && (
+                        <p className="text-xs text-gray-500 mb-2">Chance: {winner.percentage}%</p>
+                      )}
+                      <p className="text-sm text-blue-600 mb-2 text-center mt-3">
+                        Check your sidebar cart to claim your NFT reward
+                      </p>
+                    </div>
+                  );
+                } else if (rewardType === 'item') {
+                  return (
+                    <div className="mb-4">
+                      <p className="text-sm text-orange-600 mb-2 font-medium">🎁 ITEM Reward</p>
+                      <p className="text-xs text-gray-500 mb-2">Value: {(winner as any).itemValue || winner.price} {getProjectTokenSymbol()}</p>
+                      {winner.percentage && (
+                        <p className="text-xs text-gray-500 mb-2">Chance: {winner.percentage}%</p>
+                      )}
+                      <p className="text-sm text-green-600 mb-2 text-center mt-3 font-medium">
+                        ✅ {winner.name} has been automatically added to your balance!
+                      </p>
+                    </div>
+                  );
+                } else if (rewardType === 'sol') {
+                  return (
+                    <div className="mb-4">
+                      <p className="text-sm text-yellow-600 mb-2 font-medium">💰 SOL Reward</p>
+                      <p className="text-xs text-gray-500 mb-2">Amount: {(winner as any).solAmount || winner.price} SOL</p>
+                      {winner.percentage && (
+                        <p className="text-xs text-gray-500 mb-2">Chance: {winner.percentage}%</p>
+                      )}
+                      <p className="text-sm text-blue-600 mb-2 text-center mt-3">
+                        Check your sidebar cart to claim your SOL reward
+                      </p>
+                    </div>
+                  );
+                } else {
+                  // Default: token reward
+                  return (
+                    <div className="mb-4">
+                      <p className="text-sm text-blue-600 mb-2 font-medium">🪙 TOKEN Reward</p>
+                      <p className="text-xs text-gray-500 mb-2">Amount: {winner.price} {getProjectTokenSymbol()}</p>
+                      {winner.percentage && (
+                        <p className="text-xs text-gray-500 mb-2">Chance: {winner.percentage}%</p>
+                      )}
+                      <p className="text-sm text-blue-600 mb-2 text-center mt-3">
+                        Check your sidebar cart to claim your reward
+                      </p>
+                    </div>
+                  );
+                }
+              })()}
 
               <div className="flex justify-center gap-4">
                 {!isFreeSpin ? (
@@ -1578,10 +1868,10 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
                 <button
                   onClick={() => {
                     const message = winner
-                      ? `🎉 I just won ${winner.price} OGX reward on the OGX Spin Wheel 🌀
+                      ? `🎉 I just won ${winner.price} ${getProjectTokenSymbol()} reward on the ${getProjectTokenSymbol()} Spin Wheel 🌀
 Real blockchain rewards via Anchor program!
 Try your luck 👇`
-                      : "Check out this awesome OGX Spin Wheel!";
+                      : `Check out this awesome ${getProjectTokenSymbol()} Spin Wheel!`;
                     const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(message)}&url=${encodeURIComponent(window.location.href)} Stake. Spin. Win. Repeat.`;
                     window.open(url, '_blank', 'width=550,height=420');
                   }}
@@ -1644,10 +1934,10 @@ Try your luck 👇`
                   🎉 Congratulations! You won the jackpot!
                 </p>
                 <p className="text-white/80 text-sm mt-1">
-                  You received {jackpotWin.ogxEquivalent} OGX (equivalent to {jackpotWin.amount} SOL)
+                  You received {jackpotWin.ogxEquivalent} {getProjectTokenSymbol()} (equivalent to {jackpotWin.amount} SOL)
                 </p>
                 <p className="text-white/80 text-xs mt-2">
-                  You can sell this OGX to get SOL in your wallet!
+                  You can sell this {getProjectTokenSymbol()} to get SOL in your wallet!
                 </p>
               </div>
 

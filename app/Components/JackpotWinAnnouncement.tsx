@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { JackpotService, JackpotWin } from "@/lib/jackpot-service";
+import { useProject } from "@/lib/project-context";
 
 interface JackpotWinAnnouncementProps {
   userId?: string;
@@ -8,6 +9,8 @@ interface JackpotWinAnnouncementProps {
 }
 
 export default function JackpotWinAnnouncement({ userId, onWin }: JackpotWinAnnouncementProps) {
+  const { getProjectTokenSymbol } = useProject();
+  const tokenSymbol = getProjectTokenSymbol();
   const [recentWins, setRecentWins] = useState<JackpotWin[]>([]);
   const [showAnnouncement, setShowAnnouncement] = useState(false);
   const [currentWin, setCurrentWin] = useState<JackpotWin | null>(null);
@@ -108,10 +111,10 @@ export default function JackpotWinAnnouncement({ userId, onWin }: JackpotWinAnno
                 🎉 Congratulations! You won the jackpot!
               </p>
               <p className="text-white/80 text-sm mt-1">
-                You received {currentWin.amount * 1000} OGX (equivalent to {currentWin.amount} SOL)
+                You received {currentWin.amount * 1000} {tokenSymbol} (equivalent to {currentWin.amount} SOL)
               </p>
               <p className="text-white/80 text-xs mt-2">
-                You can sell this OGX to get SOL in your wallet!
+                You can sell this {tokenSymbol} to get SOL in your wallet!
               </p>
             </div>
 

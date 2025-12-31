@@ -9,7 +9,8 @@ import { supabase } from '@/service/supabase';
 import { useProject } from '@/lib/project-context';
 
 export default function JackpotSettings() {
-  const { getProjectId } = useProject();
+  const { getProjectId, getProjectTokenSymbol } = useProject();
+  const tokenSymbol = getProjectTokenSymbol();
   const projectId = getProjectId();
   const { jackpots, loading, error, addJackpot, updateJackpot, deleteJackpot, getUsedNFTMints, getLootboxNFTMints, getCartNFTMints, checkNFTExists } = useProjectJackpotPools();
   const [showModal, setShowModal] = useState(false);
@@ -27,7 +28,7 @@ export default function JackpotSettings() {
     isActive: true,
     image: null as File | string | null,
     nftMintAddress: null,
-    itemPrice: '' // Price in OGX/tokens for item rewards
+    itemPrice: '' // Price in tokens for item rewards
   };
   const [formData, setFormData] = useState(initialFormState);
   const [selectedNFT, setSelectedNFT] = useState<any>(null);
@@ -494,7 +495,7 @@ export default function JackpotSettings() {
               {depositType === 'image' && (
                 <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Winner Prize Amount (OGX/Tokens) *
+                    Winner Prize Amount ({tokenSymbol}/Tokens) *
                   </label>
                   <input 
                     type="number" 
@@ -508,7 +509,7 @@ export default function JackpotSettings() {
                     required
                   />
                   <p className="text-xs text-gray-600 mt-2">
-                    <strong>This is the reward amount the winner will receive.</strong> When a user wins this jackpot, they will get this amount credited to their balance in OGX (main website) or project tokens (sub-projects).
+                    <strong>This is the reward amount the winner will receive.</strong> When a user wins this jackpot, they will get this amount credited to their balance in {tokenSymbol} tokens.
                   </p>
                 </div>
               )}

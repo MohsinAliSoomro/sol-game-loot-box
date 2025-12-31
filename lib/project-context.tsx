@@ -228,10 +228,25 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   };
 
   /**
-   * Get project token symbol (fallback to 'TOKEN' if no token)
+   * Get project token symbol
+   * - Uses project token symbol if available
+   * - Falls back to project's token_symbol field
+   * - Falls back to 'OGX' for main project (when no project is set)
+   * - Falls back to 'TOKEN' for sub-projects without token
    */
   const getProjectTokenSymbol = (): string => {
-    return projectToken?.symbol || currentProject?.token_symbol || 'TOKEN';
+    if (projectToken?.symbol) {
+      return projectToken.symbol;
+    }
+    if (currentProject?.token_symbol) {
+      return currentProject.token_symbol;
+    }
+    // Main project (no currentProject): default to OGX
+    if (!currentProject) {
+      return 'OGX';
+    }
+    // Sub-project without token: default to TOKEN
+    return 'TOKEN';
   };
 
   /**

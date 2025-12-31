@@ -179,6 +179,38 @@ export default function ProjectAdminDashboard() {
           </div>
         </div>
 
+        {/* Total Project Token Deposited Card */}
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Total {projectTokenSymbol} Deposited</p>
+              <h3 className="text-2xl font-semibold text-gray-800 mt-1">{formatNumber(stats.totalOGXDeposited)}</h3>
+              <p className="text-green-500 text-sm mt-1">From purchases</p>
+            </div>
+            <div className="bg-green-100 p-3 rounded-lg">
+              <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        {/* Total SOL Deposited Card */}
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">SOL Deposited</p>
+              <h3 className="text-2xl font-semibold text-gray-800 mt-1">{formatCurrency(stats.totalSOLDeposited)}</h3>
+              <p className="text-green-500 text-sm mt-1">1000 {projectTokenSymbol} = 1 SOL</p>
+            </div>
+            <div className="bg-green-100 p-3 rounded-lg">
+              <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
         {/* Total Project Token Withdrawn Card */}
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <div className="flex items-center justify-between">
@@ -201,7 +233,7 @@ export default function ProjectAdminDashboard() {
             <div>
               <p className="text-sm text-gray-600">SOL Withdrawn</p>
               <h3 className="text-2xl font-semibold text-gray-800 mt-1">{formatCurrency(stats.totalSOLWithdrawn)}</h3>
-              <p className="text-red-500 text-sm mt-1">1000 OGX = 1 SOL</p>
+              <p className="text-red-500 text-sm mt-1">1000 {projectTokenSymbol} = 1 SOL</p>
             </div>
             <div className="bg-red-100 p-3 rounded-lg">
               <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">

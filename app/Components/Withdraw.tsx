@@ -42,6 +42,86 @@ export default function WithdrawModal() {
     const isMainProject = !projectSlugFromUrl;
     const projectId = getProjectId();
 
+    // Check if admin wallet is configured
+    const [adminWalletConfigured, setAdminWalletConfigured] = useState<boolean | null>(null);
+    
+    useEffect(() => {
+        const checkAdminWallet = async () => {
+            try {
+                console.log('[WITHDRAW CHECK] Checking admin wallet configuration...', { projectId });
+                
+                // For projects, ONLY check project-specific admin wallet (no fallback to website_settings)
+                if (projectId) {
+                    const { data, error } = await supabase
+                        .from('project_settings')
+                        .select('setting_value')
+                        .eq('project_id', projectId)
+                        .eq('setting_key', 'admin_private_key')
+                        .maybeSingle();
+
+                    if (error && error.code !== 'PGRST116') {
+                        console.error('[WITHDRAW CHECK] Error fetching project admin wallet:', error);
+                    }
+
+                    if (data?.setting_value) {
+                        // Validate it's a valid private key (check if it can be decoded)
+                        try {
+                            const bs58 = (await import('bs58')).default;
+                            bs58.decode(data.setting_value.trim());
+                            console.log('[WITHDRAW CHECK] ✅ Project admin wallet configured');
+                            setAdminWalletConfigured(true);
+                            return;
+                        } catch (e) {
+                            console.warn(`[WITHDRAW CHECK] ⚠️ Invalid admin private key for project ${projectId}:`, e);
+                            setAdminWalletConfigured(false);
+                            return;
+                        }
+                    } else {
+                        console.log('[WITHDRAW CHECK] ❌ No project-specific admin wallet found - withdrawals disabled');
+                        setAdminWalletConfigured(false);
+                        return;
+                    }
+                }
+                
+                // For main project (no projectId), check website_settings
+                const { data: websiteData, error: websiteError } = await supabase
+                    .from('website_settings')
+                    .select('value')
+                    .eq('key', 'admin_private_key')
+                    .maybeSingle();
+
+                if (websiteError && websiteError.code !== 'PGRST116') {
+                    console.error('[WITHDRAW CHECK] Error fetching website admin wallet:', websiteError);
+                }
+
+                if (websiteData?.value) {
+                    // Validate it's a valid private key
+                    try {
+                        const bs58 = (await import('bs58')).default;
+                        bs58.decode(websiteData.value.trim());
+                        console.log('[WITHDRAW CHECK] ✅ Website admin wallet configured');
+                        setAdminWalletConfigured(true);
+                        return;
+                    } catch (e) {
+                        console.warn('[WITHDRAW CHECK] ⚠️ Invalid website admin private key:', e);
+                        setAdminWalletConfigured(false);
+                        return;
+                    }
+                } else {
+                    console.log('[WITHDRAW CHECK] ❌ No admin wallet found - withdrawals will be disabled');
+                    setAdminWalletConfigured(false);
+                    return;
+                }
+            } catch (error) {
+                console.error('[WITHDRAW CHECK] ❌ Error checking admin wallet:', error);
+                // On error, disable withdrawals to be safe
+                setAdminWalletConfigured(false);
+            }
+        };
+
+        checkAdminWallet();
+    }, [projectId]);
+
     // Available tokens for withdrawal - dynamically loaded from database
     // Admins can add/edit tokens from the master dashboard
     const [availableTokens, setAvailableTokens] = useState<Array<{
@@ -184,11 +264,11 @@ export default function WithdrawModal() {
 
         try {
             const balance = await solanaProgramService.getOGXBalance(publicKey);
-            // Note: We don't update form here since OGX balance is tracked in vault, not wallet
+            // Note: We don't update form here since token balance is tracked in vault, not wallet
             // For withdrawals, we need to check the vault balance, not wallet balance
-            console.log(`Current OGX wallet balance: ${balance}`);
+            console.log(`Current ${projectTokenSymbol} wallet balance: ${balance}`);
         } catch (error) {
-            console.error("Error fetching OGX balance:", error);
+            console.error(`Error fetching ${projectTokenSymbol} balance:`, error);
         }
     }, [publicKey]);
 
@@ -244,9 +324,9 @@ export default function WithdrawModal() {
                 // Calculate rate: Project Token to On-Chain Token (reverse of deposit)
                 let tokenRate: number;
                 if (isMainProject || !projectId) {
-                    // Main project: use OGX to Token rate
+                    // Main project: use token to Token rate
                     tokenRate = await calculateOGXToTokenRate(selectedToken, CONFIG.BASE_EXCHANGE_RATE.SOL_TO_OGX);
-                    console.log(`📊 Current OGX to ${selectedToken} rate: 1 OGX = ${tokenRate.toFixed(4)} ${selectedToken}`);
+                    console.log(`📊 Current ${projectTokenSymbol} to ${selectedToken} rate: 1 ${projectTokenSymbol} = ${tokenRate.toFixed(4)} ${selectedToken}`);
                 } else {
                     // Sub-project: use Project Token to Token rate
                     tokenRate = await calculateProjectTokenToTokenRate(
@@ -282,7 +362,7 @@ export default function WithdrawModal() {
         }
     }, [selectedToken, connected, projectId, isMainProject, projectTokenSymbol]);
 
-    // Calculate token equivalent for OGX withdrawal using dynamic rates
+    // Calculate token equivalent for withdrawal using dynamic rates
     const tokenEquivalent = useMemo(() => {
         return ogxAmount * currentRate;
     }, [ogxAmount, selectedToken, currentRate]);
@@ -296,22 +376,22 @@ export default function WithdrawModal() {
         }
         return null;
     };
-    // Calculate SOL equivalent for OGX withdrawal
+    // Calculate SOL equivalent for token withdrawal
     const solExchange = useMemo(() => {
         return convertOGXToSOL(form.withdrawBalance);
     }, [form.withdrawBalance]);
 
-    // Calculate OGX equivalent for SOL withdrawal
+    // Calculate token equivalent for SOL withdrawal
     const ogxExchange = useMemo(() => {
         return convertSOLToOGX(form.solAmount);
     }, [form.solAmount]);
 
-    // Calculate OGX equivalent for USDC withdrawal
+    // Calculate token equivalent for USDC withdrawal
     const ogxExchangeForUSDC = useMemo(() => {
         return convertSOLToOGX(form.usdcAmount); // Using same rate as SOL for now
     }, [form.usdcAmount]);
 
-    // Calculate USDC equivalent for OGX withdrawal
+    // Calculate USDC equivalent for token withdrawal
     const usdcExchange = useMemo(() => {
         return convertOGXToUSDC(form.withdrawBalance);
     }, [form.withdrawBalance]);
@@ -332,6 +412,18 @@ export default function WithdrawModal() {
             return alert("Please connect your wallet first");
         }
 
+        // Check if admin wallet is configured
+        if (adminWalletConfigured === false) {
+            alert("⚠️ Admin wallet is not configured. Please contact the administrator to configure an admin wallet before making withdrawals.");
+            return;
+        }
+
+        // If still checking, wait a moment
+        if (adminWalletConfigured === null) {
+            alert("Please wait while we verify the admin wallet configuration...");
+            return;
+        }
+
         // Check for user authentication - use both state.id and state.uid
         const userId = state.id || state.uid;
         if (!userId) {
@@ -340,12 +432,12 @@ export default function WithdrawModal() {
         }
 
         if (!ogxAmount || ogxAmount <= 0) {
-            const tokenLabel = isMainProject ? "OGX" : projectTokenSymbol;
+            const tokenLabel = projectTokenSymbol;
             return alert(`Please enter a valid ${tokenLabel} withdrawal amount`);
         }
 
         // Check if user has enough balance
-        const tokenLabel = isMainProject ? "OGX" : projectTokenSymbol;
+        const tokenLabel = projectTokenSymbol;
         if (state.apes < ogxAmount) {
             return alert(`Insufficient ${tokenLabel} balance. You have ${state.apes.toFixed(4)} ${tokenLabel} but need ${ogxAmount.toFixed(4)} ${tokenLabel}.`);
         }
@@ -376,7 +468,7 @@ export default function WithdrawModal() {
 
             // Route to appropriate withdrawal function based on token
             if (selectedToken === "SOL") {
-                // For SOL, withdrawSOL expects SOL amount and handles OGX conversion internally
+                // For SOL, withdrawSOL expects SOL amount and handles token conversion internally
                 // But we need to verify the platform has enough SOL
                 const platformBalance = await solanaProgramService.getPlatformWalletBalance();
                 if (platformBalance < tokenAmount + 0.01) {
@@ -385,7 +477,7 @@ export default function WithdrawModal() {
                     return;
                 }
 
-                // Withdraw SOL - the program will handle OGX burning
+                // Withdraw SOL - the program will handle token burning
                 // Main project: use main website admin wallet (pass undefined)
                 // Sub-project: use project-specific admin wallet (pass projectId)
                 signature = await solanaProgramService.withdrawSOL(
@@ -509,7 +601,7 @@ export default function WithdrawModal() {
 
             setState({ ...state, apes: minus });
 
-            const tokenLabel = isMainProject ? "OGX" : projectTokenSymbol;
+            const tokenLabel = projectTokenSymbol;
             alert(`${selectedToken} withdrawal successful! ${ogxAmount.toFixed(4)} ${tokenLabel} burned, ${tokenAmount.toFixed(4)} ${selectedTokenInfo?.symbol} sent to your wallet. Transaction: ${signature}`);
 
             // Refresh balances
@@ -546,7 +638,7 @@ export default function WithdrawModal() {
         }
 
         if (!form.withdrawBalance || form.withdrawBalance <= 0) {
-            return alert("Please enter a valid OGX withdrawal amount");
+            return alert(`Please enter a valid ${projectTokenSymbol} withdrawal amount`);
         }
 
         if (isProcessing) {
@@ -591,13 +683,13 @@ export default function WithdrawModal() {
             // Main project: use userId (from legacy user table), no project_user_id, project_id is null
             // Sub-project: use project_user_id, no userId, set project_id
             if (isMainProject) {
-                console.log("🏠 Main project: Processing OGX withdrawal");
+                console.log(`🏠 Main project: Processing ${projectTokenSymbol} withdrawal`);
                 withdrawData.userId = userId; // Use userId field for legacy user table
                 withdrawData.project_id = null;
                 // Explicitly do NOT set project_user_id for main project
                 delete withdrawData.project_user_id;
             } else {
-                console.log(`📦 Sub-project: Processing OGX withdrawal for project ID ${projectId}`);
+                console.log(`📦 Sub-project: Processing ${projectTokenSymbol} withdrawal for project ID ${projectId}`);
                 withdrawData.project_user_id = userId; // UUID from project_users table
                 withdrawData.project_id = parseInt(projectId);
                 // Don't use userId field for sub-projects
@@ -607,7 +699,7 @@ export default function WithdrawModal() {
             const { error: withdrawError } = await supabase.from("withdraw").insert(withdrawData);
 
             if (withdrawError) {
-                console.error("Error saving OGX withdrawal:", withdrawError);
+                console.error(`Error saving ${projectTokenSymbol} withdrawal:`, withdrawError);
                 throw withdrawError;
             }
 
@@ -640,14 +732,14 @@ export default function WithdrawModal() {
 
             setState({ ...state, apes: minus });
 
-            alert(`OGX withdrawal successful! ${form.withdrawBalance} OGX burned, ${solExchange.toFixed(4)} SOL sent to your wallet. Transaction: ${signature}`);
+            alert(`${projectTokenSymbol} withdrawal successful! ${form.withdrawBalance} ${projectTokenSymbol} burned, ${solExchange.toFixed(4)} SOL sent to your wallet. Transaction: ${signature}`);
 
             // Refresh balances
             await fetchOGXBalance();
             run(userId);
 
         } catch (error) {
-            console.error("Error making OGX withdrawal transaction:", error);
+            console.error(`Error making ${projectTokenSymbol} withdrawal transaction:`, error);
             if (error instanceof Error && error.message === "TRANSACTION_ALREADY_PROCESSED") {
                 alert("server error try again in few seconds");
             } else if (error instanceof Error && error.message.includes("already been processed")) {
@@ -657,7 +749,7 @@ export default function WithdrawModal() {
             } else if (error instanceof Error && error.message.includes("Insufficient")) {
                 alert(error.message);
             } else {
-                alert(`Error making OGX withdrawal: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                alert(`Error making ${projectTokenSymbol} withdrawal: ${error instanceof Error ? error.message : 'Unknown error'}`);
             }
         } finally {
             setIsProcessing(false);
@@ -667,6 +759,18 @@ export default function WithdrawModal() {
     const makeSOLWithdrawTransaction = async () => {
         if (!publicKey || !signTransaction) {
             return alert("Please connect your wallet first");
+        }
+
+        // Check if admin wallet is configured
+        if (adminWalletConfigured === false) {
+            alert("⚠️ Admin wallet is not configured. Please contact the administrator to configure an admin wallet before making withdrawals.");
+            return;
+        }
+
+        // If still checking, wait a moment
+        if (adminWalletConfigured === null) {
+            alert("Please wait while we verify the admin wallet configuration...");
+            return;
         }
 
         // Check for user authentication - use both state.id and state.uid
@@ -825,7 +929,7 @@ export default function WithdrawModal() {
         }
 
         if (!form.withdrawBalance || form.withdrawBalance <= 0) {
-            return alert("Please enter a valid OGX withdrawal amount");
+            return alert(`Please enter a valid ${projectTokenSymbol} withdrawal amount`);
         }
 
         if (isProcessing) {
@@ -1016,7 +1120,7 @@ export default function WithdrawModal() {
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-orange-600 mb-2">
-                                            Available {isMainProject ? "OGX" : projectTokenSymbol} Balance
+                                            Available {projectTokenSymbol} Balance
                                         </label>
                                         <input
                                             className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
@@ -1026,7 +1130,7 @@ export default function WithdrawModal() {
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-orange-600 mb-2">
-                                            {isMainProject ? "OGX" : projectTokenSymbol} Amount to Withdraw
+                                            {projectTokenSymbol} Amount to Withdraw
                                         </label>
                                         <input
                                             type="number"
@@ -1079,12 +1183,19 @@ export default function WithdrawModal() {
                                     </div> */}
                                 </div>
                                 <div className="flex items-center justify-end pt-4 space-x-3 border-t border-[#ff914d]/20">
+                                    {adminWalletConfigured === false && (
+                                        <div className="flex-1 mr-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                                            <p className="text-xs text-yellow-800">
+                                                <strong>⚠️ Withdrawal Disabled:</strong> Admin wallet is not configured. Please contact the administrator.
+                                            </p>
+                                        </div>
+                                    )}
                                     <button
                                         onClick={makeTokenWithdrawTransaction}
-                                        disabled={isProcessing || !connected}
+                                        disabled={isProcessing || !connected || adminWalletConfigured === false || adminWalletConfigured === null}
                                         className="px-5 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-[#f74e14] to-[#ff914d] text-white hover:opacity-90 focus:ring-2 focus:ring-[#ff914d]/50 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                        {isProcessing ? "Processing..." : `Withdraw ${selectedTokenInfo?.symbol}`}
+                                        {isProcessing ? "Processing..." : adminWalletConfigured === false ? "Withdrawal Disabled" : adminWalletConfigured === null ? "Checking..." : `Withdraw ${selectedTokenInfo?.symbol}`}
                                     </button>
                                     <button
                                         onClick={() => setState({ ...state, withdraw: false })}

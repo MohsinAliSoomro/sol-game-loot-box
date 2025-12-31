@@ -102,6 +102,85 @@ export default function PurchaseModal() {
   // Use URL slug first, then fallback to currentProject slug
   const activeProjectSlug = projectSlugFromUrl || currentProject?.slug;
 
+  // Check if deposit wallet is configured
+  const [depositWalletConfigured, setDepositWalletConfigured] = useState<boolean | null>(null);
+  
+  useEffect(() => {
+    const checkDepositWallet = async () => {
+      try {
+        console.log('[DEPOSIT CHECK] Checking deposit wallet configuration...', { projectId });
+        
+        // For projects, ONLY check project-specific deposit wallet (no fallback to website_settings)
+        if (projectId) {
+          const { data, error } = await supabase
+            .from('project_settings')
+            .select('setting_value')
+            .eq('project_id', projectId)
+            .eq('setting_key', 'deposit_wallet_address')
+            .maybeSingle(); // Use maybeSingle() instead of single() to avoid error on no rows
+
+          if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+            console.error('[DEPOSIT CHECK] Error fetching project deposit wallet:', error);
+          }
+
+          if (data?.setting_value) {
+            // Validate it's a valid PublicKey
+            try {
+              new PublicKey(data.setting_value as string);
+              console.log('[DEPOSIT CHECK] ✅ Project deposit wallet configured:', data.setting_value);
+              setDepositWalletConfigured(true);
+              return;
+            } catch (e) {
+              console.warn(`[DEPOSIT CHECK] ⚠️ Invalid deposit wallet address for project ${projectId}:`, e);
+              // Invalid wallet address = not configured
+              setDepositWalletConfigured(false);
+              return;
+            }
+          } else {
+            console.log('[DEPOSIT CHECK] ❌ No project-specific deposit wallet found - deposits disabled');
+            setDepositWalletConfigured(false);
+            return;
+          }
+        }
+        
+        // For main project (no projectId), check website_settings
+        const { data: websiteData, error: websiteError } = await supabase
+          .from('website_settings')
+          .select('value')
+          .eq('key', 'deposit_wallet_address')
+          .maybeSingle(); // Use maybeSingle() instead of single() to avoid error on no rows
+
+        if (websiteError && websiteError.code !== 'PGRST116') {
+          console.error('[DEPOSIT CHECK] Error fetching website deposit wallet:', websiteError);
+        }
+
+        if (websiteData?.value) {
+          // Validate it's a valid PublicKey
+          try {
+            new PublicKey(websiteData.value as string);
+            console.log('[DEPOSIT CHECK] ✅ Website deposit wallet configured:', websiteData.value);
+            setDepositWalletConfigured(true);
+            return;
+          } catch (e) {
+            console.warn('[DEPOSIT CHECK] ⚠️ Invalid main website deposit wallet address:', e);
+            setDepositWalletConfigured(false);
+            return;
+          }
+        } else {
+          console.log('[DEPOSIT CHECK] ❌ No website deposit wallet found - deposits disabled');
+          setDepositWalletConfigured(false);
+          return;
+        }
+      } catch (error) {
+        console.error('[DEPOSIT CHECK] ❌ Error checking deposit wallet:', error);
+        // On error, disable deposits to be safe
+        setDepositWalletConfigured(false);
+      }
+    };
+
+    checkDepositWallet();
+  }, [projectId]);
+
   // Load tokens from database
   // Main project: uses legacy tokenService (tokens table or CONFIG)
   // Sub-projects: uses projectTokenService (project_tokens table)
@@ -415,6 +494,18 @@ export default function PurchaseModal() {
   const makeTokenDeposit = async () => {
     if (!publicKey || !signTransaction) {
       alert("Please connect your wallet first");
+      return;
+    }
+
+    // Check if deposit wallet is configured
+    if (depositWalletConfigured === false) {
+      alert("⚠️ Deposit wallet is not configured. Please contact the administrator to configure a deposit wallet before making deposits.");
+      return;
+    }
+
+    // If still checking, wait a moment
+    if (depositWalletConfigured === null) {
+      alert("Please wait while we verify the deposit wallet configuration...");
       return;
     }
 
@@ -1019,6 +1110,13 @@ export default function PurchaseModal() {
     } catch (error) {
       console.error(`Error making ${selectedTokenInfo?.symbol} deposit:`, error);
 
+      // Check if error is about deposit wallet not being configured
+      if (error instanceof Error && error.message.includes("Deposit wallet is not configured")) {
+        alert("⚠️ " + error.message);
+        setIsProcessing(false);
+        return;
+      }
+
       if (error instanceof Error && error.message === "TRANSACTION_ALREADY_PROCESSED") {
         alert("server error try again in few seconds");
       } else if (error instanceof Error && error.message.includes("already been processed")) {
@@ -1209,12 +1307,19 @@ export default function PurchaseModal() {
                       </div> */}
                     </div>
                     <div className="flex items-center justify-end pt-4 space-x-3 border-t border-[#ff914d]/20">
+                      {depositWalletConfigured === false && (
+                        <div className="flex-1 mr-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                          <p className="text-xs text-yellow-800">
+                            <strong>⚠️ Deposit Disabled:</strong> Deposit wallet is not configured. Please contact the administrator.
+                          </p>
+                        </div>
+                      )}
                       <button
                         onClick={makeTokenDeposit}
-                        disabled={isProcessing || !connected || !selectedTokenInfo}
+                        disabled={isProcessing || !connected || !selectedTokenInfo || depositWalletConfigured === false || depositWalletConfigured === null}
                         className="px-5 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-[#f74e14] to-[#ff914d] text-white hover:opacity-90 focus:ring-2 focus:ring-[#ff914d]/50 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {isProcessing ? "Processing..." : `Deposit ${selectedTokenInfo?.symbol || 'Token'}`}
+                        {isProcessing ? "Processing..." : depositWalletConfigured === false ? "Deposit Disabled" : depositWalletConfigured === null ? "Checking..." : `Deposit ${selectedTokenInfo?.symbol || 'Token'}`}
                       </button>
                       <button
                         onClick={() =>

@@ -58,13 +58,17 @@ const defaultTheme = {
 };
 
 export default function WebsiteSettings() {
-  const { getProjectId } = useProject();
+  const { getProjectId, getProjectTokenSymbol } = useProject();
+  const tokenSymbol = getProjectTokenSymbol();
   const projectId = getProjectId();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   const [currentLogo, setCurrentLogo] = useState<string | null>(null);
+  const [faviconFile, setFaviconFile] = useState<File | null>(null);
+  const [faviconPreviewUrl, setFaviconPreviewUrl] = useState<string | null>(null);
+  const [currentFavicon, setCurrentFavicon] = useState<string | null>(null);
   const [sliderImages, setSliderImages] = useState<any[]>([]);
   const [sliderFile1, setSliderFile1] = useState<File | null>(null);
   const [sliderFile2, setSliderFile2] = useState<File | null>(null);
@@ -153,6 +157,28 @@ export default function WebsiteSettings() {
           .single();
         if (settingsData) {
           setCurrentLogo(settingsData.value);
+        }
+      }
+
+      // Fetch favicon from project_settings
+      const { data: faviconData } = await supabase
+        .from('project_settings')
+        .select('setting_value')
+        .eq('project_id', projectId)
+        .eq('setting_key', 'favicon')
+        .single();
+
+      if (faviconData?.setting_value) {
+        setCurrentFavicon(faviconData.setting_value as string);
+      } else {
+        // Fallback to website_settings
+        const { data: settingsData } = await supabase
+          .from('website_settings')
+          .select('*')
+          .eq('key', 'favicon')
+          .single();
+        if (settingsData) {
+          setCurrentFavicon(settingsData.value);
         }
       }
 
@@ -330,6 +356,50 @@ export default function WebsiteSettings() {
     } catch (error: any) {
       console.error('Error uploading logo:', error);
       alert('Error uploading logo. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleFaviconUpload = async () => {
+    if (!faviconFile || !projectId) return;
+
+    setSaving(true);
+    try {
+      const fileExt = faviconFile.name.split('.').pop();
+      const fileName = `favicon-${Date.now()}.${fileExt}`;
+      const filePath = `website/favicon/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('apes-bucket')
+        .upload(filePath, faviconFile, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Save to project_settings (project-scoped)
+      const { error: dbError } = await supabase
+        .from('project_settings')
+        .upsert({
+          project_id: projectId,
+          setting_key: 'favicon',
+          setting_value: filePath
+        }, {
+          onConflict: 'project_id,setting_key'
+        });
+
+      if (dbError) throw dbError;
+
+      setCurrentFavicon(filePath);
+      setFaviconFile(null);
+      // Clear preview URL after successful upload
+      if (faviconPreviewUrl) {
+        URL.revokeObjectURL(faviconPreviewUrl);
+        setFaviconPreviewUrl(null);
+      }
+      alert('Favicon uploaded successfully!');
+    } catch (error: any) {
+      console.error('Error uploading favicon:', error);
+      alert('Error uploading favicon. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -935,6 +1005,73 @@ export default function WebsiteSettings() {
           <p className="text-xs text-gray-500 mt-2">Recommended size: 200x60px or larger, PNG/SVG format</p>
         </div>
 
+        {/* Favicon Upload Section */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Website Favicon</h2>
+          <p className="text-sm text-gray-600 mb-4">Upload a favicon that will appear in browser tabs and bookmarks for your project.</p>
+          
+          {/* Show preview if file is selected, otherwise show current favicon */}
+          {faviconPreviewUrl ? (
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">Preview (New Favicon):</p>
+              <div className="inline-block p-4 bg-gray-50 rounded-lg border-2 border-orange-500 border-dashed">
+                <img 
+                  src={faviconPreviewUrl} 
+                  alt="Favicon Preview" 
+                  className="w-16 h-16 object-contain"
+                />
+              </div>
+            </div>
+          ) : currentFavicon && (
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">Current Favicon:</p>
+              <div className="inline-block p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <img 
+                  src={getImageUrl(currentFavicon)} 
+                  alt="Current Favicon" 
+                  className="w-16 h-16 object-contain"
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center space-x-4">
+            <input
+              type="file"
+              accept="image/x-icon,image/png,image/svg+xml,.ico"
+              onChange={(e) => {
+                const file = e.target.files?.[0] || null;
+                setFaviconFile(file);
+                
+                // Create preview URL for selected file
+                if (file) {
+                  // Clean up previous preview URL if exists
+                  if (faviconPreviewUrl) {
+                    URL.revokeObjectURL(faviconPreviewUrl);
+                  }
+                  const previewUrl = URL.createObjectURL(file);
+                  setFaviconPreviewUrl(previewUrl);
+                } else {
+                  // Clear preview if no file selected
+                  if (faviconPreviewUrl) {
+                    URL.revokeObjectURL(faviconPreviewUrl);
+                    setFaviconPreviewUrl(null);
+                  }
+                }
+              }}
+              className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+            />
+            <button
+              onClick={handleFaviconUpload}
+              disabled={!faviconFile || saving}
+              className="px-6 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+            >
+              {saving ? 'Uploading...' : 'Upload Favicon'}
+            </button>
+          </div>
+          <p className="text-xs text-gray-500 mt-2">Recommended size: 32x32px or 16x16px, ICO/PNG/SVG format. The favicon will appear in browser tabs.</p>
+        </div>
+
         {/* Slider Images Section */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">Landing Page Slider Images</h2>
@@ -1509,7 +1646,7 @@ export default function WebsiteSettings() {
                   e.currentTarget.style.backgroundColor = wheelSettings.buttonBackgroundColor;
                 }}
               >
-                SPIN FOR 10 OGX
+                SPIN FOR 10 {tokenSymbol}
               </button>
               <div 
                 className="w-0 h-0 border-l-4 border-r-4 border-t-8"

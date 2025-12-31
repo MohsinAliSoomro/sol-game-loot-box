@@ -441,7 +441,7 @@ export default function TokenManagement() {
         <div>
           <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
             <p className="text-sm text-blue-800">
-              <strong>Off-Chain Token:</strong> This is your project&apos;s native token (like OGX). Users receive this token when they deposit. You can only have one off-chain token per project. You can edit its name and symbol.
+              <strong>Off-Chain Token:</strong> This is your project&apos;s native token. Users receive this token when they deposit. You can only have one off-chain token per project. You can edit its name and symbol.
             </p>
           </div>
 
@@ -497,7 +497,7 @@ export default function TokenManagement() {
                       value={offchainFormData.symbol}
                       onChange={(e) => setOffchainFormData({ ...offchainFormData, symbol: e.target.value.toUpperCase() })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      placeholder="e.g., OGX, MLT"
+                      placeholder="e.g., TOKEN, MLT"
                       maxLength={10}
                     />
                   </div>

@@ -74,12 +74,12 @@ export default function JackpotImage({
           } else {
             // NFT metadata not found or no image
             console.warn('⚠️ NFT metadata missing image:', metadata);
-            setImageUrl(fallbackSrc);
+            setImageUrl(null); // No placeholder for NFTs - only show real images
             setError(true);
           }
         } catch (err) {
           console.error('❌ Error fetching NFT metadata:', err);
-          setImageUrl(fallbackSrc);
+          setImageUrl(null); // No placeholder for NFTs - only show real images
           setError(true);
         } finally {
           setLoading(false);
@@ -114,9 +114,28 @@ export default function JackpotImage({
   const isExternalUrl = imageUrl && (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'));
   const isIPFS = imageUrl && (imageUrl.includes('ipfs') || imageUrl.includes('gateway.pinata.cloud') || imageUrl.includes('ipfs.io'));
   
+  // Don't render image if no URL (for NFTs without images)
+  if (!imageUrl && !fallbackSrc) {
+    return null;
+  }
+
+  // Check if it's an NFT mint (no fallback for NFTs)
+  const isNFTMint = typeof image === 'string' && 
+                   image && image.length >= 32 && 
+                   image.length <= 44 && 
+                   !image.includes('/') &&
+                   !image.includes('.');
+
+  // For NFTs, don't use fallback - only show real images
+  const finalSrc = isNFTMint ? (imageUrl || null) : (imageUrl || fallbackSrc);
+  
+  if (!finalSrc) {
+    return null;
+  }
+
   return (
     <Image
-      src={imageUrl || fallbackSrc}
+      src={finalSrc}
       alt={name}
       width={width}
       height={height}
@@ -126,7 +145,10 @@ export default function JackpotImage({
         console.error('❌ Jackpot image failed to load:', imageUrl);
         console.error('❌ Error details:', e);
         setError(true);
-        if (imageUrl !== fallbackSrc) {
+        // For NFTs, don't fallback - hide the image
+        if (isNFTMint) {
+          e.currentTarget.style.display = 'none';
+        } else if (imageUrl !== fallbackSrc && fallbackSrc) {
           setImageUrl(fallbackSrc);
         }
       }}

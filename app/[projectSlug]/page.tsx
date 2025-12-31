@@ -236,7 +236,7 @@ export default function ProjectHomePage() {
                         {transactions?.data?.map((win, index) => {
                             // Determine image source based on reward type
                             let imageSource: string | null = null;
-                            let fallbackImage: string = "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png";
+                            let fallbackImage: string | null = "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png";
                             
                             // Check reward type
                             const rewardType = (win?.reward_type || '').toLowerCase();
@@ -276,7 +276,7 @@ export default function ProjectHomePage() {
                                 // NFT reward - use mint address to fetch NFT image
                                 // Prefer mint field, fallback to image if it's a mint address
                                 imageSource = hasMint ? win.mint : (imageIsMint ? win.image : null);
-                                fallbackImage = "/NFT-Logo.png"; // NFT fallback
+                                fallbackImage = null; // No placeholder for NFTs - only show real images
                                 console.log(`🎨 Using NFT image source:`, imageSource);
                             } else if (isSOL) {
                                 // SOL/token reward - use SOL logo
@@ -307,7 +307,7 @@ export default function ProjectHomePage() {
                                                     width={100}
                                                     height={100}
                                                     className="object-contain w-full h-full"
-                                                    fallbackSrc={fallbackImage}
+                                                    fallbackSrc={fallbackImage ?? undefined}
                                                 />
                                             </div>
                                             <span className="font-bold text-sm mt-1 text-center mx-auto text-orange-700 mb-1 truncate w-full">
@@ -324,7 +324,7 @@ export default function ProjectHomePage() {
                                                     width={100}
                                                     height={100}
                                                     className="object-contain mt-3 w-full h-full"
-                                                    fallbackSrc={fallbackImage}
+                                                    fallbackSrc={fallbackImage ?? undefined}
                                                 />
                                             </div>
                                         </div>

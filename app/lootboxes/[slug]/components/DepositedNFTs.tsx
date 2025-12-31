@@ -111,7 +111,7 @@ export default function DepositedNFTs({ productId }: DepositedNFTsProps) {
           return {
             mint: dbReward.mint_address,
             name: metadataMatch?.name || dbReward.reward_name || dbReward.mint_address.substring(0, 8) + '...',
-            image: dbReward.reward_image ? getImageUrl(dbReward.reward_image) : (metadataMatch?.image || '/NFT-Logo.png'), // Prefer DB image, then metadata, then fallback
+            image: dbReward.reward_image ? getImageUrl(dbReward.reward_image) : (metadataMatch?.image || null), // Prefer DB image, then metadata, no placeholder
             description: metadataMatch?.description || '',
             symbol: metadataMatch?.symbol || 'NFT',
             attributes: metadataMatch?.attributes || [],
@@ -311,20 +311,22 @@ export default function DepositedNFTs({ productId }: DepositedNFTsProps) {
               </svg>
             </div>
             
-            {/* NFT Image */}
-            <div className="w-24 md:h-24 h-16 group-hover:scale-105 transition-transform duration-300 ml-0">
-              <Image
-                src={nft.image}
-                alt={nft.name}
-                width={250}
-                height={150}
-                className="object-contain drop-shadow-md rounded-lg"
-                onError={(e) => {
-                  // Fallback to default image if NFT image fails to load
-                  e.currentTarget.src = "/NFT-Logo.png";
-                }}
-              />
-            </div>
+            {/* NFT Image - only show if image exists */}
+            {nft.image && (
+              <div className="w-24 md:h-24 h-16 group-hover:scale-105 transition-transform duration-300 ml-0">
+                <Image
+                  src={nft.image}
+                  alt={nft.name}
+                  width={250}
+                  height={150}
+                  className="object-contain drop-shadow-md rounded-lg"
+                  onError={(e) => {
+                    // Hide image container if it fails to load - no placeholder for NFTs
+                    e.currentTarget.parentElement?.parentElement?.remove();
+                  }}
+                />
+              </div>
+            )}
 
             {/* NFT Name */}
             <div className="mt-2 reward font-bold text-center relative bottom-7 w-full py-2 text-xs rounded-lg  flex justify-center items-center gap-2 md:-top-1 top-11">

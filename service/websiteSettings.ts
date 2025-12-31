@@ -241,3 +241,39 @@ export const getWheelSettings = async (projectId?: number | null): Promise<Wheel
   }
 };
 
+export const getFavicon = async (projectId?: number | null): Promise<string | null> => {
+  try {
+    // If projectId is provided, fetch from project_settings (project-specific)
+    if (projectId) {
+      const { data, error } = await supabase
+        .from("project_settings")
+        .select("setting_value")
+        .eq("project_id", projectId)
+        .eq("setting_key", "favicon")
+        .single();
+
+      if (error || !data?.setting_value) {
+        return null;
+      }
+
+      return getImageUrl(data.setting_value);
+    }
+
+    // Fallback to website_settings for main project (legacy)
+    const { data, error } = await supabase
+      .from("website_settings")
+      .select("value")
+      .eq("key", "favicon")
+      .single();
+
+    if (error || !data?.value) {
+      return null;
+    }
+
+    return getImageUrl(data.value);
+  } catch (error) {
+    console.error("Error fetching favicon:", error);
+    return null;
+  }
+};
+

@@ -201,7 +201,7 @@ export default function ProjectAdminDashboard() {
             <div>
               <p className="text-sm text-gray-600">SOL Withdrawn</p>
               <h3 className="text-2xl font-semibold text-gray-800 mt-1">{formatCurrency(stats.totalSOLWithdrawn)}</h3>
-              <p className="text-red-500 text-sm mt-1">1000 OGX = 1 SOL</p>
+              <p className="text-red-500 text-sm mt-1">1000 {projectTokenSymbol} = 1 SOL</p>
             </div>
             <div className="bg-red-100 p-3 rounded-lg">
               <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">

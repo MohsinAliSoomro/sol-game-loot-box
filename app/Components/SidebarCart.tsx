@@ -276,7 +276,8 @@ export default function SidebarCart() {
         manual: true,
     });
     const [user, setCart] = useUserState();
-    const { getProjectId } = useProject();
+    const { getProjectId, currentProject, getProjectTokenSymbol } = useProject();
+    const tokenSymbol = getProjectTokenSymbol();
     const projectId = getProjectId();
     const [claimingReward, setClaimingReward] = useState<string | null>(null);
     const [claimingAll, setClaimingAll] = useState(false);
@@ -1019,11 +1020,17 @@ export default function SidebarCart() {
                                 className="flex h-full flex-col"
                                 style={{
                                     margin: '10px 10px 10px 10px',
-                                    backgroundColor: 'var(--wheel-segment-fill, #ff914d)',
+                                    backgroundColor: 'var(--theme-primary, var(--wheel-segment-fill, #ff914d))',
+                                    border: '2px solid var(--theme-secondary, var(--wheel-button-hover, #e63900))',
                                     opacity: 0.9
                                 }}
                             >
-                                <div className="flex items-center justify-between p-4 relative">
+                                <div 
+                                    className="flex items-center justify-between p-4 relative"
+                                    style={{
+                                        borderBottom: '2px solid var(--theme-secondary, var(--wheel-button-hover, #e63900))'
+                                    }}
+                                >
                                     <h2 className="text-2xl font-bold text-white w-full text-center">
                                         Available Rewards
                                     </h2>
@@ -1077,7 +1084,14 @@ export default function SidebarCart() {
                                                 }
                                                 
                                                 return (
-                                                <div key={index} className="flex items-center bg-white/10 rounded-lg p-4 ">
+                                                <div 
+                                                    key={index} 
+                                                    className="flex items-center bg-white/10 rounded-lg p-4"
+                                                    style={{
+                                                        border: `1px solid var(--theme-secondary, var(--wheel-button-hover, #e63900))`,
+                                                        borderLeft: `3px solid var(--theme-secondary, var(--wheel-button-hover, #e63900))`
+                                                    }}
+                                                >
                                                     <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg">
                                                         <JackpotImage
                                                             image={imageSource}
@@ -1133,18 +1147,18 @@ export default function SidebarCart() {
                                                                 disabled={claimingReward === (item.id?.toString() || index.toString()) || claimingReward !== null || claimingAll}
                                                                 className="mt-2 disabled:bg-gray-500 text-white py-2 px-4 rounded-lg text-sm font-bold transition-colors"
                                                                 style={{
-                                                                    backgroundColor: claimingReward === (item.id?.toString() || index.toString()) || claimingReward !== null || claimingAll
-                                                                        ? undefined
-                                                                        : 'var(--wheel-button-bg, #f74e14)'
+                                    backgroundColor: claimingReward === (item.id?.toString() || index.toString()) || claimingReward !== null || claimingAll
+                                        ? undefined
+                                        : 'var(--theme-primary, var(--wheel-button-bg, #f74e14))'
                                                                 }}
                                                                 onMouseEnter={(e) => {
                                                                     if (claimingReward !== (item.id?.toString() || index.toString()) && claimingReward === null && !claimingAll) {
-                                                                        e.currentTarget.style.backgroundColor = 'var(--wheel-button-hover, #e63900)';
+                                                                        e.currentTarget.style.backgroundColor = 'var(--theme-secondary, var(--wheel-button-hover, #e63900))';
                                                                     }
                                                                 }}
                                                                 onMouseLeave={(e) => {
                                                                     if (claimingReward !== (item.id?.toString() || index.toString()) && claimingReward === null && !claimingAll) {
-                                                                        e.currentTarget.style.backgroundColor = 'var(--wheel-button-bg, #f74e14)';
+                                                                        e.currentTarget.style.backgroundColor = 'var(--theme-primary, var(--wheel-button-bg, #f74e14))';
                                                                     }
                                                                 }}
                                                             >
@@ -1183,7 +1197,12 @@ export default function SidebarCart() {
                                     </div>
                                 </div>
 
-                                <div className="p-4 bg-white/10">
+                                <div 
+                                    className="p-4 bg-white/10"
+                                    style={{
+                                        borderTop: '2px solid var(--theme-secondary, var(--wheel-button-hover, #e63900))'
+                                    }}
+                                >
                                     <div className="flex justify-between text-lg font-bold text-white mb-4">
                                         <p>Total Rewards</p>
                                         <p>{(data as any)?.data?.length || 0} items</p>
@@ -1199,7 +1218,7 @@ export default function SidebarCart() {
                                                 style={{
                                                     backgroundColor: claimingAll || claimingReward !== null
                                                         ? undefined
-                                                        : 'var(--wheel-button-bg, #f74e14)'
+                                                        : 'var(--theme-primary, var(--wheel-button-bg, #f74e14))'
                                                 }}
                                                 onMouseEnter={(e) => {
                                                     if (!claimingAll && claimingReward === null) {
@@ -1226,13 +1245,13 @@ export default function SidebarCart() {
 
                                     {/* <div className="text-center text-white/60 mb-4">
                                         <p className="text-sm">NFT rewards appear here only after winning them</p>
-                                        <p className="text-sm">OGX tokens are automatically added to your balance</p>
+                                        <p className="text-sm">{tokenSymbol} tokens are automatically added to your balance</p>
                                     </div> */}
                                     <div className="text-center">
                                         <button
                                             onClick={() => setCart({ ...user, cart: false })}
                                             className="text-white hover:text-white/80 font-medium">
-                                            OGX Lootbox <span aria-hidden="true">→</span>
+                                            {tokenSymbol} Lootbox <span aria-hidden="true">→</span>
                                         </button>
                                     </div>
                                 </div>
