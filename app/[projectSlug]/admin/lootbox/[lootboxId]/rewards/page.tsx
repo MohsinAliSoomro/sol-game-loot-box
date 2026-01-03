@@ -705,7 +705,8 @@ export default function LootboxRewards() {
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" 
                   required 
                   min="0" 
-                  max="100" 
+                  max="100"
+                  step="any"
                 />
               </div>
 

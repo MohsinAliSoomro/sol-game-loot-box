@@ -23,6 +23,119 @@ const getMetaplex = async () => {
 };
 
 /**
+ * Helper: Derive Metaplex metadata PDA
+ */
+async function getMetadataPDA(mintAddress: string): Promise<string> {
+  const METADATA_PROGRAM_ID = 'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s';
+  const seeds = [
+    Buffer.from('metadata'),
+    new PublicKey(METADATA_PROGRAM_ID).toBuffer(),
+    new PublicKey(mintAddress).toBuffer()
+  ];
+  
+  const [pda] = await PublicKey.findProgramAddress(seeds, new PublicKey(METADATA_PROGRAM_ID));
+  return pda.toBase58();
+}
+
+/**
+ * Helper: Parse on-chain metadata (simplified)
+ */
+function parseMetadata(data: Buffer): { name: string; symbol: string; uri: string } {
+  try {
+    // Skip first byte (key = 4 for Metadata account)
+    let offset = 1;
+    
+    // Read update authority (32 bytes)
+    offset += 32;
+    
+    // Read mint (32 bytes)
+    offset += 32;
+    
+    // Read name (string with 4-byte length prefix)
+    const nameLen = data.readUInt32LE(offset);
+    offset += 4;
+    const name = data.slice(offset, offset + nameLen).toString('utf8').replace(/\0/g, '').trim();
+    offset += nameLen;
+    
+    // Read symbol (string with 4-byte length prefix)
+    const symbolLen = data.readUInt32LE(offset);
+    offset += 4;
+    const symbol = data.slice(offset, offset + symbolLen).toString('utf8').replace(/\0/g, '').trim();
+    offset += symbolLen;
+    
+    // Read URI (string with 4-byte length prefix)
+    const uriLen = data.readUInt32LE(offset);
+    offset += 4;
+    const uri = data.slice(offset, offset + uriLen).toString('utf8').replace(/\0/g, '').trim();
+    
+    return { name, symbol, uri };
+  } catch (err) {
+    console.error('Error parsing metadata:', err);
+    return { name: '', symbol: '', uri: '' };
+  }
+}
+
+/**
+ * Fallback method using manual parsing (no Metaplex dependency)
+ */
+async function fetchNFTMetadataFallback(mintAddress: string) {
+  try {
+    console.log("🔄 Using fallback method (manual parsing) for:", mintAddress);
+    const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com", 'confirmed');
+    
+    // Derive metadata PDA
+    const metadataPDA = await getMetadataPDA(mintAddress);
+    const accountInfo = await connection.getAccountInfo(new PublicKey(metadataPDA));
+
+    if (!accountInfo) {
+      console.warn("❌ Metadata account not found for mint:", mintAddress);
+      return null;
+    }
+
+    // Parse on-chain metadata
+    const metadata = parseMetadata(accountInfo.data);
+    
+    // Fetch off-chain metadata if URI exists
+    let offChainData = null;
+    if (metadata.uri) {
+      try {
+        const response = await fetch(metadata.uri);
+        if (response.ok) {
+          offChainData = await response.json();
+        }
+      } catch (err) {
+        console.warn('Failed to fetch off-chain metadata for', mintAddress);
+      }
+    }
+
+    // Convert IPFS URLs to HTTP gateway URLs
+    let imageUrl = offChainData?.image || null;
+    if (imageUrl && typeof imageUrl === 'string') {
+      // Handle IPFS URLs
+      if (imageUrl.startsWith('ipfs://')) {
+        imageUrl = imageUrl.replace('ipfs://', 'https://gateway.pinata.cloud/ipfs/');
+      } else if (imageUrl.startsWith('ipfs/')) {
+        imageUrl = imageUrl.replace('ipfs/', 'https://gateway.pinata.cloud/ipfs/');
+      } else if (imageUrl.startsWith('Qm') && imageUrl.length === 46 && !imageUrl.includes('/') && !imageUrl.includes('http')) {
+        imageUrl = `https://gateway.pinata.cloud/ipfs/${imageUrl}`;
+      }
+    }
+
+    return {
+      name: metadata.name || offChainData?.name || mintAddress.substring(0, 8) + '...',
+      image: imageUrl,
+      description: offChainData?.description || "",
+      mint: mintAddress,
+      symbol: metadata.symbol || "NFT",
+      attributes: offChainData?.attributes || []
+    };
+  } catch (error) {
+    console.error("❌ Error in fallback method:", error);
+    return null;
+  }
+}
+
+/**
  * Fetch NFT metadata from mint address
  * @param mintAddress - The token mint address
  * @returns Promise with NFT metadata or null if not found
@@ -32,62 +145,67 @@ export const fetchNFTMetadata = async (mintAddress: string) => {
     console.log("🔍 Fetching NFT metadata for:", mintAddress);
     console.log("🌐 Using RPC:", process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com");
     
-    const metaplex = await getMetaplex();
-    const mint = new PublicKey(mintAddress);
-    const nft = await metaplex.nfts().findByMint({ mintAddress: mint });
-    
-    if (!nft) {
-      console.warn("❌ NFT not found for mint:", mintAddress);
-      return null;
-    }
-    
-    console.log("📦 NFT found:", {
-      name: nft.name,
-      symbol: nft.symbol,
-      uri: nft.uri,
-      hasJson: !!nft.json,
-      imageUrl: nft.json?.image
-    });
-    
-    // Convert IPFS URLs to HTTP gateway URLs
-    let imageUrl = nft.json?.image || null; // No placeholder for NFTs - only show real images
-    if (imageUrl && typeof imageUrl === 'string') {
-      console.log("🖼️ Original image URL:", imageUrl);
-      // Handle IPFS URLs (ipfs://... or ipfs/...)
-      if (imageUrl.startsWith('ipfs://')) {
-        // Convert ipfs://Qm... to https://gateway.pinata.cloud/ipfs/Qm...
-        imageUrl = imageUrl.replace('ipfs://', 'https://gateway.pinata.cloud/ipfs/');
-        console.log("🔄 Converted IPFS URL to:", imageUrl);
-      } else if (imageUrl.startsWith('ipfs/')) {
-        // Convert ipfs/Qm... to https://gateway.pinata.cloud/ipfs/Qm...
-        imageUrl = imageUrl.replace('ipfs/', 'https://gateway.pinata.cloud/ipfs/');
-        console.log("🔄 Converted IPFS path to:", imageUrl);
-      } else if (imageUrl.startsWith('Qm') && imageUrl.length === 46 && !imageUrl.includes('/') && !imageUrl.includes('http')) {
-        // If it's just a CID (Qm...), prepend gateway URL
-        imageUrl = `https://gateway.pinata.cloud/ipfs/${imageUrl}`;
-        console.log("🔄 Converted CID to:", imageUrl);
+    // Try Metaplex first
+    try {
+      const metaplex = await getMetaplex();
+      const mint = new PublicKey(mintAddress);
+      const nft = await metaplex.nfts().findByMint({ mintAddress: mint });
+      
+      if (!nft) {
+        console.warn("❌ NFT not found for mint:", mintAddress);
+        // Try fallback method
+        return await fetchNFTMetadataFallback(mintAddress);
       }
-      // Keep original if it's already an HTTP/HTTPS URL
-      console.log("✅ Final image URL:", imageUrl);
-    } else {
-      console.warn("⚠️ Image URL is not a string:", imageUrl);
+      
+      console.log("📦 NFT found via Metaplex:", {
+        name: nft.name,
+        symbol: nft.symbol,
+        uri: nft.uri,
+        hasJson: !!nft.json,
+        imageUrl: nft.json?.image
+      });
+      
+      // Convert IPFS URLs to HTTP gateway URLs
+      let imageUrl = nft.json?.image || null;
+      if (imageUrl && typeof imageUrl === 'string') {
+        console.log("🖼️ Original image URL:", imageUrl);
+        // Handle IPFS URLs (ipfs://... or ipfs/...)
+        if (imageUrl.startsWith('ipfs://')) {
+          imageUrl = imageUrl.replace('ipfs://', 'https://gateway.pinata.cloud/ipfs/');
+          console.log("🔄 Converted IPFS URL to:", imageUrl);
+        } else if (imageUrl.startsWith('ipfs/')) {
+          imageUrl = imageUrl.replace('ipfs/', 'https://gateway.pinata.cloud/ipfs/');
+          console.log("🔄 Converted IPFS path to:", imageUrl);
+        } else if (imageUrl.startsWith('Qm') && imageUrl.length === 46 && !imageUrl.includes('/') && !imageUrl.includes('http')) {
+          imageUrl = `https://gateway.pinata.cloud/ipfs/${imageUrl}`;
+          console.log("🔄 Converted CID to:", imageUrl);
+        }
+        console.log("✅ Final image URL:", imageUrl);
+      } else {
+        console.warn("⚠️ Image URL is not a string:", imageUrl);
+      }
+      
+      const metadata = {
+        name: nft.name,
+        image: imageUrl,
+        description: nft.json?.description || "",
+        mint: mintAddress,
+        symbol: nft.symbol || "NFT",
+        attributes: nft.json?.attributes || []
+      };
+      
+      console.log("✅ NFT metadata fetched via Metaplex:", metadata);
+      return metadata;
+    } catch (metaplexError) {
+      console.warn("⚠️ Metaplex method failed, trying fallback:", metaplexError);
+      // If Metaplex fails, use fallback method
+      return await fetchNFTMetadataFallback(mintAddress);
     }
-    
-    const metadata = {
-      name: nft.name,
-      image: imageUrl,
-      description: nft.json?.description || "",
-      mint: mintAddress,
-      symbol: nft.symbol || "NFT",
-      attributes: nft.json?.attributes || []
-    };
-    
-    console.log("✅ NFT metadata fetched:", metadata);
-    return metadata;
     
   } catch (error) {
     console.error("❌ Error fetching NFT metadata:", error);
-    return null;
+    // Last resort: try fallback
+    return await fetchNFTMetadataFallback(mintAddress);
   }
 };
 
