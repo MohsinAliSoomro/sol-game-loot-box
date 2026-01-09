@@ -7,6 +7,7 @@ import React from "react";
 import Image from "next/image";
 import { useParams } from "next/navigation";
 import { useProject } from "@/lib/project-context";
+import { LeaderboardRowSkeleton } from "@/app/Components/Skeleton";
 
 async function getLeaderboard(timeFilter: string = "all", projectId: number | null = null, isMainProject: boolean = false) {
   try {
@@ -182,7 +183,6 @@ export default function Leaderboard() {
     }
   }, [timeFilter, projectId, isMainProject, run]);
 
-  if (loading) return <Loader />;
   if (error)
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -252,7 +252,19 @@ export default function Leaderboard() {
       </div>
 
       {/* Top 3 Winners - Podium */}
-      {!hasEnoughData ? (
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 items-end">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex flex-col items-center">
+              <div className="relative bg-gray-800 rounded-xl p-6 w-full max-w-xs shadow-lg">
+                <div className="flex flex-col items-center">
+                  <LeaderboardRowSkeleton />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : !hasEnoughData ? (
         <div className="text-center mb-12">
           <div className="bg-gray-800 rounded-xl p-8 max-w-md mx-auto">
             <h3 className="text-xl font-bold text-white mb-4">🏆 Not Enough Players Yet</h3>
@@ -369,7 +381,13 @@ export default function Leaderboard() {
       )}
 
       {/* Remaining Rankings */}
-      {newData.length > 3 && (
+      {loading ? (
+        <div className="space-y-3 max-w-2xl mx-auto">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <LeaderboardRowSkeleton key={i} />
+          ))}
+        </div>
+      ) : newData.length > 3 && (
         <div className="space-y-3 max-w-2xl mx-auto">
           {newData.slice(3).map((user: any, index: number) => (
           <div key={user.id} className="relative">

@@ -10,6 +10,8 @@ import { useUserState } from "@/state/useUserState";
 import ImageSlider from "@/app/Components/ImageSlider";
 import Loader from "@/app/Components/Loader";
 import JackpotImage from "@/app/Components/JackpotImage";
+import { useThemeColor } from "@/lib/hooks/useThemeColor";
+import { ProductCardSkeleton, PrizeCardSkeleton } from "@/app/Components/Skeleton";
 
 // Types for the API responses
 interface Product {
@@ -50,6 +52,22 @@ export default function ProjectHomePage() {
     const params = useParams();
     const { currentProject, getProjectId } = useProject();
     const [user] = useUserState();
+    const themeColor = useThemeColor(); // Get theme color immediately
+    
+    // Helper to create darker shade for gradients
+    const adjustColorBrightness = (color: string, percent: number): string => {
+        const num = parseInt(color.replace("#", ""), 16);
+        const amt = Math.round(2.55 * percent);
+        const R = (num >> 16) + amt;
+        const G = (num >> 8 & 0x00FF) + amt;
+        const B = (num & 0x0000FF) + amt;
+        return "#" + (0x1000000 + (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
+            (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
+            (B < 255 ? B < 1 ? 0 : B : 255)).toString(16).slice(1);
+    };
+    
+    const darkerColor = adjustColorBrightness(themeColor, -20); // For gradient end
+    const lighterColor = adjustColorBrightness(themeColor, 30); // For borders
     // Get project slug from params OR from currentProject context (for root page)
     const projectSlug = (params?.projectSlug as string) || currentProject?.slug;
     const navigate = useRouter();
@@ -182,7 +200,10 @@ export default function ProjectHomePage() {
     // Main project works independently without needing currentProject
     if (!currentProject && !isMainProject) {
         return (
-            <div className="min-h-screen bg-orange-500 text-white">
+            <div 
+                className="min-h-screen text-white"
+                style={{ backgroundColor: themeColor }}
+            >
                 <div className="flex items-center justify-center h-screen">
                     <div className="text-center p-8">
                         <h1 className="text-3xl font-bold mb-4">No Project Found</h1>
@@ -196,17 +217,15 @@ export default function ProjectHomePage() {
     }
 
     // Check for loading and error states
-    if (loading || transactionLoading) {
-        return (
-            <div className="min-h-screen bg-orange-500">
-                <Loader />
-            </div>
-        );
-    }
+    // Don't show full loader - show skeleton instead
+    const isLoading = loading || transactionLoading;
 
     if (error || transactionError) {
         return (
-            <div className="min-h-screen bg-orange-500">
+            <div 
+                className="min-h-screen"
+                style={{ backgroundColor: themeColor }}
+            >
                 <div className="nav-top z-50 relative">
                     <TopNav />
 
@@ -219,7 +238,10 @@ export default function ProjectHomePage() {
     }
 
     return (
-        <div className="overflow-hidden bg-orange-500 text-white">
+        <div 
+            className="overflow-hidden text-white"
+            style={{ backgroundColor: themeColor }}
+        >
             <div className="nav-top z-50 relative">
                 <TopNav />
 
@@ -233,7 +255,13 @@ export default function ProjectHomePage() {
             <div className="w-full mb-8"  >
                 <div className="overflow-x-auto scrollbar-hide ">
                     <div className="flex gap-4 flex-grow min-w-max px-4 h-56" >
-                        {transactions?.data?.map((win, index) => {
+                        {isLoading ? (
+                            // Show skeleton loaders while loading
+                            Array.from({ length: 5 }).map((_, index) => (
+                                <PrizeCardSkeleton key={index} />
+                            ))
+                        ) : (
+                            transactions?.data?.map((win, index) => {
                             // Determine image source based on reward type
                             let imageSource: string | null = null;
                             let fallbackImage: string | null = "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png";
@@ -332,7 +360,8 @@ export default function ProjectHomePage() {
                                 </div>
                             </div>
                             );
-                        })}
+                        })
+                        )}
                     </div>
                 </div>
             </div>
@@ -342,7 +371,13 @@ export default function ProjectHomePage() {
                 <p className="text-3xl font-bold w-full text-center">Feature OGX Lootbox</p>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 px-4 mb-40">
-                {productsData?.data?.map((loot, index) => (
+                {isLoading ? (
+                    // Show skeleton loaders while loading
+                    Array.from({ length: 10 }).map((_, index) => (
+                        <ProductCardSkeleton key={index} />
+                    ))
+                ) : (
+                    productsData?.data?.map((loot, index) => (
                     <div
                         key={index}
                         className="border border-orange-300 rounded-lg shadow-md text-orange-800 flex flex-col items-center justify-between relative
@@ -398,7 +433,8 @@ export default function ProjectHomePage() {
                             </button>
                         </div>
                     </div>
-                ))}
+                ))
+                )}
             </div>
 
             <Model />

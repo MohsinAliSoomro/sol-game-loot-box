@@ -4,11 +4,34 @@ import Image from "next/image";
 import Link from "next/link";
 import { useProject } from "@/lib/project-context";
 import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { getWebsiteLogo } from "@/service/websiteSettings";
 
 export default function Sidebar() {
-    const { currentProject } = useProject();
+    const { currentProject, getProjectId } = useProject();
     const params = useParams();
     const projectSlug = (params?.projectSlug as string) || currentProject?.slug || "";
+    const projectId = getProjectId();
+    const [logoUrl, setLogoUrl] = useState<string>("/logo.png");
+    const [isLogoLoading, setIsLogoLoading] = useState<boolean>(true);
+
+    // Fetch dynamic logo - refetch when projectId changes
+    useEffect(() => {
+        const fetchLogo = async () => {
+            setIsLogoLoading(true);
+            try {
+                const logo = await getWebsiteLogo(projectId || undefined);
+                if (logo) {
+                    setLogoUrl(logo);
+                } else {
+                    setLogoUrl("/logo.png");
+                }
+            } finally {
+                setIsLogoLoading(false);
+            }
+        };
+        fetchLogo();
+    }, [projectId]);
 
     let SIDEBAR_DATA = [
         {
@@ -32,13 +55,18 @@ export default function Sidebar() {
                     <li
                         key={1}
                         className="text-center mb-20 flex items-center justify-center">
-                        <Image
-                            src={"/logo.png"}
-                            alt="logo"
-                            width={100}
-                            height={100}
-                            className="w-20 h-20 "
-                        />
+                        {isLogoLoading ? (
+                            <div className="w-20 h-20 rounded-full bg-white/20 animate-pulse" />
+                        ) : (
+                            <Image
+                                src={logoUrl}
+                                alt="logo"
+                                width={100}
+                                height={100}
+                                className="w-20 h-20"
+                                unoptimized={logoUrl.startsWith("http")}
+                            />
+                        )}
                     </li>
                     {SIDEBAR_DATA.map((link) => {
                         return (

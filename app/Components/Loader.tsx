@@ -1,9 +1,16 @@
+"use client";
 import React from 'react';
 import TopNav from './TopNav';
+import { useThemeColor } from '@/lib/hooks/useThemeColor';
 
 export default function Loader() {
+    const themeColor = useThemeColor(); // Get theme color immediately
+    
     return (
-        <div className="min-h-screen bg-orange-500">
+        <div 
+            className="min-h-screen"
+            style={{ backgroundColor: themeColor }}
+        >
           <div className="nav-top z-50 relative">
             {/* <TopNav /> */}
 

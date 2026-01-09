@@ -3,6 +3,9 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/service/supabase";
 import Loader from "./Components/Loader";
+import { useThemeColor } from "@/lib/hooks/useThemeColor";
+import { ProjectCardSkeleton, ImageSkeleton } from "./Components/Skeleton";
+import { useState } from "react";
 
 interface Project {
   id: number;
@@ -13,11 +16,50 @@ interface Project {
   primary_color?: string;
 }
 
+// Component for project logo with skeleton loader
+function ProjectLogoWithSkeleton({ logoUrl, name }: { logoUrl: string; name: string }) {
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+
+  return (
+    <div className="w-12 h-12 rounded-lg overflow-hidden">
+      {isLoading && !hasError && (
+        <ImageSkeleton width={48} height={48} className="rounded-lg" />
+      )}
+      <img
+        src={logoUrl}
+        alt={name}
+        className={`w-12 h-12 rounded-lg object-cover ${isLoading ? 'hidden' : ''}`}
+        onLoad={() => setIsLoading(false)}
+        onError={() => {
+          setIsLoading(false);
+          setHasError(true);
+        }}
+      />
+    </div>
+  );
+}
+
 export default function RootHomePage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchSlug, setSearchSlug] = useState("");
   const router = useRouter();
+  const themeColor = useThemeColor(); // Get theme color immediately
+  
+  // Helper to create darker shade for gradients
+  const adjustColorBrightness = (color: string, percent: number): string => {
+    const num = parseInt(color.replace("#", ""), 16);
+    const amt = Math.round(2.55 * percent);
+    const R = (num >> 16) + amt;
+    const G = (num >> 8 & 0x00FF) + amt;
+    const B = (num & 0x0000FF) + amt;
+    return "#" + (0x1000000 + (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
+      (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
+      (B < 255 ? B < 1 ? 0 : B : 255)).toString(16).slice(1);
+  };
+  
+  const darkerColor = adjustColorBrightness(themeColor, -20); // For gradient end
 
   useEffect(() => {
     loadProjects();
@@ -52,16 +94,11 @@ export default function RootHomePage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-500 to-orange-700">
-        <Loader />
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-500 to-orange-700 text-white">
+    <div 
+      className="min-h-screen text-white"
+      style={{ background: `linear-gradient(to bottom right, ${themeColor}, ${darkerColor})` }}
+    >
       <div className="container mx-auto px-4 py-16">
         <div className="text-center mb-12">
           <h1 className="text-5xl font-bold mb-4">Welcome to Spinloot</h1>
@@ -88,7 +125,13 @@ export default function RootHomePage() {
         </div>
 
         {/* Projects List */}
-        {projects.length > 0 ? (
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <ProjectCardSkeleton key={index} />
+            ))}
+          </div>
+        ) : projects.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
             {projects.map((project) => (
               <div
@@ -101,11 +144,7 @@ export default function RootHomePage() {
               >
                 <div className="flex items-center gap-4 mb-3">
                   {project.logo_url ? (
-                    <img
-                      src={project.logo_url}
-                      alt={project.name}
-                      className="w-12 h-12 rounded-lg object-cover"
-                    />
+                    <ProjectLogoWithSkeleton logoUrl={project.logo_url} name={project.name} />
                   ) : (
                     <div
                       className="w-12 h-12 rounded-lg flex items-center justify-center text-2xl font-bold"

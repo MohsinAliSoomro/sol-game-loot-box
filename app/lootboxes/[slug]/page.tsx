@@ -11,6 +11,7 @@ import Image from "next/image";
 import WheelSpinner from "./components/wheel";
 import DepositedNFTs from "./components/DepositedNFTs";
 import Loader from "../../Components/Loader";
+import { useThemeColor } from "@/lib/hooks/useThemeColor";
 
 const getProducts = async () => {
   // MAIN PROJECT ONLY: Filter for products where project_id IS NULL (legacy main project data)
@@ -29,6 +30,7 @@ export default function Details() {
   const [prizeNumber, setPrizeNumber] = useState(0);
   const [openModal, setOpenModal] = useState(false);
   const pathname = useParams();
+  const themeColor = useThemeColor(); // Get theme color immediately
 
   const newData = useMemo(() => {
     const slug = pathname?.slug as string | undefined;
@@ -52,7 +54,10 @@ export default function Details() {
  
   if (error) {
     return (
-      <div className="min-h-screen bg-orange-500">
+      <div 
+        className="min-h-screen text-white"
+        style={{ backgroundColor: themeColor }}
+      >
         <div className="nav-top z-50 relative">
           <TopNav />
         </div>
@@ -66,7 +71,10 @@ export default function Details() {
     return <Loader />;
   }
   return (
-    <div className="overflow-hidden bg-orange-500 text-white">
+    <div 
+      className="overflow-hidden text-white"
+      style={{ backgroundColor: themeColor }}
+    >
       <div className="nav-top z-50 relative">
         <TopNav />
       </div>

@@ -12,12 +12,14 @@ import WheelSpinner from "./components/wheel";
 import DepositedNFTs from "./components/DepositedNFTs";
 import Loader from "@/app/Components/Loader";
 import { useProject } from "@/lib/project-context";
+import { useThemeColor } from "@/lib/hooks/useThemeColor";
 
 export default function Details() {
   const params = useParams();
   const { getProjectId } = useProject();
   const projectSlug = params?.projectSlug as string;
   const projectId = getProjectId();
+  const themeColor = useThemeColor(); // Get theme color immediately
   
   // Check if this is the main project (no projectSlug in URL)
   const isMainProject = !projectSlug;
@@ -66,7 +68,10 @@ const getProducts = async () => {
  
   if (error) {
     return (
-      <div className="min-h-screen bg-orange-500">
+      <div 
+        className="min-h-screen text-white"
+        style={{ backgroundColor: themeColor }}
+      >
         <div className="nav-top z-50 relative">
           <TopNav />
         </div>
@@ -80,7 +85,10 @@ const getProducts = async () => {
     return <Loader />;
   }
   return (
-    <div className="overflow-hidden bg-orange-500 text-white">
+    <div 
+      className="overflow-hidden text-white"
+      style={{ backgroundColor: themeColor }}
+    >
       <div className="nav-top z-50 relative">
         <TopNav />
       </div>

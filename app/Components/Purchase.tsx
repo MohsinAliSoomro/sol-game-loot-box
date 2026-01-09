@@ -95,6 +95,77 @@ export default function PurchaseModal() {
   const projectId = getProjectId();
   const projectTokenSymbol = getProjectTokenSymbol();
   
+  // Get theme color immediately from localStorage cache - prevents flash
+  // Initialize synchronously to avoid flash when modal opens
+  const getThemeColorSync = (): string => {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) return '#FF6B35';
+      
+      const keys: string[] = [];
+      
+      // Try project-specific key first
+      if (projectId) {
+        keys.push(`website-theme-cache-${projectId}`);
+      }
+      
+      // Try 'main' key
+      keys.push('website-theme-cache-main');
+      
+      // Try generic key
+      keys.push('website-theme-cache');
+      
+      // Try all project-specific keys
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('website-theme-cache-') && !keys.includes(key)) {
+          keys.push(key);
+        }
+      }
+      
+      // Try each key
+      for (const key of keys) {
+        try {
+          const cached = localStorage.getItem(key);
+          if (cached) {
+            const theme = JSON.parse(cached);
+            const primaryColor = theme.primaryColor || theme.primary_color;
+            if (primaryColor) {
+              return primaryColor;
+            }
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+      
+      // Fallback: Use project color if available
+      if (currentProject?.primary_color) {
+        return currentProject.primary_color;
+      }
+      
+      return '#FF6B35';
+    } catch (e) {
+      return '#FF6B35';
+    }
+  };
+  
+  const [modalThemeColor, setModalThemeColor] = useState<string>(() => getThemeColorSync()); // Initialize immediately
+  
+  useEffect(() => {
+    // Update theme color when project changes or modal opens
+    const color = getThemeColorSync();
+    setModalThemeColor(color);
+    
+    // Also check CSS variable as fallback
+    if (typeof window !== 'undefined') {
+      const root = document.documentElement;
+      const cssVarColor = getComputedStyle(root).getPropertyValue('--theme-primary').trim();
+      if (cssVarColor && cssVarColor !== modalThemeColor) {
+        setModalThemeColor(cssVarColor);
+      }
+    }
+  }, [state.purchase, projectId, currentProject]);
+  
   // Get project slug from URL params (most reliable source)
   const params = useParams();
   const projectSlugFromUrl = (params?.projectSlug as string | undefined);
@@ -1155,7 +1226,10 @@ export default function PurchaseModal() {
   if (!state.purchase) return null;
   return (
     <div className="fixed top-0 left-0 w-screen h-screen flex items-center justify-center bg-black/40 z-50" >
-      <div className="z-50 justify-center items-center w-full max-w-2xl bg-orange-400 rounded-lg">
+      <div 
+        className="z-50 justify-center items-center w-full max-w-2xl rounded-lg"
+        style={{ backgroundColor: modalThemeColor }}
+      >
         {/* <div className="relative p-4 w-full"> */}
         <div className="relative bg-background rounded-lg shadow ">
           <div className="flex items-center justify-between p-4 md:p-5 border-b rounded-t dark:border-gray-600">
@@ -1190,18 +1264,26 @@ export default function PurchaseModal() {
             <button
               onClick={() => setActiveTab("deposit")}
                className={`flex-1 max-w-[200px] py-2 px-3 text-sm text-center whitespace-nowrap ${activeTab === "deposit"
-                ? "border-b-2 border-[#ff914d] text-orange-600 bg-gray-200"
-                : "text-orange-600 bg-transparent"
+                ? "border-b-2 bg-gray-200"
+                : "bg-transparent"
                 }`}
+              style={{
+                borderBottomColor: activeTab === "deposit" ? modalThemeColor : 'transparent',
+                color: modalThemeColor
+              }}
             >
               Deposit Tokens
             </button>
             <button
               onClick={() => setActiveTab("history")}
              className={`flex-1 max-w-[200px] py-2 px-3 text-sm text-center whitespace-nowrap ${activeTab === "history"
-                ? "border-b-2 border-[#ff914d] text-orange-600 bg-gray-200"
-                : "text-orange-600 bg-transparent"
+                ? "border-b-2 bg-gray-200"
+                : "bg-transparent"
                 }`}
+              style={{
+                borderBottomColor: activeTab === "history" ? modalThemeColor : 'transparent',
+                color: modalThemeColor
+              }}
             >
               Deposit History
             </button>
@@ -1306,7 +1388,10 @@ export default function PurchaseModal() {
                         )}
                       </div> */}
                     </div>
-                    <div className="flex items-center justify-end pt-4 space-x-3 border-t border-[#ff914d]/20">
+                    <div 
+                      className="flex items-center justify-end pt-4 space-x-3 border-t"
+                      style={{ borderTopColor: `${modalThemeColor}33` }}
+                    >
                       {depositWalletConfigured === false && (
                         <div className="flex-1 mr-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                           <p className="text-xs text-yellow-800">
@@ -1317,7 +1402,11 @@ export default function PurchaseModal() {
                       <button
                         onClick={makeTokenDeposit}
                         disabled={isProcessing || !connected || !selectedTokenInfo || depositWalletConfigured === false || depositWalletConfigured === null}
-                        className="px-5 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-[#f74e14] to-[#ff914d] text-white hover:opacity-90 focus:ring-2 focus:ring-[#ff914d]/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-5 py-2.5 text-sm font-medium rounded-lg text-white hover:opacity-90 focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{
+                          background: `linear-gradient(to right, ${modalThemeColor}, ${modalThemeColor}dd)`,
+                          boxShadow: `0 0 0 2px ${modalThemeColor}80`
+                        }}
                       >
                         {isProcessing ? "Processing..." : depositWalletConfigured === false ? "Deposit Disabled" : depositWalletConfigured === null ? "Checking..." : `Deposit ${selectedTokenInfo?.symbol || 'Token'}`}
                       </button>
@@ -1325,7 +1414,16 @@ export default function PurchaseModal() {
                         onClick={() =>
                           setState({ ...state, purchase: false })
                         }
-                        className="px-5 py-2.5 text-sm font-medium rounded-lg border border-[#ff914d]/20 text-gray-300 hover:bg-[#ff914d]/20 focus:ring-2 focus:ring-[#ff914d]/50"
+                        className="px-5 py-2.5 text-sm font-medium rounded-lg border text-gray-300 focus:ring-2"
+                        style={{
+                          borderColor: `${modalThemeColor}33`,
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = `${modalThemeColor}33`;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                        }}
                       >
                         Cancel
                       </button>

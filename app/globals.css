@@ -4,7 +4,9 @@
  
 @layer base {
   :root {
-    --background: 23, 100%, 65%;
+    /* Background color set by JavaScript before CSS loads - default to transparent to prevent flash */
+    --background-color-override: transparent;
+    --background: 23, 100%, 65%; /* Fallback orange - only used if override not set */
     --foreground: 15, 93%, 52%;
 
     --card: 0 0% 100%;
@@ -70,8 +72,11 @@
   * {
     @apply border-border;
   }
-  body {
-    @apply bg-background text-foreground;
+  html, body {
+    @apply text-foreground;
+    /* Background color MUST be set by blocking JavaScript before CSS loads */
+    /* Use override if set, otherwise transparent to prevent orange flash */
+    background-color: var(--background-color-override, transparent) !important;
   }
 }
 

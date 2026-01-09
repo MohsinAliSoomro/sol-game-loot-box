@@ -1,5 +1,5 @@
 'use client'
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { getThemeSettings, getLootboxSettings, getWheelSettings } from '@/service/websiteSettings';
 import { useProject } from '@/lib/project-context';
@@ -90,9 +90,124 @@ const applyThemeToElements = (theme: any) => {
   });
 };
 
+// Global function to apply theme immediately - can be called from anywhere
+const applyThemeImmediately = (projectId?: number | string | null, projectPrimaryColor?: string | null) => {
+  try {
+    let primaryColor: string | null = null;
+    const projectIdStr = projectId?.toString() || 'main';
+    const cacheKey = `website-theme-cache-${projectIdStr}`;
+    
+    // Try to get theme from cache synchronously
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const theme = JSON.parse(cached);
+        primaryColor = theme.primaryColor || theme.primary_color || null;
+        
+        if (primaryColor) {
+          // Apply IMMEDIATELY - synchronously, no async delay
+          const root = document.documentElement;
+          root.style.backgroundColor = primaryColor;
+          root.style.setProperty('background-color', primaryColor, 'important');
+          
+          if (document.body) {
+            document.body.style.backgroundColor = primaryColor;
+            document.body.style.setProperty('background-color', primaryColor, 'important');
+          }
+          
+          root.style.setProperty('--theme-primary', primaryColor, 'important');
+          root.style.setProperty('--background-color-override', primaryColor, 'important');
+          
+          // Apply to all orange elements immediately
+          applyThemeToElements(theme);
+          return primaryColor;
+        }
+      }
+    } catch (e) {
+      // Ignore cache errors
+    }
+    
+    // Fallback: Try all cache keys
+    try {
+      const keys: string[] = [];
+      const storedProjectId = localStorage.getItem('currentProjectId');
+      if (storedProjectId) keys.push(`website-theme-cache-${storedProjectId}`);
+      keys.push('website-theme-cache-main');
+      keys.push('website-theme-cache');
+      
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('website-theme-cache-') && !keys.includes(key)) {
+          keys.push(key);
+        }
+      }
+      
+      for (const key of keys) {
+        try {
+          const cached = localStorage.getItem(key);
+          if (cached) {
+            const theme = JSON.parse(cached);
+            primaryColor = theme.primaryColor || theme.primary_color || null;
+            if (primaryColor) break;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+    
+    // Fallback: Use project color if available
+    if (!primaryColor && projectPrimaryColor) {
+      primaryColor = projectPrimaryColor;
+    }
+    
+    if (primaryColor) {
+      const root = document.documentElement;
+      root.style.backgroundColor = primaryColor;
+      root.style.setProperty('background-color', primaryColor, 'important');
+      if (document.body) {
+        document.body.style.backgroundColor = primaryColor;
+        document.body.style.setProperty('background-color', primaryColor, 'important');
+      }
+      root.style.setProperty('--theme-primary', primaryColor, 'important');
+      root.style.setProperty('--background-color-override', primaryColor, 'important');
+    } else {
+      // No theme found - set transparent to prevent orange flash
+      const root = document.documentElement;
+      root.style.setProperty('--background-color-override', 'transparent', 'important');
+    }
+    
+    return primaryColor;
+  } catch (e) {
+    return null;
+  }
+};
+
 export default function WebsiteTheme() {
   const pathname = usePathname();
   const { currentProject } = useProject();
+
+  // Apply theme IMMEDIATELY on every pathname change - BEFORE React renders new page
+  // useLayoutEffect runs synchronously BEFORE browser paint
+  useLayoutEffect(() => {
+    // Apply immediately when pathname changes - runs before render
+    applyThemeImmediately(currentProject?.id, currentProject?.primary_color);
+    
+    // Also apply to any existing orange elements immediately
+    try {
+      const projectId = currentProject?.id || 'main';
+      const cacheKey = `website-theme-cache-${projectId}`;
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const theme = JSON.parse(cached);
+        applyThemeToElements(theme);
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+  }, [pathname, currentProject?.id, currentProject?.primary_color]);
 
   useEffect(() => {
     // Apply project branding if available (takes priority over website settings)
@@ -230,12 +345,15 @@ export default function WebsiteTheme() {
       }
     };
 
-    // Call global function from inline script if available (only once)
+    // Apply immediately on mount - use global function
+    applyThemeImmediately(currentProject?.id, currentProject?.primary_color);
+    
+    // Call global function from inline script if available
     if (typeof window !== 'undefined' && (window as any).__applyThemeFromCache) {
       (window as any).__applyThemeFromCache();
     }
     
-    // Apply theme immediately (only once on mount/navigation)
+    // Apply theme with full async fetch (runs after immediate application)
     applyTheme();
     
     // Lootbox box background color application
@@ -361,35 +479,48 @@ export default function WebsiteTheme() {
     // Apply wheel colors on mount
     applyWheelColors();
 
-    // Only watch for new DOM elements being added, not style changes
-    // This prevents loops from our own style modifications
+    // Watch for new DOM elements being added - apply theme IMMEDIATELY
+    // This ensures theme is applied to new pages during navigation
     let timeoutId: NodeJS.Timeout;
     const observer = new MutationObserver((mutations) => {
-      // Only react if new elements are added, not if attributes change
+      // React immediately when new elements are added (during navigation)
       const hasNewElements = mutations.some(mutation => 
         mutation.type === 'childList' && mutation.addedNodes.length > 0
       );
       
       if (hasNewElements) {
         clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => {
-          // Only apply to new elements, don't call full applyTheme
-          try {
-            // Make cache key project-specific
-            const projectId = currentProject?.id || 'main';
-            const cacheKey = `website-theme-cache-${projectId}`;
-            const cached = localStorage.getItem(cacheKey);
-            if (cached) {
-              const theme = JSON.parse(cached);
-              applyThemeToElements(theme);
+        // Apply IMMEDIATELY - synchronously in observer callback (no setTimeout delay)
+        try {
+          const projectId = currentProject?.id || 'main';
+          const cacheKey = `website-theme-cache-${projectId}`;
+          const cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            const theme = JSON.parse(cached);
+            const primaryColor = theme.primaryColor || theme.primary_color || '#FF6B35';
+            
+            // Apply immediately to new elements - synchronously
+            applyThemeToElements(theme);
+            
+            // Also ensure body/html have correct color
+            const root = document.documentElement;
+            root.style.backgroundColor = primaryColor;
+            root.style.setProperty('background-color', primaryColor, 'important');
+            if (document.body) {
+              document.body.style.backgroundColor = primaryColor;
+              document.body.style.setProperty('background-color', primaryColor, 'important');
             }
-          } catch (e) {
-            // Ignore errors
+            root.style.setProperty('--theme-primary', primaryColor, 'important');
+            root.style.setProperty('--background-color-override', primaryColor, 'important');
           }
-
+        } catch (e) {
+          // Ignore errors
+        }
+        
+        // Batch other updates with minimal delay
+        timeoutId = setTimeout(() => {
           // Re-apply lootbox box background color to new elements
           try {
-            // Make cache key project-specific
             const projectId = currentProject?.id || 'main';
             const lootboxCacheKey = `website-lootbox-cache-${projectId}`;
             const cached = localStorage.getItem(lootboxCacheKey);
@@ -404,7 +535,6 @@ export default function WebsiteTheme() {
 
           // Re-apply wheel colors to new elements
           try {
-            // Make cache key project-specific
             const projectId = currentProject?.id || 'main';
             const wheelCacheKey = `website-wheel-cache-${projectId}`;
             const cached = localStorage.getItem(wheelCacheKey);
@@ -421,22 +551,127 @@ export default function WebsiteTheme() {
           } catch (e) {
             // Ignore errors
           }
-        }, 300); // Longer delay to batch changes
+        }, 0);
       }
     });
     
-    // Only observe child additions, not attribute changes
+    // Observe child additions and also check for attribute changes that might add orange classes
     observer.observe(document.body, {
       childList: true,
-      subtree: true
-      // Removed attributes observation to prevent loops
+      subtree: true,
+      attributes: true, // Watch for class changes too
+      attributeFilter: ['class'] // Only watch class attribute
     });
+    
+    // Also apply theme immediately when observer is set up
+    try {
+      const projectId = currentProject?.id || 'main';
+      const cacheKey = `website-theme-cache-${projectId}`;
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const theme = JSON.parse(cached);
+        applyThemeToElements(theme);
+      }
+    } catch (e) {
+      // Ignore errors
+    }
 
     return () => {
       clearTimeout(timeoutId);
       observer.disconnect();
     };
   }, [pathname, currentProject?.id]); // Re-run when pathname or project changes
+  
+  // Hook into Next.js router to apply theme BEFORE navigation completes
+  useEffect(() => {
+    // Intercept navigation events - apply theme IMMEDIATELY on route change
+    const handleRouteChange = () => {
+      // Apply theme immediately - synchronously, no delay
+      applyThemeImmediately(currentProject?.id, currentProject?.primary_color);
+      
+      // Also apply to all orange elements immediately - run synchronously
+      try {
+        const projectId = currentProject?.id || 'main';
+        const cacheKey = `website-theme-cache-${projectId}`;
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          const theme = JSON.parse(cached);
+          // Apply immediately - no delay
+          applyThemeToElements(theme);
+          
+          // Also ensure all bg-orange elements get theme immediately
+          const primaryColor = theme.primaryColor || theme.primary_color || '#FF6B35';
+          document.querySelectorAll('.bg-orange-500, [class*="bg-orange"]').forEach((el: Element) => {
+            const htmlEl = el as HTMLElement;
+            htmlEl.style.backgroundColor = primaryColor;
+            htmlEl.style.setProperty('background-color', primaryColor, 'important');
+          });
+        }
+      } catch (e) {
+        // Ignore errors
+      }
+      
+      // Call global function if available
+      if (typeof window !== 'undefined' && (window as any).__applyThemeFromCache) {
+        (window as any).__applyThemeFromCache();
+      }
+    };
+    
+    // Apply immediately on mount
+    handleRouteChange();
+    
+    // Listen for popstate events (browser back/forward)
+    window.addEventListener('popstate', handleRouteChange);
+    
+    // Override pushState and replaceState to catch navigation - apply BEFORE navigation
+    const originalPushState = window.history.pushState;
+    const originalReplaceState = window.history.replaceState;
+    
+    window.history.pushState = function(...args) {
+      handleRouteChange(); // Apply BEFORE navigation starts
+      originalPushState.apply(window.history, args);
+      // Apply again after navigation completes (synchronously)
+      handleRouteChange();
+      // Also apply after a microtask (for async React rendering)
+      Promise.resolve().then(handleRouteChange);
+    };
+    
+    window.history.replaceState = function(...args) {
+      handleRouteChange(); // Apply BEFORE navigation starts
+      originalReplaceState.apply(window.history, args);
+      // Apply again after navigation completes (synchronously)
+      handleRouteChange();
+      // Also apply after a microtask (for async React rendering)
+      Promise.resolve().then(handleRouteChange);
+    };
+    
+    return () => {
+      window.removeEventListener('popstate', handleRouteChange);
+      window.history.pushState = originalPushState;
+      window.history.replaceState = originalReplaceState;
+    };
+  }, [currentProject?.id, currentProject?.primary_color]);
+  
+  // Apply theme after DOM updates (for new elements added by React)
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      applyThemeImmediately(currentProject?.id, currentProject?.primary_color);
+      // Re-apply to all elements after DOM updates
+      try {
+        const projectId = currentProject?.id || 'main';
+        const cacheKey = `website-theme-cache-${projectId}`;
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          const theme = JSON.parse(cached);
+          applyThemeToElements(theme);
+        }
+      } catch (e) {
+        // Ignore errors
+      }
+    }, 0);
+    
+    return () => clearTimeout(timeoutId);
+  }, [pathname, currentProject?.id, currentProject?.primary_color]);
 
   return null; // This component doesn't render anything
 }

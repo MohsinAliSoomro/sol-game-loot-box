@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { getSliderImages, SliderImage } from '@/service/websiteSettings';
 import { useProject } from '@/lib/project-context';
+import { useThemeColor } from '@/lib/hooks/useThemeColor';
 
 // Fallback images if no slider images are found in database
 const fallbackImages = [
@@ -14,6 +15,7 @@ const fallbackImages = [
 export default function ImageSlider() {
     const { getProjectId } = useProject();
     const projectId = getProjectId();
+    const themeColor = useThemeColor();
     const [currentIndex, setCurrentIndex] = useState(0);
     const [sliderImages, setSliderImages] = useState<SliderImage[]>([]);
     const [loading, setLoading] = useState(true);
@@ -79,7 +81,10 @@ export default function ImageSlider() {
 
     if (loading) {
         return (
-            <div className="relative w-full h-[50vh] overflow-hidden bg-gray-200 animate-pulse" />
+            <div 
+                className="relative w-full h-[50vh] overflow-hidden animate-pulse" 
+                style={{ backgroundColor: themeColor + '40' }}
+            />
         );
     }
 

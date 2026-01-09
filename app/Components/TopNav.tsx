@@ -34,6 +34,7 @@ export default function TopNav() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isAutoLoggingIn, setIsAutoLoggingIn] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string>("/logo.png");
+  const [isLogoLoading, setIsLogoLoading] = useState<boolean>(true);
   const hasAttemptedLogin = useRef(false);
   const isLoadingUser = useRef(false); // Prevent duplicate API calls
   const lastLoadedProjectId = useRef<number | null>(null); // Track which project we last loaded
@@ -58,14 +59,19 @@ export default function TopNav() {
   // Fetch dynamic logo - refetch when projectId changes
   useEffect(() => {
     const fetchLogo = async () => {
-      // Only fetch logo if we have a projectId (for project-specific pages)
-      // For main project, projectId will be null/undefined, so it will use legacy website_settings
-      const logo = await getWebsiteLogo(projectId || undefined);
-      if (logo) {
-        setLogoUrl(logo);
-      } else {
-        // Fallback to default logo if no custom logo found
-        setLogoUrl("/logo.png");
+      setIsLogoLoading(true);
+      try {
+        // Only fetch logo if we have a projectId (for project-specific pages)
+        // For main project, projectId will be null/undefined, so it will use legacy website_settings
+        const logo = await getWebsiteLogo(projectId || undefined);
+        if (logo) {
+          setLogoUrl(logo);
+        } else {
+          // Fallback to default logo if no custom logo found
+          setLogoUrl("/logo.png");
+        }
+      } finally {
+        setIsLogoLoading(false);
       }
     };
     fetchLogo();
@@ -900,14 +906,20 @@ export default function TopNav() {
       {/* Logo and Mobile Menu Button */}
       <div className="w-full md:w-1/4 flex items-center justify-between md:justify-start">
         <Link href={getNavPath("/")} className="relative inline-block">
-          <Image
-            src={logoUrl}
-            alt="logo"
-            width={600}
-            height={400}
-            className="w-full h-16 md:h-24 object-contain"
-            unoptimized={logoUrl.startsWith("http")}
-          />
+          {isLogoLoading ? (
+            <div className="w-full h-16 md:h-24 flex items-center justify-center">
+              <div className="w-16 h-16 md:w-24 md:h-24 rounded-full bg-white/20 animate-pulse" />
+            </div>
+          ) : (
+            <Image
+              src={logoUrl}
+              alt="logo"
+              width={600}
+              height={400}
+              className="w-full h-16 md:h-24 object-contain"
+              unoptimized={logoUrl.startsWith("http")}
+            />
+          )}
           <span className="absolute -top-1 -right-1 md:-top-2 md:-right-2 bg-red-600 text-white text-[10px] md:text-[11px] leading-none px-1 md:mt-4 mt-0  py-0.5 rounded">BETA</span>
         </Link>
         {/* Mobile menu button */}
