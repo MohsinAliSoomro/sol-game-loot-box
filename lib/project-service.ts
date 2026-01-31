@@ -17,7 +17,7 @@ import deployedIdl from "../idl/vault_project.json";
 
 // Program ID from config
 export const PROGRAM_ID = new PublicKey(CONFIG.PROGRAM_ID);
-export const RPC_URL = "https://api.devnet.solana.com";
+export const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://mainnet.helius-rpc.com/?api-key=5a1a852c-3ed9-40ee-bca8-dda4550c3ce8";
 
 /**
  * Derive Project PDA address

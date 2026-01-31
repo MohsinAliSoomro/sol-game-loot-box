@@ -2,10 +2,10 @@
 // Add your actual Solana program vault wallet addresses here
 
 export const SOLANA_CONFIG = {
-  // Devnet RPC URL (since your vault is on devnet)
-  RPC_URL: 'https://api.devnet.solana.com',
+  // Mainnet RPC URL (using Helius for better reliability)
+  RPC_URL: 'https://mainnet.helius-rpc.com/?api-key=5a1a852c-3ed9-40ee-bca8-dda4550c3ce8',
   
-  // For production, change to:
+  // Alternative public mainnet RPC:
   // RPC_URL: 'https://api.mainnet-beta.solana.com',
   
   // Your Solana program vault wallet addresses

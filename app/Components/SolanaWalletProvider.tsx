@@ -17,7 +17,7 @@ require("@solana/wallet-adapter-react-ui/styles.css");
 
 const SolanaWalletProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const endpoint =
-    process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl("devnet");
+    process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl("mainnet-beta");
 
   const wallets = useMemo(
     () => [

@@ -195,7 +195,20 @@ export const useProjectRewards = (lootboxId: string | number | null) => {
         project_id: projectId
       };
 
-      // Handle image upload if provided
+      // If this is an on-chain token item, store mint in existing columns.
+      // Some schemas use `collection`, others `mint_address` – set both for compatibility.
+      if (rewardData.rewardType === 'item' && rewardData.isOnChain && rewardData.tokenMintAddress) {
+        insertData.collection = rewardData.tokenMintAddress; // legacy mint column
+        insertData.mint_address = rewardData.tokenMintAddress; // explicit mint column
+        insertData.token_symbol = rewardData.tokenSymbol || 'Token';
+        // Use tokenAmount as reward_price if provided
+        if (rewardData.tokenAmount) {
+          insertData.reward_price = rewardData.tokenAmount;
+        }
+      }
+
+      // Handle image upload if provided.
+      // For on-chain token items we ALSO allow custom image upload (admin's image takes priority).
       if (rewardData.image) {
         const fileExt = rewardData.image.name.split('.').pop();
         const fileName = `${Date.now()}.${fileExt}`;

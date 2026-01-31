@@ -1260,7 +1260,8 @@ export default function WebsiteSettings() {
                     setThemeSettings(prev => ({ ...prev, primaryColor: e.target.value }));
                     setSelectedThemeType('custom');
                   }}
-                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                   placeholder="#FF6B35"
                 />
               </div>
@@ -1285,7 +1286,8 @@ export default function WebsiteSettings() {
                     setThemeSettings(prev => ({ ...prev, secondaryColor: e.target.value }));
                     setSelectedThemeType('custom');
                   }}
-                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                   placeholder="#004E89"
                 />
               </div>
@@ -1310,7 +1312,8 @@ export default function WebsiteSettings() {
                     setThemeSettings(prev => ({ ...prev, backgroundColor: e.target.value }));
                     setSelectedThemeType('custom');
                   }}
-                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                   placeholder="#FFFFFF"
                 />
               </div>
@@ -1335,7 +1338,8 @@ export default function WebsiteSettings() {
                     setThemeSettings(prev => ({ ...prev, textColor: e.target.value }));
                     setSelectedThemeType('custom');
                   }}
-                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                   placeholder="#1F2937"
                 />
               </div>
@@ -1432,7 +1436,8 @@ export default function WebsiteSettings() {
                 type="text"
                 value={lootboxBoxBg}
                 onChange={(e) => setLootboxBoxBg(e.target.value)}
-                className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+                className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                style={{ color: 'white' }}
                 placeholder="#FFFFFF"
               />
             </div>
@@ -1488,7 +1493,8 @@ export default function WebsiteSettings() {
                   type="text"
                   value={wheelSettings.segmentFillColor}
                   onChange={(e) => setWheelSettings(prev => ({ ...prev, segmentFillColor: e.target.value }))}
-                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                   placeholder="#ff914d"
                 />
               </div>
@@ -1507,7 +1513,8 @@ export default function WebsiteSettings() {
                   type="text"
                   value={wheelSettings.segmentStrokeColor}
                   onChange={(e) => setWheelSettings(prev => ({ ...prev, segmentStrokeColor: e.target.value }))}
-                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                   placeholder="#f74e14"
                 />
               </div>
@@ -1526,7 +1533,8 @@ export default function WebsiteSettings() {
                   type="text"
                   value={wheelSettings.buttonBackgroundColor}
                   onChange={(e) => setWheelSettings(prev => ({ ...prev, buttonBackgroundColor: e.target.value }))}
-                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                   placeholder="#f74e14"
                 />
               </div>
@@ -1545,7 +1553,8 @@ export default function WebsiteSettings() {
                   type="text"
                   value={wheelSettings.buttonHoverColor}
                   onChange={(e) => setWheelSettings(prev => ({ ...prev, buttonHoverColor: e.target.value }))}
-                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                   placeholder="#e63900"
                 />
               </div>
@@ -1564,7 +1573,8 @@ export default function WebsiteSettings() {
                   type="text"
                   value={wheelSettings.pointerColor}
                   onChange={(e) => setWheelSettings(prev => ({ ...prev, pointerColor: e.target.value }))}
-                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                   placeholder="#f74e14"
                 />
               </div>
@@ -1583,7 +1593,8 @@ export default function WebsiteSettings() {
                   type="text"
                   value={wheelSettings.textColor}
                   onChange={(e) => setWheelSettings(prev => ({ ...prev, textColor: e.target.value }))}
-                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                   placeholder="#ffffff"
                 />
               </div>
@@ -1871,7 +1882,8 @@ export default function WebsiteSettings() {
                   value={depositWalletAddress}
                   onChange={(e) => setDepositWalletAddress(e.target.value)}
                   placeholder="Enter Solana wallet address (e.g., 5arqJxyZFKf4UCCL9JXa1nf79J4kkxzAXNu2icRfnBB6)"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-green-500 font-mono text-sm"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-green-500 font-mono text-sm bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   This wallet will receive all SOL and token deposits from users. Make sure you have access to this wallet.

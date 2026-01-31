@@ -143,18 +143,27 @@ const getWinPrizes = async (userId: string) => {
             const hasMint = !!reward.mint && reward.mint.trim() !== '';
             const isItem = rewardType === 'item';
             const isSol = rewardType === 'sol';
+            const isNFT = rewardType === 'nft';
+            const isToken = rewardType === 'token';
+
+            // CRITICAL: Exclude NFT and token rewards - they should never appear as SOL rewards
+            if (isNFT || isToken) {
+                console.log(`🚫 Filtering out ${rewardType} reward from SOL rewards:`, reward.name);
+                return false;
+            }
 
             // Exclude item rewards
             if (isItem) {
                 return false;
             }
 
-            // Explicit SOL reward type
-            if (isSol) {
+            // Explicit SOL reward type (and NOT an NFT or token)
+            if (isSol && !hasMint) {
                 return true;
             }
 
             // Legacy entries: if reward_type is NULL/empty and name contains "SOL", treat as SOL
+            // BUT only if it doesn't have a mint address (which would indicate it's an NFT)
             if (!rewardType && !hasMint) {
                 const nameLower = (reward.name || '').toLowerCase();
                 if (nameLower.includes('sol')) {
@@ -166,7 +175,27 @@ const getWinPrizes = async (userId: string) => {
             return false;
         });
 
-        console.log(`📊 Found ${nftRewards.length} NFT rewards and ${solRewards.length} SOL rewards`);
+        // Filter token rewards (on-chain tokens like OGX)
+        const tokenRewards = response.data.filter((reward: any) => {
+            const rewardType = (reward.reward_type || '').toLowerCase();
+            const hasMint = !!reward.mint && reward.mint.trim() !== '';
+            const isItem = rewardType === 'item';
+            const isToken = rewardType === 'token';
+
+            // Exclude item rewards
+            if (isItem) {
+                return false;
+            }
+
+            // Explicit token reward type (must have mint address)
+            if (isToken && hasMint) {
+                return true;
+            }
+
+            return false;
+        });
+
+        console.log(`📊 Found ${nftRewards.length} NFT rewards, ${solRewards.length} SOL rewards, and ${tokenRewards.length} Token rewards`);
         if (nftRewards.length > 0) {
             console.log("🎨 NFT rewards details:", nftRewards.map((r: any) => ({
                 id: r.id,
@@ -234,8 +263,8 @@ const getWinPrizes = async (userId: string) => {
             return true;
         });
 
-        // Combine valid NFT rewards with SOL rewards
-        const validRewards = [...validWonNFTs, ...solRewards];
+        // Combine valid NFT rewards with SOL rewards and Token rewards
+        const validRewards = [...validWonNFTs, ...solRewards, ...tokenRewards];
 
         console.log(`🎯 Filtered rewards: ${response.data.length} → ${validRewards.length} rewards available to claim`);
 
@@ -254,10 +283,10 @@ const getWinPrizes = async (userId: string) => {
             return acc;
         }, []);
 
-        // Combine unique NFTs with SOL rewards
-        const finalRewards = [...uniqueNFTs, ...solRewards];
+        // Combine unique NFTs with SOL rewards and Token rewards
+        const finalRewards = [...uniqueNFTs, ...solRewards, ...tokenRewards];
 
-        console.log(`🎯 Final rewards: ${uniqueNFTs.length} unique NFTs + ${solRewards.length} SOL rewards = ${finalRewards.length} total`);
+        console.log(`🎯 Final rewards: ${uniqueNFTs.length} unique NFTs + ${solRewards.length} SOL rewards + ${tokenRewards.length} Token rewards = ${finalRewards.length} total`);
 
         return { ...response, data: finalRewards };
     } catch (error) {
@@ -341,16 +370,30 @@ export default function SidebarCart() {
             }
             console.log(`🎨 Starting NFT claim for reward ${rewardId} with mint ${mintAddress}`);
 
-            // Check if this reward is already withdrawn
+            // Check if this reward is already withdrawn AND verify user is the winner
             const { data: existingReward, error: checkError } = await supabase
                 .from("prizeWin")
-                .select("isWithdraw")
+                .select("isWithdraw, userId, reward_type, name")
                 .eq("id", rewardId)
                 .single();
 
             if (checkError) {
                 console.error("Error checking reward status:", checkError);
                 throw new Error("Failed to check reward status");
+            }
+
+            // CRITICAL: Verify the user is the actual winner (backend validation)
+            if (existingReward?.userId !== user?.id) {
+                console.error("❌ Security violation: User attempting to claim reward that doesn't belong to them", {
+                    rewardUserId: existingReward?.userId,
+                    currentUserId: user?.id,
+                    rewardId: rewardId
+                });
+                if (!bulkMode) {
+                    alert(`❌ Access Denied!\n\nThis reward does not belong to you.\n\nOnly the jackpot winner can claim this NFT.`);
+                    run(user?.id); // Refresh to update UI
+                }
+                return;
             }
 
             if (existingReward?.isWithdraw) {
@@ -360,6 +403,27 @@ export default function SidebarCart() {
                     run(user?.id); // Refresh to update UI
                 }
                 return;
+            }
+            
+            // Additional validation: For jackpot NFT rewards, verify user is the winner in jackpot_wins table
+            if (existingReward?.reward_type === 'nft' && existingReward?.name) {
+                // Check if this is a jackpot reward by checking jackpot_wins table
+                const { data: jackpotWin, error: jackpotError } = await supabase
+                    .from('jackpot_wins')
+                    .select('user_id, pool_id, win_type')
+                    .eq('user_id', user?.id)
+                    .eq('win_type', 'jackpot_final')
+                    .maybeSingle();
+                
+                if (jackpotError) {
+                    console.warn('⚠️ Could not verify jackpot win status:', jackpotError);
+                    // Continue anyway - prizeWin entry is the source of truth
+                } else if (!jackpotWin) {
+                    console.warn('⚠️ User has prizeWin entry but no corresponding jackpot_wins entry');
+                    // This could be a lootbox reward, not a jackpot reward - allow it
+                } else {
+                    console.log('✅ Verified user is jackpot winner:', jackpotWin);
+                }
             }
 
             // Get current project ID and check if main project (before wallet connection)
@@ -493,6 +557,155 @@ export default function SidebarCart() {
 
             // Handle specific error cases
             if (error instanceof Error) {
+                // Handle transaction timeout errors
+                if (error.message.includes("not confirmed") ||
+                    error.message.includes("timeout") ||
+                    error.message.includes("TransactionExpiredTimeoutError")) {
+                    console.log("⚠️ Transaction timeout - checking if it succeeded...");
+                    
+                    // Try to extract signature from error message
+                    const signatureMatch = error.message.match(/signature[:\s]+([A-Za-z0-9]{64,88})/i) ||
+                                          error.message.match(/Transaction: ([A-Za-z0-9]{64,88})/);
+                    const signature = signatureMatch ? signatureMatch[1] : null;
+                    
+                    if (signature) {
+                        alert(
+                            `⏳ Transaction Pending Confirmation\n\n` +
+                            `The transaction was sent but confirmation timed out after 120 seconds.\n\n` +
+                            `This can happen on mainnet due to network congestion.\n\n` +
+                            `Transaction: ${signature.substring(0, 8)}...${signature.substring(-8)}\n\n` +
+                            `Please check the transaction status:\n` +
+                            `https://solscan.io/tx/${signature}\n\n` +
+                            `The transaction may still be processing. If it succeeded, the NFT will appear in your wallet.\n` +
+                            `If it failed, you'll see an error on Solana Explorer. Please try claiming again if it failed.`
+                        );
+                    } else {
+                        alert(
+                            `⏳ Transaction Pending\n\n` +
+                            `The transaction was sent but confirmation timed out.\n\n` +
+                            `This is common on mainnet due to network congestion.\n\n` +
+                            `Please refresh the page and check your wallet.\n` +
+                            `If the NFT doesn't appear, try claiming again.`
+                        );
+                    }
+                    
+                    // Refresh cart to check if transaction succeeded
+                    setTimeout(() => {
+                        run(user?.id);
+                    }, 5000);
+                    
+                    setClaimingReward(null);
+                    return;
+                }
+                
+                // Handle blockhash expiration errors
+                if (error.message.includes("block height exceeded") ||
+                    error.message.includes("TransactionExpiredBlockheightExceededError") ||
+                    error.message.includes("blockhash expired")) {
+                    console.log("⚠️ Blockhash expired - transaction may still succeed, checking status...");
+                    
+                    // Try to extract signature from error message
+                    const signatureMatch = error.message.match(/Transaction: ([A-Za-z0-9]{64,88})/);
+                    const signature = signatureMatch ? signatureMatch[1] : null;
+                    
+                    if (signature) {
+                        alert(
+                            `⏳ Transaction Pending Confirmation\n\n` +
+                            `The transaction was sent but the blockhash expired during confirmation.\n\n` +
+                            `This is common on mainnet due to network congestion.\n\n` +
+                            `Transaction: ${signature.substring(0, 8)}...${signature.substring(-8)}\n\n` +
+                            `Please check the transaction status:\n` +
+                            `https://solscan.io/tx/${signature}\n\n` +
+                            `If the transaction succeeded, the NFT will appear in your wallet.\n` +
+                            `If it failed, please try claiming again.`
+                        );
+                    } else {
+                        alert(
+                            `⏳ Transaction Pending\n\n` +
+                            `The transaction was sent but confirmation timed out.\n\n` +
+                            `This is common on mainnet due to network congestion.\n\n` +
+                            `Please refresh the page and check your wallet.\n` +
+                            `If the NFT doesn't appear, try claiming again.`
+                        );
+                    }
+                    
+                    // Refresh cart to check if transaction succeeded
+                    setTimeout(() => {
+                        run(user?.id);
+                    }, 3000);
+                    
+                    setClaimingReward(null);
+                    return;
+                }
+                
+                // Handle InstructionError (transaction failed on-chain)
+                if (error.message.includes("InstructionError") ||
+                    error.message.includes("Instruction") && error.message.includes("failed")) {
+                    console.error("❌ Transaction failed on-chain with InstructionError");
+                    
+                    // Try to extract signature from error message
+                    const signatureMatch = error.message.match(/Transaction: ([A-Za-z0-9]{64,88})/);
+                    const signature = signatureMatch ? signatureMatch[1] : null;
+                    
+                    let errorDetails = error.message;
+                    if (error.message.includes("Custom error")) {
+                        const customMatch = error.message.match(/Custom error: (\d+)/);
+                        if (customMatch) {
+                            errorDetails = `Program error code: ${customMatch[1]}`;
+                        }
+                    }
+                    
+                    alert(
+                        `❌ NFT Claim Failed On-Chain\n\n` +
+                        `The transaction was sent but failed during execution on the Solana blockchain.\n\n` +
+                        `Error: ${errorDetails}\n\n` +
+                        (signature 
+                            ? `Transaction: ${signature.substring(0, 8)}...${signature.substring(-8)}\n\n` +
+                              `Check the transaction on Solana Explorer:\n` +
+                              `https://solscan.io/tx/${signature}\n\n`
+                            : ``) +
+                        `Common causes:\n` +
+                        `• NFT not available in admin wallet\n` +
+                        `• Insufficient SOL in admin wallet for fees\n` +
+                        `• Invalid token account\n` +
+                        `• Network congestion\n\n` +
+                        `Please try again or contact support if the issue persists.`
+                    );
+                    
+                    setClaimingReward(null);
+                    return;
+                }
+                
+                // Handle transaction failure errors
+                if (error.message.includes("NFT withdrawal failed")) {
+                    console.error("Transaction failed - extracting error details");
+                    
+                    // Try to extract transaction signature from error message
+                    const signatureMatch = error.message.match(/Transaction: ([A-Za-z0-9]{64,88})/);
+                    const signature = signatureMatch ? signatureMatch[1] : null;
+                    
+                    // Extract error details
+                    const errorDetails = error.message.split("NFT withdrawal failed:")[1]?.split("\n\n")[0] || "Unknown error";
+                    
+                    alert(
+                        `❌ NFT Claim Failed!\n\n` +
+                        `The transaction failed on the Solana blockchain.\n\n` +
+                        `Error: ${errorDetails}\n\n` +
+                        (signature 
+                            ? `Transaction: ${signature.substring(0, 8)}...${signature.substring(-8)}\n\n` +
+                              `You can check the transaction status on Solana Explorer:\n` +
+                              `https://solscan.io/tx/${signature}\n\n`
+                            : ``) +
+                        `Common causes:\n` +
+                        `• Insufficient SOL in admin wallet for transaction fees\n` +
+                        `• Network congestion\n` +
+                        `• Invalid token account\n\n` +
+                        `Please try again or contact support if the issue persists.`
+                    );
+                    setClaimingReward(null);
+                    return;
+                }
+                
                 // Handle case where admin wallet doesn't have NFT - check if user already has it
                 if (error.message.includes("Admin wallet does not have this NFT") || 
                     error.message.includes("NFT not found in admin wallet")) {
@@ -697,7 +910,8 @@ export default function SidebarCart() {
             `🎯 Claim All Rewards?\n\n` +
             `You are about to claim ${unclaimedRewards.length} reward(s):\n` +
             `${unclaimedRewards.filter((r: any) => r.reward_type === 'nft').length} NFT(s)\n` +
-            `${unclaimedRewards.filter((r: any) => r.reward_type === 'sol').length} SOL reward(s)\n\n` +
+            `${unclaimedRewards.filter((r: any) => r.reward_type === 'sol').length} SOL reward(s)\n` +
+            `${unclaimedRewards.filter((r: any) => r.reward_type === 'token').length} Token reward(s)\n\n` +
             `This will process ${unclaimedRewards.length} transaction(s). Continue?`
         );
 
@@ -724,6 +938,16 @@ export default function SidebarCart() {
                             reward.id?.toString() || i.toString(),
                             reward.name,
                             reward.sol,
+                            true // bulk mode - don't show individual alerts
+                        );
+                        successCount++;
+                    } else if (reward.reward_type === 'token') {
+                        await claimTokenReward(
+                            reward.id?.toString() || i.toString(),
+                            reward.name,
+                            reward.mint,
+                            reward.sol, // token amount
+                            reward.token_symbol || 'Token',
                             true // bulk mode - don't show individual alerts
                         );
                         successCount++;
@@ -843,10 +1067,10 @@ export default function SidebarCart() {
             }
             console.log(`💰 Starting SOL claim for reward ${rewardId} with amount ${solAmount}`);
 
-            // Check if this reward is already withdrawn
+            // Check if this reward is already withdrawn AND verify user is the winner
             let checkQuery = supabase
                 .from("prizeWin")
-                .select("isWithdraw")
+                .select("isWithdraw, userId, reward_type, name")
                 .eq("id", rewardId);
 
             // Filter by project_id based on whether we're on main project or sub-project
@@ -863,6 +1087,20 @@ export default function SidebarCart() {
             if (checkError) {
                 console.error("Error checking reward status:", checkError);
                 throw new Error("Failed to check reward status");
+            }
+
+            // CRITICAL: Verify the user is the actual winner (backend validation)
+            if (existingReward?.userId !== user?.id) {
+                console.error("❌ Security violation: User attempting to claim reward that doesn't belong to them", {
+                    rewardUserId: existingReward?.userId,
+                    currentUserId: user?.id,
+                    rewardId: rewardId
+                });
+                if (!bulkMode) {
+                    alert(`❌ Access Denied!\n\nThis reward does not belong to you.\n\nOnly the jackpot winner can claim this reward.`);
+                    run(user?.id); // Refresh to update UI
+                }
+                return;
             }
 
             if (existingReward?.isWithdraw) {
@@ -985,6 +1223,147 @@ export default function SidebarCart() {
         }
     };
 
+    // Claim Token reward function
+    const claimTokenReward = async (rewardId: string, rewardName: string, mintAddress: string, tokenAmount: string, tokenSymbol: string, bulkMode: boolean = false) => {
+        if (claimingReward && !bulkMode) {
+            console.log("⚠️ Claim already in progress, ignoring duplicate request");
+            return;
+        }
+
+        try {
+            if (!bulkMode) {
+                setClaimingReward(rewardId);
+            }
+            console.log(`🪙 Starting token claim for reward ${rewardId} with mint ${mintAddress}`);
+
+            // Check if this reward is already withdrawn
+            const { data: existingReward, error: checkError } = await supabase
+                .from("prizeWin")
+                .select("isWithdraw")
+                .eq("id", rewardId)
+                .single();
+
+            if (checkError) {
+                console.error("Error checking reward status:", checkError);
+                throw new Error("Failed to check reward status");
+            }
+
+            if (existingReward?.isWithdraw) {
+                console.log("⚠️ Reward already withdrawn, skipping claim");
+                if (!bulkMode) {
+                    alert(`🎉 Token Already Claimed!\n\nYou already claimed ${rewardName}!\n\nCheck your wallet for the tokens!`);
+                    run(user?.id); // Refresh to update UI
+                }
+                return;
+            }
+
+            // Connect wallet (same pattern as SOL/NFT claims)
+            // @ts-ignore
+            const wallet = window.solana;
+            if (!wallet || !wallet.isPhantom) {
+                alert("Please install Phantom wallet");
+                return;
+            }
+
+            let userPublicKey: PublicKey;
+            try {
+                // Check if already connected
+                if (wallet.isConnected && wallet.publicKey) {
+                    userPublicKey = new PublicKey(wallet.publicKey.toString());
+                    console.log("✅ Wallet already connected:", userPublicKey.toString());
+                } else {
+                    // Request connection
+                    const response = await wallet.connect({ onlyIfTrusted: false });
+                    userPublicKey = new PublicKey(response.publicKey.toString());
+                    console.log("✅ Wallet connected:", userPublicKey.toString());
+                }
+            } catch (error: any) {
+                console.error("Wallet connection error:", error);
+                if (error.code === 4001 || error.message?.includes("User rejected") || error.message?.includes("User rejected the request")) {
+                    alert("❌ Wallet connection cancelled by user");
+                    return;
+                }
+                if (error.message?.includes("WalletConnectionError")) {
+                    alert("❌ Wallet connection failed. Please make sure Phantom wallet is installed and unlocked, then try again.");
+                    return;
+                }
+                throw new Error(`Wallet connection failed: ${error.message || 'Please try again'}`);
+            }
+
+            console.log(`🪙 Claiming ${tokenAmount} ${tokenSymbol} tokens...`);
+
+            // Call the token claim API
+            const response = await fetch('/api/claim-token-reward', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    rewardId,
+                    userPublicKey: userPublicKey.toString(),
+                    mintAddress,
+                    tokenAmount,
+                }),
+            });
+
+            const result = await response.json();
+
+            if (!result.success) {
+                throw new Error(result.error || 'Failed to claim token reward');
+            }
+
+            console.log("✅ Token reward claimed successfully:", result);
+
+            // Mark as withdrawn in database
+            const { error: updateError } = await supabase
+                .from("prizeWin")
+                .update({ isWithdraw: true })
+                .eq("id", rewardId);
+
+            if (updateError) {
+                console.error("Error updating reward status:", updateError);
+                // Don't throw here as the token was already transferred
+            }
+
+            if (!bulkMode) {
+                alert(`🎉 Token Reward Claimed!\n\nYou received ${tokenAmount} ${tokenSymbol}!\n\nCheck your wallet for the tokens!`);
+                run(user?.id); // Refresh to update UI
+            }
+
+        } catch (error: any) {
+            console.error("Error claiming token reward:", error);
+            
+            // Handle specific error cases
+            if (error.message.includes("already claimed") || error.message.includes("AlreadyClaimed")) {
+                console.log("⚠️ Token reward already claimed, updating UI");
+                if (!bulkMode) {
+                    alert(`🎉 Token Already Claimed!\n\nYou already claimed ${rewardName}!\n\nCheck your wallet for the tokens!`);
+                    run(user?.id);
+                }
+                return;
+            } else if (error.message.includes("Insufficient balance") || error.message.includes("InsufficientBalance")) {
+                console.log("⚠️ Insufficient token balance in vault");
+                if (!bulkMode) {
+                    alert(`⚠️ Insufficient Token Balance!\n\nThere are not enough ${tokenSymbol} tokens in the vault to claim ${rewardName}.\n\nPlease try again later.`);
+                }
+                throw new Error("INSUFFICIENT_TOKEN_BALANCE");
+            } else if (error.message.includes("User rejected")) {
+                alert("❌ Transaction cancelled by user");
+                return;
+            }
+
+            if (!bulkMode) {
+                alert(`Error claiming token reward: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            } else {
+                throw error;
+            }
+        } finally {
+            if (!bulkMode) {
+                setClaimingReward(null);
+            }
+        }
+    };
+
     if (!user.cart) return null;
 
     if (loading) return <div>Loading...</div>;
@@ -1075,12 +1454,45 @@ export default function SidebarCart() {
                                                 if (item?.reward_type === 'sol') {
                                                     // For SOL rewards, use default SOL logo
                                                     imageSource = 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png';
-                                                } else if (item?.mint) {
-                                                    // For NFT rewards, use mint address
+                                                } else if (item?.reward_type === 'token') {
+                                                    // For token rewards, PREFER stored image if available, otherwise try token-list logo via mint
+                                                    if (item?.image && item.image.trim() !== '') {
+                                                        const isUrl = item.image.startsWith('http://') || item.image.startsWith('https://') || item.image.startsWith('/');
+                                                        if (isUrl) {
+                                                            imageSource = item.image;
+                                                        } else {
+                                                            imageSource = item.image;
+                                                        }
+                                                    } else if (item?.mint) {
+                                                        imageSource = `https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/${item.mint}/logo.png`;
+                                                    } else {
+                                                        // Fallback to generic token icon
+                                                        imageSource = 'https://cryptologos.cc/logos/solana-sol-logo.png';
+                                                    }
+                                                } else if (item?.image && item.image.trim() !== '') {
+                                                    // For NFT rewards, prefer image field if it exists (may already be a URL or mint address)
+                                                    // Check if it's a URL
+                                                    const isUrl = item.image.startsWith('http://') || item.image.startsWith('https://') || item.image.startsWith('/');
+                                                    if (isUrl) {
+                                                        // It's already a URL, use it directly
+                                                        imageSource = item.image;
+                                                    } else {
+                                                        // Image field might contain a mint address - use it to fetch metadata
+                                                        // JackpotImage component will handle mint addresses
+                                                        imageSource = item.image;
+                                                    }
+                                                } else if (item?.mint && item.mint.trim() !== '') {
+                                                    // Fallback to mint address if image field is not available
+                                                    // This is the primary way to fetch NFT images
                                                     imageSource = item.mint;
-                                                } else if (item?.image) {
-                                                    // Fallback to image field
-                                                    imageSource = item.image;
+                                                } else {
+                                                    console.warn('⚠️ SidebarCart: No image source for reward:', {
+                                                        name: item?.name,
+                                                        reward_type: item?.reward_type,
+                                                        hasImage: !!item?.image,
+                                                        hasMint: !!item?.mint,
+                                                        item
+                                                    });
                                                 }
                                                 
                                                 return (
@@ -1134,6 +1546,22 @@ export default function SidebarCart() {
                                                                             fullItem: item
                                                                         });
                                                                         claimSOLReward(item.id?.toString() || index.toString(), item.name, item.sol);
+                                                                    } else if (item?.reward_type === 'token') {
+                                                                        console.log("🎯 Claiming Token:", {
+                                                                            id: item.id,
+                                                                            name: item.name,
+                                                                            mint: item.mint,
+                                                                            tokenAmount: item.sol,
+                                                                            tokenSymbol: item.token_symbol,
+                                                                            fullItem: item
+                                                                        });
+                                                                        claimTokenReward(
+                                                                            item.id?.toString() || index.toString(),
+                                                                            item.name,
+                                                                            item.mint,
+                                                                            item.sol,
+                                                                            item.token_symbol || 'Token'
+                                                                        );
                                                                     } else {
                                                                         console.log("🎯 Claiming NFT:", {
                                                                             id: item.id,

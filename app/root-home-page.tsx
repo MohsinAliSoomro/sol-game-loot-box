@@ -5,7 +5,6 @@ import { supabase } from "@/service/supabase";
 import Loader from "./Components/Loader";
 import { useThemeColor } from "@/lib/hooks/useThemeColor";
 import { ProjectCardSkeleton, ImageSkeleton } from "./Components/Skeleton";
-import { useState } from "react";
 
 interface Project {
   id: number;

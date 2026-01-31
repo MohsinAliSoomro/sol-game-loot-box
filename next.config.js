@@ -28,7 +28,9 @@ const nextConfig = {
             'ipfs.io',
             'cloudflare-ipfs.com',
             'dweb.link',
-            'nftstorage.link'
+            'nftstorage.link',
+            'ap-assets.pinit.io',
+            'we-assets.pinit.io'
         ],
         remotePatterns: [
             {
@@ -54,6 +56,14 @@ const nextConfig = {
             {
                 protocol: 'https',
                 hostname: 'nftstorage.link',
+            },
+            {
+                protocol: 'https',
+                hostname: 'ap-assets.pinit.io',
+            },
+            {
+                protocol: 'https',
+                hostname: 'we-assets.pinit.io',
             }
         ]
     },

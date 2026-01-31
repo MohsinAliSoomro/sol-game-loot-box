@@ -5,7 +5,10 @@
  * Ensures same wallet gets different profiles per project
  */
 
-const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL
+// BACKEND_API_URL should be base URL (without /api) since we append /api in fetch calls
+// Remove /api if present, then code will add it
+const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_API_URL || '';
+const BACKEND_API_URL = BACKEND_BASE_URL.replace(/\/api\/?$/, ''); // Remove trailing /api if present
 
 export interface ProjectUser {
   id: string;

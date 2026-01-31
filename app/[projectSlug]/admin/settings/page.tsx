@@ -267,7 +267,8 @@ export default function Settings() {
                   name="name"
                   value={formData.name}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                   required
                 />
               </div>
@@ -279,7 +280,8 @@ export default function Settings() {
                   name="price"
                   value={formData.price}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                   required
                 />
               </div>
@@ -291,7 +293,8 @@ export default function Settings() {
                   name="percent"
                   value={formData.percent}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                   required
                   min="0"
                   max="100"

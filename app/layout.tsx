@@ -160,7 +160,12 @@ export default function RootLayout({
                   // Inject theme style tag
                   var style = document.createElement('style');
                   style.id = 'theme-blocking-style';
-                  style.textContent = 'html, body, #__next, [data-nextjs-scroll-focus-boundary], main, [role="main"] { background-color: ' + primaryColor + ' !important; } :root { --background-color-override: ' + primaryColor + ' !important; --theme-primary: ' + primaryColor + ' !important; }';
+                  // Check if we're on an admin page - exclude main from theme background
+                  var isAdminPage = window.location.pathname && (window.location.pathname.includes('/admin') || window.location.pathname.match(/\/[^\/]+\/[^\/]+\/admin/));
+                  var mainBackgroundRule = isAdminPage 
+                    ? 'html, body, #__next, [data-nextjs-scroll-focus-boundary] { background-color: ' + primaryColor + ' !important; } main, [role="main"] { background-color: #ffffff !important; }'
+                    : 'html, body, #__next, [data-nextjs-scroll-focus-boundary], main, [role="main"] { background-color: ' + primaryColor + ' !important; }';
+                  style.textContent = mainBackgroundRule + ' :root { --background-color-override: ' + primaryColor + ' !important; --theme-primary: ' + primaryColor + ' !important; }';
                   
                   // Insert at the very beginning of head
                   if (document.head) {
@@ -270,6 +275,26 @@ export default function RootLayout({
                       html.style.setProperty('--theme-primary', navPrimaryColor, 'important');
                       html.style.setProperty('--background-color-override', navPrimaryColor, 'important');
                       
+                      // Check if we're on an admin page - set main background to white
+                      var isNavAdminPage = window.location.pathname && (window.location.pathname.includes('/admin') || window.location.pathname.match(/\/[^\/]+\/[^\/]+\/admin/));
+                      if (isNavAdminPage) {
+                        document.querySelectorAll('main, [role="main"]').forEach(function(mainEl) {
+                          mainEl.style.backgroundColor = '#ffffff';
+                          mainEl.style.setProperty('background-color', '#ffffff', 'important');
+                        });
+                        // Update existing style tag if it exists
+                        var existingStyle = document.getElementById('theme-blocking-style');
+                        if (existingStyle) {
+                          existingStyle.textContent = 'html, body, #__next, [data-nextjs-scroll-focus-boundary] { background-color: ' + navPrimaryColor + ' !important; } main, [role="main"] { background-color: #ffffff !important; } :root { --background-color-override: ' + navPrimaryColor + ' !important; --theme-primary: ' + navPrimaryColor + ' !important; }';
+                        }
+                      } else {
+                        // Update existing style tag to include main for non-admin pages
+                        var existingStyle = document.getElementById('theme-blocking-style');
+                        if (existingStyle) {
+                          existingStyle.textContent = 'html, body, #__next, [data-nextjs-scroll-focus-boundary], main, [role="main"] { background-color: ' + navPrimaryColor + ' !important; } :root { --background-color-override: ' + navPrimaryColor + ' !important; --theme-primary: ' + navPrimaryColor + ' !important; }';
+                        }
+                      }
+                      
                       // Apply to all orange elements IMMEDIATELY - prevents flash
                       if (navTheme) {
                         // Update elements with bg-orange classes
@@ -326,7 +351,7 @@ export default function RootLayout({
 
       <body
         className={cn(
-          "min-h-screen antialiased",
+          "min-h-screen antialiased flex flex-col",
           myFont.className
         )}
       >
@@ -340,7 +365,9 @@ export default function RootLayout({
             >
               <FaviconManager />
               <WebsiteTheme />
-              {children}
+              <div className="flex-1 flex flex-col">
+                {children}
+              </div>
               <ConditionalFooter />
               <SidebarCart />
               <PurchaseModal />

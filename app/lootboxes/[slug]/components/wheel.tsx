@@ -136,12 +136,14 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
       console.log(`🎨 Loading NFT rewards from database for lootbox: ${item.id}...`);
       
       // First, get all NFTs that are in carts (won but not yet claimed)
+      // Main project: only check NFTs from main project (project_id IS NULL)
       const { data: cartNFTs } = await supabase
         .from('prizeWin')
         .select('mint')
         .eq('reward_type', 'nft')
         .eq('isWithdraw', false) // In cart but not yet claimed
-        .not('mint', 'is', null);
+        .not('mint', 'is', null)
+        .is('project_id', null); // Main project only - isolate from sub-projects
       
       const cartMints = new Set((cartNFTs || []).map((w: any) => w.mint).filter(Boolean));
       console.log(`📋 Found ${cartMints.size} NFTs in carts (will be excluded from wheel):`, Array.from(cartMints));
@@ -469,18 +471,38 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
         // Ensure reward_price is properly extracted and stored
         const rewardPrice = String(r.reward_price || r.price || '0').trim();
         const itemValue = parseFloat(rewardPrice) || 0;
+        const rawRewardImage = typeof r.reward_image === 'string' ? r.reward_image.trim() : '';
+        const rawCollection = typeof r.collection === 'string' ? r.collection.trim() : '';
+        const rawMintAddress = typeof r.mint_address === 'string' ? r.mint_address.trim() : '';
+        // Prefer explicit mint_address, then collection, then (only if it looks like a mint) reward_image
+        const rewardImageLooksLikeMint =
+          !!rawRewardImage && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(rawRewardImage);
+        const mintCandidate = rawMintAddress || rawCollection || (rewardImageLooksLikeMint ? rawRewardImage : '');
+        const isOnChainToken =
+          !!mintCandidate && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mintCandidate);
         
         console.log(`📦 Loading item reward:`, {
           id: r.id,
           name: r.reward_name,
           reward_price: r.reward_price,
-          parsed_itemValue: itemValue
+          parsed_itemValue: itemValue,
+          isOnChainToken,
+          tokenMintAddress: isOnChainToken ? mintCandidate : null,
+          rawCollection,
+          rawMintAddress,
+          tokenSymbol: r.token_symbol || null
         });
         
+        const onChainImage =
+          getImageUrlFromPath(r.reward_image) ||
+          `https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/${mintCandidate}/logo.png`;
+
         return {
           id: 4000 + (r.id || idx),
           name: r.reward_name || 'Item',
-          image: getImageUrlFromPath(r.reward_image) || '/default-item.png',
+          image: isOnChainToken
+            ? onChainImage
+            : (getImageUrlFromPath(r.reward_image) || '/default-item.png'),
           color: `hsl(${(idx * 55 + 120) % 360}, 70%, 60%)`,
           textColor: '#ffffff',
           percentage: r.percentage || 0,
@@ -492,6 +514,14 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
           itemValue: rewardPrice, // Store as string for consistency
           // @ts-ignore
           itemValueNumber: itemValue, // Also store as number for direct use
+          // @ts-ignore
+          isOnChain: isOnChainToken,
+          // @ts-ignore
+          tokenMintAddress: isOnChainToken ? mintCandidate : '',
+          // @ts-ignore
+          tokenAmount: isOnChainToken ? rewardPrice : '',
+          // @ts-ignore
+          tokenSymbol: r.token_symbol || 'Token',
         };
       });
 
@@ -716,7 +746,19 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
   // Add reward to cart function
   const addRewardToCart = useCallback(async (winnerItem: WheelItem) => {
     try {
+      // Get current project ID (for main project, this will be null)
+      const projectId = typeof window !== 'undefined' 
+        ? localStorage.getItem('currentProjectId')
+        : null;
+      
+      // Convert to integer or null for database
+      const projectIdForInsert = projectId && projectId !== 'null' && projectId !== '' 
+        ? parseInt(projectId) 
+        : null;
+      
       console.log("🎯 Adding reward to cart:", winnerItem);
+      console.log("🔍 Project ID for insert:", projectIdForInsert);
+      console.log("🔍 FULL winnerItem object:", JSON.stringify(winnerItem, null, 2));
       console.log("🎯 Winner item type check:", {
         isNFT: winnerItem.isNFT,
         hasMint: !!winnerItem.mint,
@@ -742,6 +784,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
           reward_type: 'sol', // Add reward type
           mint: null, // No mint for SOL rewards
           product_id: item.id, // Add the lootbox/product ID
+          project_id: projectIdForInsert, // Add project ID (null for main project)
           created_at: new Date().toISOString(),
         });
 
@@ -804,6 +847,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
           reward_type: 'nft', // Add reward type
           mint: winnerItem.mint, // Add mint address
           product_id: item.id, // Add the lootbox/product ID
+          project_id: projectIdForInsert, // Add project ID (null for main project)
           created_at: new Date().toISOString(),
         });
 
@@ -939,10 +983,59 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
         setUser({ ...user, cart: true });
         console.log("🛒 Sidebar cart opened automatically for NFT reward");
         
+      } else if ((winnerItem as any).reward_type === 'item' && (winnerItem as any).isOnChain && (winnerItem as any).tokenMintAddress) {
+        console.log("🪙 Processing on-chain token reward:", winnerItem.name);
+        console.log("🔍 DEBUG - winnerItem properties:", {
+          reward_type: (winnerItem as any).reward_type,
+          isOnChain: (winnerItem as any).isOnChain,
+          tokenMintAddress: (winnerItem as any).tokenMintAddress,
+          tokenAmount: (winnerItem as any).tokenAmount,
+          tokenSymbol: (winnerItem as any).tokenSymbol,
+          name: winnerItem.name
+        });
+        
+        // Generate a unique reward ID
+        const rewardId = Date.now() % 1000000;
+        
+        console.log("📝 Inserting token reward into prizeWin table...");
+        // Add token reward to prizeWin table (for sidebar cart)
+        const prizeWinResult = await supabase.from("prizeWin").insert({
+          userId: user.id,
+          name: winnerItem.name,
+          image: winnerItem.image,
+          sol: (winnerItem as any).tokenAmount, // Token amount
+          isWithdraw: false,
+          reward_type: 'token', // Add reward type
+          mint: (winnerItem as any).tokenMintAddress, // Token mint address
+          product_id: item.id, // Add the lootbox/product ID
+          project_id: projectIdForInsert, // Add project ID (null for main project)
+          created_at: new Date().toISOString(),
+        });
+
+        if (prizeWinResult.error) {
+          console.error("❌ Error inserting token reward into prizeWin:", prizeWinResult.error);
+          throw prizeWinResult.error;
+        }
+
+        console.log("✅ Successfully inserted token reward into prizeWin:", prizeWinResult.data);
+        console.log(`🎉 Token reward added to cart: ${(winnerItem as any).tokenAmount} ${(winnerItem as any).tokenSymbol || 'Tokens'}`);
+        
+        // Automatically open sidebar cart to show the won reward
+        setUser({ ...user, cart: true });
+        console.log("🛒 Sidebar cart opened automatically for token reward");
+        
       } else if ((winnerItem as any).reward_type === 'item') {
         // Item rewards are NOT added to cart - they are immediately credited to token balance
         // This is handled in the spinWheel function after addRewardToCart
         console.log("🎁 Item reward won - will be credited immediately to token balance (not added to cart)");
+        console.log("🔍 DEBUG - Item reward properties:", {
+          reward_type: (winnerItem as any).reward_type,
+          isOnChain: (winnerItem as any).isOnChain,
+          tokenMintAddress: (winnerItem as any).tokenMintAddress,
+          name: winnerItem.name,
+          hasTokenMint: !!(winnerItem as any).tokenMintAddress,
+          isOnChainFlag: !!(winnerItem as any).isOnChain
+        });
         
       } else {
         console.log("💰 Processing token reward:", winnerItem.name);
@@ -984,6 +1077,7 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
           reward_type: 'nft', // Add reward type
           mint: randomNFT.mint, // Add mint address for token rewards too
           product_id: item.id, // Add the lootbox/product ID
+          project_id: projectIdForInsert, // Add project ID (null for main project)
           created_at: new Date().toISOString(),
         });
 
@@ -1123,15 +1217,14 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
         let updateQuery = supabase
           .from("project_users")
           .update({ apes: user.apes - price })
-          .eq("id", user.id)
-          .select();
+          .eq("id", user.id);
         
         // Filter by project_id for sub-projects
         if (projectId) {
           updateQuery = updateQuery.eq("project_id", parseInt(projectId));
         }
         
-        const result = await updateQuery;
+        const result = await updateQuery.select();
         updatedUser = result.data;
         updateError = result.error;
         
@@ -1285,17 +1378,22 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
         price: winnerItem.price,
         image: winnerItem.image
       });
-      // Item rewards are NOT added to cart - they are immediately credited to token balance
-      // Only add to cart if it's NOT an item reward
-      if ((winnerItem as any).reward_type !== 'item') {
+      // Add to cart for: SOL, NFT, TOKEN, and ON-CHAIN token items.
+      // Only OFF-CHAIN item rewards are credited immediately to balance.
+      const isOnChainItem =
+        (winnerItem as any).reward_type === 'item' &&
+        (winnerItem as any).isOnChain &&
+        (winnerItem as any).tokenMintAddress;
+
+      if ((winnerItem as any).reward_type !== 'item' || isOnChainItem) {
       await addRewardToCart(winnerItem);
       console.log("✅ addRewardToCart completed");
       } else {
         console.log("🎁 Item reward - skipping cart, will credit tokens directly");
       }
 
-      // Reward payout for ITEM rewards - credit user's offchain token balance immediately
-      if ((winnerItem as any).reward_type === 'item') {
+      // Reward payout for OFF-CHAIN ITEM rewards only (on-chain token items are claimable from cart)
+      if ((winnerItem as any).reward_type === 'item' && !isOnChainItem) {
         // Extract item value - try multiple sources in order of preference
         const itemValueNumber = (winnerItem as any).itemValueNumber; // Direct number if available
         const itemValueStr = (winnerItem as any).itemValue || winnerItem?.price || '0';
@@ -1347,15 +1445,14 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
             let updateQuery = supabase
               .from("project_users")
               .update({ apes: newBalance })
-              .eq("id", user.id)
-              .select();
+              .eq("id", user.id);
             
             // Filter by project_id for sub-projects
             if (projectId) {
               updateQuery = updateQuery.eq("project_id", parseInt(projectId));
             }
             
-            const result = await updateQuery;
+            const result = await updateQuery.select();
             updatedUser = result.data;
             updateError = result.error;
             
@@ -1801,7 +1898,9 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
                         <p className="text-xs text-gray-500 mb-2">Chance: {winner.percentage}%</p>
                       )}
                       <p className="text-sm text-green-600 mb-2 text-center mt-3 font-medium">
-                        ✅ {winner.name} has been automatically added to your balance!
+                        {(winner as any)?.reward_type === 'item' && !(winner as any)?.isOnChain
+                          ? `✅ ${winner.name} has been automatically added to your balance!`
+                          : `✅ ${winner.name} has been added to your cart!`}
                       </p>
                 </div>
                   );

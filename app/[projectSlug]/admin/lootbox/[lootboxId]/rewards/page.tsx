@@ -30,7 +30,9 @@ export default function LootboxRewards() {
   const [solBalance, setSolBalance] = useState(0);
   const [solBalanceLoading, setSolBalanceLoading] = useState(false);
   const [selectedSOLAmount, setSelectedSOLAmount] = useState<number | null>(null);
+  const [customSOLAmount, setCustomSOLAmount] = useState<string>('');
   const [jackpotNFTMints, setJackpotNFTMints] = useState<string[]>([]);
+  const [isOnChainToken, setIsOnChainToken] = useState(false);
   const [allLootboxNFTMints, setAllLootboxNFTMints] = useState<string[]>([]); // NFTs used in ANY project's lootboxes
   
   // Get admin wallet address from database
@@ -104,7 +106,8 @@ export default function LootboxRewards() {
     if (adminWalletAddress) {
       fetchNFTs();
     }
-  }, [adminWalletAddress, getUsedNFTMints]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminWalletAddress]);
 
   // Predefined SOL reward amounts
   const SOL_REWARD_OPTIONS = [0.01, 0.05, 0.08, 0.1, 0.2];
@@ -142,6 +145,26 @@ export default function LootboxRewards() {
           reward.solAmount = solMatch[1];
         }
       }
+      // Check if SOL amount is a custom value (not in predefined options)
+      if (reward.rewardType === 'sol' && reward.solAmount) {
+        const solAmountNum = parseFloat(reward.solAmount);
+        if (SOL_REWARD_OPTIONS.includes(solAmountNum)) {
+          setSelectedSOLAmount(solAmountNum);
+          setCustomSOLAmount('');
+        } else {
+          setSelectedSOLAmount(null);
+          setCustomSOLAmount(reward.solAmount);
+        }
+      } else {
+        setSelectedSOLAmount(null);
+        setCustomSOLAmount('');
+      }
+      // Check if item is an on-chain token
+      if (reward.rewardType === 'item' && reward.isOnChain) {
+        setIsOnChainToken(true);
+      } else {
+        setIsOnChainToken(false);
+      }
       setFormData(reward);
     } else {
       setEditingReward(null);
@@ -156,8 +179,13 @@ export default function LootboxRewards() {
         tokenAmount: '',
         solAmount: '',
         chance: '',
-        image: null
+        image: null,
+        tokenMintAddress: '',
+        isOnChain: false
       });
+      setSelectedSOLAmount(null);
+      setCustomSOLAmount('');
+      setIsOnChainToken(false);
     }
     setShowAddModal(true);
   };
@@ -184,14 +212,64 @@ export default function LootboxRewards() {
       const submissionData = { ...formData, rewardType: selectedRewardType };
       
       if (selectedRewardType === 'sol') {
-        // Ensure name is set for SOL rewards
-        if (!submissionData.name || submissionData.name === ' SOL') {
-          submissionData.name = `${submissionData.solAmount || submissionData.value || '0'} SOL`;
+        // Validate SOL amount is selected or entered
+        if (!selectedSOLAmount && !customSOLAmount) {
+          alert('Please select a SOL amount or enter a custom amount');
+          return;
         }
-        // Ensure solAmount is set
-        if (!submissionData.solAmount && submissionData.value) {
-          submissionData.solAmount = submissionData.value;
+        
+        // Use custom amount if entered, otherwise use selected amount
+        const finalAmount = customSOLAmount || (selectedSOLAmount ? selectedSOLAmount.toString() : '');
+        const finalAmountNum = parseFloat(finalAmount);
+        
+        // Validate amount
+        if (isNaN(finalAmountNum) || finalAmountNum <= 0) {
+          alert('Please enter a valid SOL amount greater than 0');
+          return;
         }
+        
+        if (finalAmountNum > solBalance) {
+          alert(`Amount (${finalAmountNum} SOL) exceeds wallet balance (${solBalance.toFixed(4)} SOL)`);
+          return;
+        }
+        
+        // Set solAmount and name
+        submissionData.solAmount = finalAmount;
+        submissionData.name = `${finalAmount} SOL`;
+      }
+
+      // For on-chain token items, validate mint address and amount
+      if (selectedRewardType === 'item' && isOnChainToken) {
+        if (!submissionData.tokenMintAddress || submissionData.tokenMintAddress.trim() === '') {
+          alert('Please enter a valid token mint address');
+          return;
+        }
+        
+        // Basic validation for Solana address format (32-44 characters, base58)
+        const mintAddress = submissionData.tokenMintAddress.trim();
+        if (mintAddress.length < 32 || mintAddress.length > 44) {
+          alert('Invalid token mint address. Please enter a valid Solana address.');
+          return;
+        }
+        
+        if (!submissionData.tokenAmount || parseFloat(submissionData.tokenAmount) <= 0) {
+          alert('Please enter a valid token amount greater than 0');
+          return;
+        }
+        
+        // Set isOnChain flag
+        submissionData.isOnChain = true;
+        submissionData.tokenMintAddress = mintAddress;
+        
+        // Auto-set name if not provided
+        if (!submissionData.name || submissionData.name.trim() === '') {
+          const symbol = submissionData.tokenSymbol || 'Token';
+          submissionData.name = `${submissionData.tokenAmount} ${symbol}`;
+        }
+      } else if (selectedRewardType === 'item' && !isOnChainToken) {
+        // Off-chain item - clear on-chain fields
+        submissionData.isOnChain = false;
+        submissionData.tokenMintAddress = '';
       }
 
       // For NFT rewards, validate that mint address is selected
@@ -355,16 +433,25 @@ export default function LootboxRewards() {
                     </td>
                     <td className="px-6 py-4">
                       <span className={`px-3 py-1 text-xs font-medium rounded-full ${
+                        reward.rewardType === 'item' && reward.isOnChain ? 'bg-cyan-100 text-cyan-800' :
                         reward.rewardType === 'item' ? 'bg-orange-100 text-orange-800' : 
                         reward.rewardType === 'nft' ? 'bg-purple-100 text-purple-800' : 
                         reward.rewardType === 'sol' ? 'bg-green-100 text-green-800' :
                         'bg-blue-100 text-blue-800'
                       }`}>
-                        {reward.rewardType?.toUpperCase() || 'ITEM'}
+                        {reward.rewardType === 'item' && reward.isOnChain ? 'TOKEN' : (reward.rewardType?.toUpperCase() || 'ITEM')}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">
-                      {reward.rewardType === 'item' && reward.value}
+                      {reward.rewardType === 'item' && reward.isOnChain && (
+                        <div>
+                          <span>{reward.tokenAmount} {reward.tokenSymbol || 'Tokens'}</span>
+                          <span className="block text-xs text-gray-400 truncate max-w-[150px]" title={reward.tokenMintAddress}>
+                            {reward.tokenMintAddress?.substring(0, 8)}...
+                          </span>
+                        </div>
+                      )}
+                      {reward.rewardType === 'item' && !reward.isOnChain && reward.value}
                       {reward.rewardType === 'nft' && `${reward.collection} #${reward.tokenId}`}
                       {reward.rewardType === 'token' && `${reward.tokenAmount} ${reward.tokenSymbol}`}
                       {reward.rewardType === 'sol' && `${reward.tokenAmount || reward.value} SOL`}
@@ -459,24 +546,113 @@ export default function LootboxRewards() {
                     name="name" 
                     value={formData.name || ''} 
                     onChange={handleInputChange} 
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" 
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400" 
+                    style={{ color: 'white' }}
                     required 
                   />
                 )}
               </div>
 
               {selectedRewardType === 'item' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Value</label>
-                  <input 
-                    type="text" 
-                    name="value" 
-                    value={formData.value || ''} 
-                    onChange={handleInputChange} 
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" 
-                    required 
-                  />
-                </div>
+                <>
+                  {/* On-chain / Off-chain Toggle */}
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">On-chain Token</p>
+                      <p className="text-xs text-gray-500">Enable to send SPL tokens (like OGX) directly to user&apos;s wallet</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOnChainToken(!isOnChainToken);
+                        setFormData((prev: any) => ({ ...prev, isOnChain: !isOnChainToken, tokenMintAddress: '', tokenAmount: '' }));
+                      }}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        isOnChainToken ? 'bg-orange-500' : 'bg-gray-300'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          isOnChainToken ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {isOnChainToken ? (
+                    <>
+                      {/* Token Mint Address */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Token Mint Address</label>
+                        <input 
+                          type="text" 
+                          name="tokenMintAddress" 
+                          value={formData.tokenMintAddress || ''} 
+                          onChange={handleInputChange} 
+                          placeholder="e.g., 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
+                          className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 font-mono text-sm" 
+                          required 
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Enter the SPL token mint address (e.g., OGX token)</p>
+                      </div>
+
+                      {/* Token Amount */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Token Amount</label>
+                        <input 
+                          type="number" 
+                          name="tokenAmount" 
+                          value={formData.tokenAmount || ''} 
+                          onChange={handleInputChange} 
+                          placeholder="e.g., 100"
+                          step="any"
+                          min="0"
+                          className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" 
+                          required 
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Amount of tokens to send to the winner</p>
+                      </div>
+
+                      {/* Token Symbol (optional) */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Token Symbol (Optional)</label>
+                        <input 
+                          type="text" 
+                          name="tokenSymbol" 
+                          value={formData.tokenSymbol || ''} 
+                          onChange={handleInputChange} 
+                          placeholder="e.g., OGX"
+                          className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" 
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Display symbol for the token</p>
+                      </div>
+
+                      <div className="text-sm text-blue-600 bg-blue-50 p-3 rounded-lg">
+                        <p className="font-medium mb-1">ℹ️ On-chain Token Info:</p>
+                        <p>• Tokens will be transferred from admin wallet to winner&apos;s wallet</p>
+                        <p>• Make sure admin wallet has enough token balance</p>
+                        <p>• Token will be sent automatically when user wins</p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* Off-chain Value */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Value</label>
+                        <input 
+                          type="text" 
+                          name="value" 
+                          value={formData.value || ''} 
+                          onChange={handleInputChange} 
+                          className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400" 
+                          style={{ color: 'white' }}
+                          required 
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Description or value of the off-chain item</p>
+                      </div>
+                    </>
+                  )}
+                </>
               )}
 
               {selectedRewardType === 'nft' && (
@@ -658,6 +834,7 @@ export default function LootboxRewards() {
                             disabled={solBalance < amount}
                             onClick={() => {
                               setSelectedSOLAmount(amount);
+                              setCustomSOLAmount('');
                               setFormData((prev: any) => ({ 
                                 ...prev, 
                                 solAmount: amount.toString(), 
@@ -665,7 +842,7 @@ export default function LootboxRewards() {
                               }));
                             }}
                             className={`py-3 px-2 rounded-lg border-2 transition-all text-sm font-medium ${
-                              selectedSOLAmount === amount
+                              selectedSOLAmount === amount && !customSOLAmount
                                 ? 'border-green-500 bg-green-50 text-green-700'
                                 : solBalance < amount
                                 ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
@@ -677,9 +854,46 @@ export default function LootboxRewards() {
                         ))}
                       </div>
 
-                      {selectedSOLAmount && (
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Or Enter Custom Amount</label>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            max={solBalance}
+                            value={customSOLAmount}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setCustomSOLAmount(value);
+                              if (value && !isNaN(parseFloat(value)) && parseFloat(value) > 0) {
+                                const numValue = parseFloat(value);
+                                if (numValue <= solBalance) {
+                                  setSelectedSOLAmount(null);
+                                  setFormData((prev: any) => ({ 
+                                    ...prev, 
+                                    solAmount: value, 
+                                    name: `${value} SOL` 
+                                  }));
+                                }
+                              }
+                            }}
+                            placeholder="e.g., 0.000001"
+                            className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-green-500"
+                          />
+                          <span className="text-sm text-gray-600 font-medium">SOL</span>
+                        </div>
+                        {customSOLAmount && parseFloat(customSOLAmount) > solBalance && (
+                          <p className="text-xs text-red-600 mt-1">Amount exceeds wallet balance ({solBalance.toFixed(4)} SOL)</p>
+                        )}
+                        {customSOLAmount && parseFloat(customSOLAmount) <= 0 && (
+                          <p className="text-xs text-red-600 mt-1">Amount must be greater than 0</p>
+                        )}
+                      </div>
+
+                      {(selectedSOLAmount || (customSOLAmount && parseFloat(customSOLAmount) > 0 && parseFloat(customSOLAmount) <= solBalance)) && (
                         <div className="p-3 bg-green-50 rounded-lg">
-                          <p className="text-sm font-medium text-gray-700">✅ Selected: {selectedSOLAmount} SOL</p>
+                          <p className="text-sm font-medium text-gray-700">✅ Selected: {customSOLAmount ? `${customSOLAmount} SOL` : `${selectedSOLAmount} SOL`}</p>
                           <p className="text-xs text-gray-500 mt-1">This amount will be deposited to the vault and deducted from your wallet.</p>
                         </div>
                       )}
@@ -702,7 +916,8 @@ export default function LootboxRewards() {
                   name="chance" 
                   value={formData.chance || ''} 
                   onChange={handleInputChange} 
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" 
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400" 
+                  style={{ color: 'white' }}
                   required 
                   min="0" 
                   max="100"

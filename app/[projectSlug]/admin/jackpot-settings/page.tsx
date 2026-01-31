@@ -467,28 +467,28 @@ export default function JackpotSettings() {
                 <>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                    <input type="text" name="name" value={formData.name} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" required />
+                    <input type="text" name="name" value={formData.name} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400" style={{ color: 'white' }} required />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-                    <input type="text" name="title" value={formData.title} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" required />
+                    <input type="text" name="title" value={formData.title} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400" style={{ color: 'white' }} required />
                   </div>
                 </>
               )}
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <textarea name="description" value={formData.description} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" rows={3} required />
+                <textarea name="description" value={formData.description} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400" style={{ color: 'white' }} rows={3} required />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Ticket Price</label>
-                  <input type="number" name="price" value={formData.price} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" required />
+                  <input type="number" name="price" value={formData.price} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400" style={{ color: 'white' }} required />
                   <p className="text-xs text-gray-500 mt-1">Price users pay to buy a ticket</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Max Tickets</label>
-                  <input type="number" name="maxTickets" value={formData.maxTickets} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" required />
+                  <input type="number" name="maxTickets" value={formData.maxTickets} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400" style={{ color: 'white' }} required />
                 </div>
               </div>
               
@@ -502,7 +502,8 @@ export default function JackpotSettings() {
                     name="itemPrice" 
                     value={formData.itemPrice} 
                     onChange={handleInputChange} 
-                    className="w-full px-4 py-2 border border-orange-300 rounded-lg focus:outline-none focus:border-orange-500 " 
+                    className="w-full px-4 py-2 border border-orange-300 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                    style={{ color: 'white' }} 
                     placeholder="e.g., 100"
                     min="0"
                     step="0.01"
@@ -516,7 +517,7 @@ export default function JackpotSettings() {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
-                <input type="datetime-local" name="endTime" value={formData.endTime} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" />
+                <input type="datetime-local" name="endTime" value={formData.endTime} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400" style={{ color: 'white' }} />
               </div>
               
               <div>

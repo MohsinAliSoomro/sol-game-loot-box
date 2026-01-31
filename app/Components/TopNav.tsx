@@ -997,7 +997,7 @@ export default function TopNav() {
                 <div className="items flex justify-between text-white">
                   <div className="text-xs pt-2 pb-2">
                     <p>{projectTokenSymbol}</p>
-                    <p className="text-center">{formatNumber(user?.apes)}</p>
+                    <p className="text-center">{Number(user?.apes || 0).toFixed(1)}</p>
                   </div>
                   <div className="text-xs pt-2">
                     <p className="text-center">Volume ({projectTokenSymbol})</p>

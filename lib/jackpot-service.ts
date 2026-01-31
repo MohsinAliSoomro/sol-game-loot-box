@@ -85,18 +85,32 @@ export class JackpotService {
   // Get jackpot setting
   static async getSetting(key: string): Promise<string | null> {
     try {
-      const { data, error } = await supabase
+      // Some deployments may have older schema where `value` column was renamed.
+      // Try `value` first, then fallback to `setting_value`.
+      let data: any = null;
+      let error: any = null;
+
+      ({ data, error } = await supabase
         .from('jackpot_settings')
         .select('value')
         .eq('key', key)
-        .single();
+        .single());
+
+      if (error && (error.message?.includes('does not exist') || error.code === '42703')) {
+        console.warn('⚠️ jackpot_settings.value missing, falling back to jackpot_settings.setting_value');
+        ({ data, error } = await supabase
+          .from('jackpot_settings')
+          .select('setting_value')
+          .eq('key', key)
+          .single());
+      }
 
       if (error) {
         console.error('Error fetching setting:', error);
         return null;
       }
 
-      return data?.value || null;
+      return data?.value ?? data?.setting_value ?? null;
     } catch (error) {
       console.error('Error in getSetting:', error);
       return null;

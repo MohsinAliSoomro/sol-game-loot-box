@@ -1,18 +1,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabase as appSupabase } from '@/service/supabase';
 
-// Create Supabase client function
-function getSupabaseClient() {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    throw new Error('Missing Supabase environment variables');
-  }
-  
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  );
-}
+// NOTE: Use the app's configured Supabase client.
+// The previous implementation required NEXT_PUBLIC_* env vars at runtime,
+// which can be missing in some server environments and caused 500s.
 
 /**
  * API endpoint to manage NFT status in the wheel
@@ -23,8 +15,15 @@ function getSupabaseClient() {
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabaseClient();
+    const supabase = appSupabase;
     console.log("🔍 Getting available NFTs from backend...");
+    
+    // Get project_id from query parameters (optional)
+    const { searchParams } = new URL(request.url);
+    const projectIdParam = searchParams.get('project_id');
+    const projectId = projectIdParam ? parseInt(projectIdParam) : null;
+    
+    console.log(`📦 Project context: ${projectId ? `Sub-project ${projectId}` : 'Main project (NULL)'}`);
     
     // Get all NFTs that are deposited in vault
     const { getDepositedNFTs } = await import("@/lib/nft-metadata");
@@ -41,12 +40,23 @@ export async function GET(request: NextRequest) {
     }
     
     // Get NFTs that are already won (in sidebar carts)
-    const { data: wonNFTs } = await supabase
+    // Filter by project_id: NULL for main project, specific ID for sub-projects
+    let wonNFTsQuery = supabase
       .from('prizeWin')
       .select('mint')
       .eq('reward_type', 'nft')
       .eq('isWithdraw', false) // In cart but not yet claimed
       .not('mint', 'is', null);
+    
+    if (projectId) {
+      // Sub-project: filter by specific project_id
+      wonNFTsQuery = wonNFTsQuery.eq('project_id', projectId);
+    } else {
+      // Main project: only show NFTs from main project (project_id IS NULL)
+      wonNFTsQuery = wonNFTsQuery.is('project_id', null);
+    }
+    
+    const { data: wonNFTs } = await wonNFTsQuery;
     
     const wonMints = new Set((wonNFTs || []).map(w => w.mint));
     console.log(`📋 Won NFTs: ${wonMints.size}`);
@@ -112,7 +122,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = getSupabaseClient();
+    const supabase = appSupabase;
     const { mint, userId } = await request.json();
     
     if (!mint || !userId) {
@@ -162,7 +172,7 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = getSupabaseClient();
+    const supabase = appSupabase;
     const { mint } = await request.json();
     
     if (!mint) {

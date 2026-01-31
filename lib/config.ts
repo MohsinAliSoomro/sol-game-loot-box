@@ -2,7 +2,7 @@
 export const CONFIG = {
   // Solana Program Configuration
   PROGRAM_ID: "BkwbgssSuWQS46MtNRcq5RCnUgYq1H1LJpKhCGUtdGaH",
-  NETWORK: "devnet" as const,
+  NETWORK: "mainnet-beta" as const,
   
   // Token Configuration
   TOKENS: {

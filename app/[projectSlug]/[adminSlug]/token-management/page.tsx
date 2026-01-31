@@ -485,7 +485,8 @@ export default function TokenManagement() {
                       required
                       value={offchainFormData.name}
                       onChange={(e) => setOffchainFormData({ ...offchainFormData, name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                      style={{ color: 'white' }}
                       placeholder="e.g., Project Token"
                     />
                   </div>
@@ -496,7 +497,8 @@ export default function TokenManagement() {
                       required
                       value={offchainFormData.symbol}
                       onChange={(e) => setOffchainFormData({ ...offchainFormData, symbol: e.target.value.toUpperCase() })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                      style={{ color: 'white' }}
                       placeholder="e.g., TOKEN, MLT"
                       maxLength={10}
                     />
@@ -529,14 +531,15 @@ export default function TokenManagement() {
               <form onSubmit={handleCreateOffchainToken} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Token Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={offchainFormData.name}
-                    onChange={(e) => setOffchainFormData({ ...offchainFormData, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    placeholder="e.g., Project Token"
-                  />
+                    <input
+                      type="text"
+                      required
+                      value={offchainFormData.name}
+                      onChange={(e) => setOffchainFormData({ ...offchainFormData, name: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                      style={{ color: 'white' }}
+                      placeholder="e.g., Project Token"
+                    />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Token Symbol *</label>
@@ -545,7 +548,7 @@ export default function TokenManagement() {
                     required
                     value={offchainFormData.symbol}
                     onChange={(e) => setOffchainFormData({ ...offchainFormData, symbol: e.target.value.toUpperCase() })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
                     placeholder="e.g., OGX, MLT"
                     maxLength={10}
                   />
@@ -599,7 +602,8 @@ export default function TokenManagement() {
                   required
                       value={onchainFormData.name}
                       onChange={(e) => setOnchainFormData({ ...onchainFormData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                       placeholder="e.g., USD Coin"
                 />
               </div>
@@ -610,7 +614,8 @@ export default function TokenManagement() {
                   required
                       value={onchainFormData.symbol}
                       onChange={(e) => setOnchainFormData({ ...onchainFormData, symbol: e.target.value.toUpperCase() })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                       placeholder="e.g., USDC"
                   maxLength={10}
                 />
@@ -628,7 +633,8 @@ export default function TokenManagement() {
                     const value = e.target.value.trim();
                         setOnchainFormData({ ...onchainFormData, mint_address: value });
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono text-sm bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                       placeholder="Enter 32-44 character Solana mint address"
                       disabled={!!editingOnchainToken}
                 />
@@ -645,7 +651,8 @@ export default function TokenManagement() {
                   max="18"
                       value={onchainFormData.decimals}
                       onChange={(e) => setOnchainFormData({ ...onchainFormData, decimals: parseInt(e.target.value) || 6 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                 />
               </div>
               <div>
@@ -654,7 +661,8 @@ export default function TokenManagement() {
                   type="number"
                       value={onchainFormData.display_order}
                       onChange={(e) => setOnchainFormData({ ...onchainFormData, display_order: parseInt(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                 />
               </div>
               <div>
@@ -663,7 +671,8 @@ export default function TokenManagement() {
                   type="text"
                       value={onchainFormData.coingecko_id}
                       onChange={(e) => setOnchainFormData({ ...onchainFormData, coingecko_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                       placeholder="e.g., usd-coin"
                 />
               </div>
@@ -674,7 +683,8 @@ export default function TokenManagement() {
                   step="0.01"
                       value={onchainFormData.fallback_price}
                       onChange={(e) => setOnchainFormData({ ...onchainFormData, fallback_price: parseFloat(e.target.value) || 1 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                 />
               </div>
             </div>

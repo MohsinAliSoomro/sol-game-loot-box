@@ -70,7 +70,8 @@ export default function Users() {
                 placeholder="Search users..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                style={{ color: 'white' }}
               />
               <svg
                 className="w-5 h-5 text-gray-400 absolute left-3 top-2.5"

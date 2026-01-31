@@ -194,7 +194,8 @@ export default function ChangePassword() {
                   value={formData.oldPassword}
                   onChange={handleInputChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                   placeholder="Enter your current password"
                   disabled={loading || success}
                 />
@@ -212,7 +213,8 @@ export default function ChangePassword() {
                   onChange={handleInputChange}
                   required
                   minLength={6}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                   placeholder="Enter your new password (min. 6 characters)"
                   disabled={loading || success}
                 />
@@ -231,7 +233,8 @@ export default function ChangePassword() {
                   onChange={handleInputChange}
                   required
                   minLength={6}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500 bg-gray-800 !text-white placeholder:text-gray-400"
+                  style={{ color: 'white' }}
                   placeholder="Confirm your new password"
                   disabled={loading || success}
                 />

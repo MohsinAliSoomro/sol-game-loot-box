@@ -12,7 +12,7 @@ const getMetaplex = async () => {
   if (!metaplexInstance) {
     try {
       const { Metaplex } = await import("@metaplex-foundation/js");
-      const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com");
+      const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://mainnet.helius-rpc.com/?api-key=5a1a852c-3ed9-40ee-bca8-dda4550c3ce8");
       metaplexInstance = Metaplex.make(connection);
     } catch (error) {
       console.error("Failed to load Metaplex:", error);
@@ -81,7 +81,9 @@ function parseMetadata(data: Buffer): { name: string; symbol: string; uri: strin
 async function fetchNFTMetadataFallback(mintAddress: string) {
   try {
     console.log("🔄 Using fallback method (manual parsing) for:", mintAddress);
-    const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com", 'confirmed');
+    const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://mainnet.helius-rpc.com/?api-key=5a1a852c-3ed9-40ee-bca8-dda4550c3ce8";
+    console.log("🌐 Fallback using RPC:", rpcUrl);
+    const connection = new Connection(rpcUrl, 'confirmed');
     
     // Derive metadata PDA
     const metadataPDA = await getMetadataPDA(mintAddress);
@@ -143,13 +145,30 @@ async function fetchNFTMetadataFallback(mintAddress: string) {
 export const fetchNFTMetadata = async (mintAddress: string) => {
   try {
     console.log("🔍 Fetching NFT metadata for:", mintAddress);
-    console.log("🌐 Using RPC:", process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com");
+    const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://mainnet.helius-rpc.com/?api-key=5a1a852c-3ed9-40ee-bca8-dda4550c3ce8";
+    console.log("🌐 Using RPC:", rpcUrl);
+    
+    // Validate mint address
+    try {
+      new PublicKey(mintAddress);
+    } catch (e) {
+      console.error("❌ Invalid mint address:", mintAddress);
+      throw new Error(`Invalid mint address: ${mintAddress}`);
+    }
     
     // Try Metaplex first
     try {
+      console.log("🔄 Attempting Metaplex fetch...");
       const metaplex = await getMetaplex();
       const mint = new PublicKey(mintAddress);
-      const nft = await metaplex.nfts().findByMint({ mintAddress: mint });
+      
+      // Add timeout wrapper
+      const fetchPromise = metaplex.nfts().findByMint({ mintAddress: mint });
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Metaplex fetch timeout')), 15000)
+      );
+      
+      const nft = await Promise.race([fetchPromise, timeoutPromise]) as any;
       
       if (!nft) {
         console.warn("❌ NFT not found for mint:", mintAddress);
@@ -169,20 +188,52 @@ export const fetchNFTMetadata = async (mintAddress: string) => {
       let imageUrl = nft.json?.image || null;
       if (imageUrl && typeof imageUrl === 'string') {
         console.log("🖼️ Original image URL:", imageUrl);
+        
         // Handle IPFS URLs (ipfs://... or ipfs/...)
         if (imageUrl.startsWith('ipfs://')) {
-          imageUrl = imageUrl.replace('ipfs://', 'https://gateway.pinata.cloud/ipfs/');
-          console.log("🔄 Converted IPFS URL to:", imageUrl);
+          const cid = imageUrl.replace('ipfs://', '').replace(/^\/+/, '');
+          imageUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
+          console.log("🔄 Converted ipfs:// to:", imageUrl);
         } else if (imageUrl.startsWith('ipfs/')) {
-          imageUrl = imageUrl.replace('ipfs/', 'https://gateway.pinata.cloud/ipfs/');
-          console.log("🔄 Converted IPFS path to:", imageUrl);
+          const cid = imageUrl.replace('ipfs/', '').replace(/^\/+/, '');
+          imageUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
+          console.log("🔄 Converted ipfs/ to:", imageUrl);
         } else if (imageUrl.startsWith('Qm') && imageUrl.length === 46 && !imageUrl.includes('/') && !imageUrl.includes('http')) {
           imageUrl = `https://gateway.pinata.cloud/ipfs/${imageUrl}`;
           console.log("🔄 Converted CID to:", imageUrl);
+        } else if (!imageUrl.startsWith('http')) {
+          // If it's a relative path or just a CID, try to extract it
+          const cidMatch = imageUrl.match(/(Qm[a-zA-Z0-9]{44})/);
+          if (cidMatch) {
+            imageUrl = `https://gateway.pinata.cloud/ipfs/${cidMatch[1]}`;
+            console.log("🔄 Extracted and converted CID to:", imageUrl);
+          }
         }
+        
         console.log("✅ Final image URL:", imageUrl);
       } else {
-        console.warn("⚠️ Image URL is not a string:", imageUrl);
+        console.warn("⚠️ Image URL is not a string or missing:", imageUrl);
+        // Try to get image from URI if json.image is missing
+        if (nft.uri) {
+          try {
+            console.log("🔄 Attempting to fetch image from URI:", nft.uri);
+            const uriResponse = await fetch(nft.uri);
+            if (uriResponse.ok) {
+              const uriData = await uriResponse.json();
+              if (uriData.image) {
+                imageUrl = uriData.image;
+                console.log("✅ Found image in URI data:", imageUrl);
+                // Convert IPFS if needed
+                if (imageUrl.startsWith('ipfs://')) {
+                  const cid = imageUrl.replace('ipfs://', '').replace(/^\/+/, '');
+                  imageUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
+                }
+              }
+            }
+          } catch (uriError) {
+            console.warn("⚠️ Failed to fetch from URI:", uriError);
+          }
+        }
       }
       
       const metadata = {
@@ -194,18 +245,29 @@ export const fetchNFTMetadata = async (mintAddress: string) => {
         attributes: nft.json?.attributes || []
       };
       
+      if (!metadata.image) {
+        console.error("❌ No image found in NFT metadata");
+        throw new Error("No image found in NFT metadata");
+      }
+      
       console.log("✅ NFT metadata fetched via Metaplex:", metadata);
       return metadata;
-    } catch (metaplexError) {
-      console.warn("⚠️ Metaplex method failed, trying fallback:", metaplexError);
+    } catch (metaplexError: any) {
+      console.warn("⚠️ Metaplex method failed, trying fallback:", metaplexError?.message);
       // If Metaplex fails, use fallback method
       return await fetchNFTMetadataFallback(mintAddress);
     }
     
-  } catch (error) {
+  } catch (error: any) {
     console.error("❌ Error fetching NFT metadata:", error);
+    console.error("❌ Error stack:", error?.stack);
     // Last resort: try fallback
-    return await fetchNFTMetadataFallback(mintAddress);
+    try {
+      return await fetchNFTMetadataFallback(mintAddress);
+    } catch (fallbackError) {
+      console.error("❌ Fallback also failed:", fallbackError);
+      throw error; // Re-throw original error
+    }
   }
 };
 
@@ -247,7 +309,7 @@ export const getDepositedNFTs = async (): Promise<string[]> => {
     
     // Configuration
     const PROGRAM_ID = new PublicKey('BkwbgssSuWQS46MtNRcq5RCnUgYq1H1LJpKhCGUtdGaH');
-    const CONNECTION_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.devnet.solana.com';
+    const CONNECTION_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com/?api-key=5a1a852c-3ed9-40ee-bca8-dda4550c3ce8';
     
     const connection = new Connection(CONNECTION_URL, 'confirmed');
     

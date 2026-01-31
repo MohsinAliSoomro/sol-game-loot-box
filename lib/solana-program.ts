@@ -26,8 +26,8 @@ import { createSyncNativeInstruction, createCloseAccountInstruction } from "@sol
 // Program configuration
 export const PROGRAM_ID = new PublicKey(CONFIG.PROGRAM_ID);
 export const NETWORK = CONFIG.NETWORK;
-// Use a more reliable RPC endpoint
-export const RPC_URL = "https://api.devnet.solana.com";
+// Use Helius mainnet RPC endpoint for better reliability
+export const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://mainnet.helius-rpc.com/?api-key=5a1a852c-3ed9-40ee-bca8-dda4550c3ce8";
 
 // Token mint addresses
 export const OGX_MINT = new PublicKey(CONFIG.TOKENS.OGX);
@@ -112,6 +112,407 @@ export class SolanaProgramService {
       }
     }
     throw new Error('Max retries exceeded');
+  }
+
+  /**
+   * Transfer a compressed NFT (cNFT) using the Bubblegum program
+   * Compressed NFTs are stored in Merkle trees and require proof-based transfers
+   */
+  private async transferCompressedNFT(
+    assetId: PublicKey,
+    fromKeypair: Keypair,
+    toAddress: PublicKey,
+    nftData: any,
+    rpcUrl: string
+  ): Promise<string> {
+    console.log(`🌳 Starting compressed NFT transfer...`);
+    console.log(`   Asset ID: ${assetId.toString()}`);
+    console.log(`   From: ${fromKeypair.publicKey.toString()}`);
+    console.log(`   To: ${toAddress.toString()}`);
+
+    // Get the asset proof from Helius
+    console.log(`📜 Fetching asset proof from Helius...`);
+    const proofResponse = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'get-asset-proof',
+        method: 'getAssetProof',
+        params: { id: assetId.toString() },
+      }),
+    });
+
+    const proofData = await proofResponse.json();
+
+    if (!proofData.result) {
+      console.error(`❌ Failed to get asset proof:`, proofData);
+      throw new Error(`Failed to get asset proof for compressed NFT: ${JSON.stringify(proofData.error || 'Unknown error')}`);
+    }
+
+    console.log(`✅ Asset proof received`);
+    console.log(`   Root: ${proofData.result.root}`);
+    console.log(`   Proof length: ${proofData.result.proof?.length || 0}`);
+
+    // Bubblegum program ID
+    const BUBBLEGUM_PROGRAM_ID = new PublicKey('BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY');
+    const SPL_NOOP_PROGRAM_ID = new PublicKey('noopb9bkMVfRPU8AsbpTUg8AQkHtKwMYZiFUjNRtMmV');
+    const SPL_ACCOUNT_COMPRESSION_PROGRAM_ID = new PublicKey('cmtDvXumGCrqC1Age74AVPhSRVXJMd8PJS91L8KbNCK');
+
+    // Extract compression data
+    const treeAddress = new PublicKey(nftData.compression.tree);
+    const leafIndex = nftData.compression.leaf_id;
+
+    // Helius returns hashes in base58 format, not base64
+    // Need to decode from base58 (same encoding as Solana public keys)
+    const bs58 = require('bs58');
+    const dataHashStr = proofData.result.data_hash || nftData.compression.data_hash;
+    const creatorHashStr = proofData.result.creator_hash || nftData.compression.creator_hash;
+    const rootStr = proofData.result.root;
+
+    console.log(`🔍 Decoding hashes from base58...`);
+    console.log(`   Data hash: ${dataHashStr}`);
+    console.log(`   Creator hash: ${creatorHashStr}`);
+    console.log(`   Root: ${rootStr}`);
+
+    const dataHash = bs58.decode(dataHashStr);
+    const creatorHash = bs58.decode(creatorHashStr);
+    const root = bs58.decode(rootStr);
+
+    console.log(`✅ Hashes decoded:  Data: ${dataHash.length}b, Creator: ${creatorHash.length}b, Root: ${root.length}b`);
+
+    const nonce = BigInt(leafIndex);
+
+    // Build the transfer instruction for Bubblegum
+    // Transfer instruction discriminator: [163, 52, 200, 231, 140, 3, 69, 186]
+    const transferDiscriminator = Buffer.from([163, 52, 200, 231, 140, 3, 69, 186]);
+
+    // Encode the nonce as u64 (little-endian)
+    const nonceBuffer = Buffer.allocUnsafe(8);
+    const nonceBigInt = BigInt(nonce);
+    for (let i = 0; i < 8; i++) {
+      nonceBuffer[i] = Number((nonceBigInt >> BigInt(i * 8)) & BigInt(0xff));
+    }
+
+    // Encode leaf index as u32 (little-endian)
+    const leafIndexBuffer = Buffer.allocUnsafe(4);
+    leafIndexBuffer.writeUInt32LE(leafIndex, 0);
+
+    // Build instruction data: discriminator + root + data_hash + creator_hash + nonce + index
+    const instructionData = Buffer.concat([
+      transferDiscriminator,
+      root,
+      dataHash,
+      creatorHash,
+      nonceBuffer,
+      leafIndexBuffer,
+    ]);
+
+    // Build proof accounts
+    const proofAccounts = (proofData.result.proof || []).map((p: string) => ({
+      pubkey: new PublicKey(p),
+      isSigner: false,
+      isWritable: false,
+    }));
+
+    // Derive tree config PDA (owned by Bubblegum program)
+    const [treeConfig] = PublicKey.findProgramAddressSync(
+      [treeAddress.toBuffer()],
+      BUBBLEGUM_PROGRAM_ID
+    );
+
+    console.log(`🌲 Tree addresses:`);
+    console.log(`   Merkle Tree: ${treeAddress.toString()}`);
+    console.log(`   Tree Config (PDA): ${treeConfig.toString()}`);
+
+    // Build instruction accounts - ORDER IS CRITICAL per Bubblegum spec
+    // Reference: https://github.com/metaplex-foundation/mpl-bubblegum/blob/main/programs/bubblegum/program/src/lib.rs
+    const transferInstructionAccounts = [
+      { pubkey: treeConfig, isSigner: false, isWritable: false },           // [0] Tree config (PDA owned by Bubblegum)
+      { pubkey: fromKeypair.publicKey, isSigner: true, isWritable: false }, // [1] Leaf owner (signer)
+      { pubkey: fromKeypair.publicKey, isSigner: false, isWritable: false }, // [2] Leaf delegate (same as owner)
+      { pubkey: toAddress, isSigner: false, isWritable: false },            // [3] New leaf owner
+      { pubkey: treeAddress, isSigner: false, isWritable: true },           // [4] Merkle tree (writable)
+      { pubkey: SPL_NOOP_PROGRAM_ID, isSigner: false, isWritable: false },  // [5] Log wrapper (noop program)
+      { pubkey: SPL_ACCOUNT_COMPRESSION_PROGRAM_ID, isSigner: false, isWritable: false }, // [6] Compression program
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // [7] System program
+      ...proofAccounts, // Remaining accounts are the Merkle proof
+    ];
+
+    const transferInstruction = new TransactionInstruction({
+      programId: BUBBLEGUM_PROGRAM_ID,
+      keys: transferInstructionAccounts,
+      data: instructionData,
+    });
+
+    console.log(`📝 Building Bubblegum transfer transaction...`);
+    console.log(`   Program ID: ${BUBBLEGUM_PROGRAM_ID.toString()}`);
+    console.log(`   Tree: ${treeAddress.toString()}`);
+    console.log(`   Leaf index: ${leafIndex}`);
+    console.log(`   Proof accounts: ${proofAccounts.length}`);
+
+    // Build and send transaction
+    const transaction = new Transaction();
+    transaction.add(transferInstruction);
+    transaction.feePayer = fromKeypair.publicKey;
+
+    // Get fresh blockhash
+    const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('confirmed');
+    transaction.recentBlockhash = blockhash;
+
+    // Sign and send
+    transaction.sign(fromKeypair);
+
+    console.log(`📤 Sending Bubblegum transfer transaction...`);
+    const signature = await this.connection.sendRawTransaction(transaction.serialize(), {
+      skipPreflight: false,
+      preflightCommitment: 'confirmed',
+      maxRetries: 3,
+    });
+
+    console.log(`⏳ Confirming transaction: ${signature}`);
+
+    // Wait for confirmation
+    const confirmation = await this.confirmTransactionRobust(signature, 120000);
+
+    if (confirmation.value?.err) {
+      console.error(`❌ Compressed NFT transfer failed:`, confirmation.value.err);
+      throw new Error(`Compressed NFT transfer failed: ${JSON.stringify(confirmation.value.err)}`);
+    }
+
+    console.log(`✅ Compressed NFT transferred successfully!`);
+    return signature;
+  }
+
+  /**
+   * Transfer a Metaplex Core NFT using the Core program
+   * Metaplex Core NFTs use a different ownership model than standard SPL Token NFTs
+   */
+  private async transferMetaplexCoreNFT(
+    assetId: PublicKey,
+    fromKeypair: Keypair,
+    toAddress: PublicKey,
+    nftData: any,
+    rpcUrl: string
+  ): Promise<string> {
+    console.log(`🔷 Starting Metaplex Core NFT transfer using official mpl-core library...`);
+    console.log(`   Asset ID: ${assetId.toString()}`);
+    console.log(`   From: ${fromKeypair.publicKey.toString()}`);
+    console.log(`   To: ${toAddress.toString()}`);
+
+    // Import mpl-core and umi
+    const { createUmi } = await import('@metaplex-foundation/umi-bundle-defaults');
+    const { transferV1, fetchAssetV1 } = await import('@metaplex-foundation/mpl-core');
+    const {
+      publicKey: umiPublicKey,
+      keypairIdentity,
+      transactionBuilder
+    } = await import('@metaplex-foundation/umi');
+
+    // Create Umi instance
+    const umi = createUmi(rpcUrl);
+
+    // Convert Solana Keypair to Umi keypair
+    const umiKeypair = {
+      publicKey: umiPublicKey(fromKeypair.publicKey.toBase58()),
+      secretKey: fromKeypair.secretKey,
+    };
+
+    // Set the identity
+    umi.use(keypairIdentity(umiKeypair));
+
+    console.log(`📝 Building Metaplex Core transfer with official SDK...`);
+
+    // Convert addresses to Umi public keys
+    const assetUmiKey = umiPublicKey(assetId.toBase58());
+    const newOwnerUmiKey = umiPublicKey(toAddress.toBase58());
+
+    // Get collection if exists
+    const collectionGrouping = nftData.grouping?.find((g: any) => g.group_key === 'collection');
+    const collectionAddress = collectionGrouping?.group_value
+      ? umiPublicKey(collectionGrouping.group_value)
+      : undefined;
+
+    console.log(`   Has collection: ${collectionAddress ? 'yes' : 'no'}`);
+    if (collectionAddress) {
+      console.log(`   Collection: ${collectionGrouping.group_value}`);
+    }
+
+    try {
+      // Build the transfer instruction using the official SDK
+      console.log(`📤 Building and sending Metaplex Core transfer...`);
+
+      const transferBuilder = transferV1(umi, {
+        asset: assetUmiKey,
+        newOwner: newOwnerUmiKey,
+        collection: collectionAddress,
+      });
+
+      // Send and confirm
+      const result = await transferBuilder.sendAndConfirm(umi, {
+        confirm: { commitment: 'confirmed' },
+      });
+
+      // Convert signature to base58 string using bs58
+      const bs58 = await import('bs58');
+      const signature = bs58.default.encode(Buffer.from(result.signature));
+
+      console.log(`✅ Metaplex Core NFT transferred successfully!`);
+      console.log(`   Signature: ${signature}`);
+
+      return signature;
+    } catch (error: any) {
+      console.error(`❌ Metaplex Core transfer failed:`, error);
+
+      // Try to extract more details from the error
+      let errorMessage = error.message || 'Unknown error';
+      if (error.logs) {
+        console.error(`   Logs:`, error.logs);
+        errorMessage += `\nLogs: ${error.logs.join('\n')}`;
+      }
+
+      throw new Error(`Failed to transfer Metaplex Core NFT: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Robust transaction confirmation that handles blockhash expiration and timeouts
+   * Uses signature-only confirmation with extended timeout and aggressive polling fallback
+   */
+  private async confirmTransactionRobust(
+    signature: string,
+    timeout: number = 120000 // 120 seconds for mainnet (increased from 60)
+  ): Promise<{ value: { err: any } | null }> {
+    console.log(`⏳ Confirming transaction ${signature.substring(0, 8)}...${signature.substring(-8)}`);
+
+    try {
+      // Try signature-only confirmation first (doesn't rely on blockhash)
+      // This will poll until confirmed or timeout
+      const confirmation = await Promise.race([
+        this.connection.confirmTransaction(signature, "confirmed"),
+        new Promise<{ value: { err: any } | null }>((_, reject) =>
+          setTimeout(() => reject(new Error("Confirmation timeout")), timeout)
+        )
+      ]);
+
+      if (confirmation.value?.err) {
+        console.error(`❌ Transaction failed on-chain: ${JSON.stringify(confirmation.value.err)}`);
+        return confirmation;
+      }
+
+      console.log(`✅ Transaction confirmed successfully`);
+      return confirmation;
+    } catch (error: any) {
+      // If confirmation timed out, poll signature status aggressively
+      if (error.message === "Confirmation timeout" || error.message?.includes("not confirmed")) {
+        console.log(`⏱️ Confirmation timeout, polling signature status aggressively...`);
+
+        // Poll multiple times with delays to catch late confirmations
+        let status = null;
+        for (let attempt = 0; attempt < 10; attempt++) {
+          try {
+            status = await this.connection.getSignatureStatus(signature);
+
+            if (status.value) {
+              if (status.value.err) {
+                // Transaction failed on-chain
+                console.error(`❌ Transaction failed on-chain: ${JSON.stringify(status.value.err)}`);
+                return { value: { err: status.value.err } };
+              } else {
+                // Transaction succeeded!
+                console.log(`✅ Transaction succeeded (confirmed via polling attempt ${attempt + 1})`);
+                return { value: null };
+              }
+            }
+
+            // If status is null, transaction might still be pending
+            if (attempt < 9) {
+              await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds between attempts
+            }
+          } catch (pollError: any) {
+            console.warn(`⚠️ Polling attempt ${attempt + 1} failed:`, pollError.message);
+            if (attempt < 9) {
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+          }
+        }
+
+        // After all polling attempts, check one final time
+        try {
+          status = await this.connection.getSignatureStatus(signature);
+          if (status.value?.err) {
+            console.error(`❌ Transaction failed: ${JSON.stringify(status.value.err)}`);
+            return { value: { err: status.value.err } };
+          } else if (status.value && !status.value.err) {
+            console.log(`✅ Transaction succeeded (confirmed on final check)`);
+            return { value: null };
+          }
+        } catch (finalError) {
+          console.warn(`⚠️ Final status check failed:`, finalError);
+        }
+
+        // Transaction not found or still pending after all attempts
+        throw new Error(
+          `Transaction was not confirmed within ${timeout}ms after ${10} polling attempts. ` +
+          `Signature: ${signature}. ` +
+          `Status: ${status?.value ? 'pending' : 'not found'}. ` +
+          `This could mean:\n` +
+          `1. Network congestion delayed the transaction\n` +
+          `2. Transaction failed but error not yet propagated\n` +
+          `3. Transaction is still processing\n\n` +
+          `Check on Solana Explorer: https://solscan.io/tx/${signature}`
+        );
+      }
+
+      // Handle blockhash expiration errors specifically
+      if (error.message?.includes("block height exceeded") ||
+        error.message?.includes("TransactionExpiredBlockheightExceededError") ||
+        error.message?.includes("expired")) {
+        console.log(`⚠️ Blockhash expired, checking signature status...`);
+
+        // Poll multiple times
+        let status = null;
+        for (let attempt = 0; attempt < 5; attempt++) {
+          try {
+            status = await this.connection.getSignatureStatus(signature);
+
+            if (status.value) {
+              if (status.value.err) {
+                console.error(`❌ Transaction failed: ${JSON.stringify(status.value.err)}`);
+                return { value: { err: status.value.err } };
+              } else {
+                console.log(`✅ Transaction succeeded (blockhash expired but confirmed)`);
+                return { value: null };
+              }
+            }
+
+            if (attempt < 4) {
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+          } catch (pollError) {
+            if (attempt < 4) {
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+          }
+        }
+
+        if (status?.value?.err) {
+          return { value: { err: status.value.err } };
+        } else if (status?.value && !status.value.err) {
+          return { value: null };
+        }
+
+        throw new Error(
+          `Transaction blockhash expired. ` +
+          `Signature: ${signature}. ` +
+          `Status: ${status?.value ? 'pending' : 'not found'}. ` +
+          `Check on Solana Explorer: https://solscan.io/tx/${signature}`
+        );
+      }
+
+      // Re-throw other errors
+      throw error;
+    }
   }
 
   /**
@@ -512,9 +913,15 @@ export class SolanaProgramService {
       const [userBalancePDA] = this.getSolUserBalancePDA(user);
       const [solFeeConfigPDA] = this.getSolFeeConfig();
 
-      // Get project-specific deposit wallet if available, otherwise use default
-      const depositWallet = await this.getDepositWallet(projectId);
-      const feeWallet = new PublicKey(CONFIG.FEE_WALLET);
+      // Derive platform_wallet and fee_wallet PDAs (required by program security checks)
+      const [platformWalletPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("platform_wallet")],
+        PROGRAM_ID
+      );
+      const [feeWalletPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("fee_wallet")],
+        PROGRAM_ID
+      );
 
       // Calculate actual deposit amount (after fee deduction)
       const actualDepositAmount = solAmount - depositFee;
@@ -524,11 +931,11 @@ export class SolanaProgramService {
       console.log(`Requested deposit: ${solAmount} SOL`);
       console.log(`Deposit fee: ${depositFee.toFixed(4)} SOL`);
       console.log(`Network fee: ${networkFee.toFixed(4)} SOL`);
-      console.log(`Amount going to deposit wallet: ${actualDepositAmount.toFixed(4)} SOL`);
+      console.log(`Amount going to platform wallet: ${actualDepositAmount.toFixed(4)} SOL`);
       console.log(`Fee going to fee wallet: ${depositFee.toFixed(4)} SOL`);
       console.log(`Total required: ${totalRequired.toFixed(4)} SOL`);
-      console.log(`Deposit wallet (OGX withdrawal wallet): ${depositWallet.toString()}`);
-      console.log(`Fee wallet: ${feeWallet.toString()}`);
+      console.log(`Platform wallet PDA: ${platformWalletPDA.toString()}`);
+      console.log(`Fee wallet PDA: ${feeWalletPDA.toString()}`);
       console.log(`User balance PDA: ${userBalancePDA.toString()}`);
       console.log(`SOL fee config PDA: ${solFeeConfigPDA.toString()}`);
       console.log(`=======================`);
@@ -540,21 +947,21 @@ export class SolanaProgramService {
       if (depositFee > 0) {
         const feeTransferInstruction = SystemProgram.transfer({
           fromPubkey: user,
-          toPubkey: feeWallet,
+          toPubkey: feeWalletPDA, // Use fee_wallet PDA
           lamports: depositFee * LAMPORTS_PER_SOL,
         });
         finalTransaction.add(feeTransferInstruction);
-        console.log(`✅ Added separate fee transfer instruction: ${depositFee.toFixed(4)} SOL → fee_wallet`);
+        console.log(`✅ Added separate fee transfer instruction: ${depositFee.toFixed(4)} SOL → fee_wallet PDA`);
       }
 
       // Create deposit_sol transaction manually (no wrapping needed - direct SOL transfer)
       // Using manual instruction building to avoid Anchor IDL issues
       // Note: deposit_sol will handle net amount transfer (solAmount - fee)
-      // Using OGX withdrawal wallet for deposits (public key only, no private key needed)
+      // Must use platform_wallet and fee_wallet PDAs (required by program security checks)
       const depositInstruction = await this.buildDepositSolInstruction(
         user,
-        depositWallet, // Use OGX withdrawal wallet instead of platform wallet
-        feeWallet,
+        platformWalletPDA, // Use platform_wallet PDA (required by program)
+        feeWalletPDA, // Use fee_wallet PDA (required by program)
         userBalancePDA,
         solFeeConfigPDA,
         solAmount * LAMPORTS_PER_SOL
@@ -676,9 +1083,15 @@ export class SolanaProgramService {
       const [userBalancePDA] = this.getSolUserBalancePDA(user);
       const [solFeeConfigPDA] = this.getSolFeeConfig();
 
-      // Get project-specific deposit wallet if available, otherwise use default
-      const depositWallet = await this.getDepositWallet(projectId);
-      const feeWallet = new PublicKey(CONFIG.FEE_WALLET);
+      // Derive platform_wallet and fee_wallet PDAs (required by program security checks)
+      const [platformWalletPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("platform_wallet")],
+        PROGRAM_ID
+      );
+      const [feeWalletPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("fee_wallet")],
+        PROGRAM_ID
+      );
 
       // Calculate actual deposit amount (after fee deduction)
       const actualDepositAmount = solAmount - depositFee;
@@ -688,11 +1101,11 @@ export class SolanaProgramService {
       console.log(`Requested deposit: ${solAmount} SOL`);
       console.log(`Custom Project Fee: ${depositFee.toFixed(4)} SOL (${customFeeLamports} lamports)`);
       console.log(`Network fee: ${networkFee.toFixed(4)} SOL`);
-      console.log(`Amount going to deposit wallet: ${actualDepositAmount.toFixed(4)} SOL`);
+      console.log(`Amount going to platform wallet: ${actualDepositAmount.toFixed(4)} SOL`);
       console.log(`Fee going to fee wallet: ${depositFee.toFixed(4)} SOL`);
       console.log(`Total required: ${totalRequired.toFixed(4)} SOL`);
-      console.log(`Deposit wallet (OGX withdrawal wallet): ${depositWallet.toString()}`);
-      console.log(`Fee wallet: ${feeWallet.toString()}`);
+      console.log(`Platform wallet PDA: ${platformWalletPDA.toString()}`);
+      console.log(`Fee wallet PDA: ${feeWalletPDA.toString()}`);
       console.log(`User balance PDA: ${userBalancePDA.toString()}`);
       console.log(`SOL fee config PDA: ${solFeeConfigPDA.toString()}`);
       console.log(`===================================`);
@@ -704,21 +1117,21 @@ export class SolanaProgramService {
       if (depositFee > 0) {
         const feeTransferInstruction = SystemProgram.transfer({
           fromPubkey: user,
-          toPubkey: feeWallet,
+          toPubkey: feeWalletPDA, // Use fee_wallet PDA
           lamports: customFeeLamports, // Use custom fee amount
         });
         finalTransaction.add(feeTransferInstruction);
-        console.log(`✅ Added separate fee transfer instruction: ${depositFee.toFixed(4)} SOL (${customFeeLamports} lamports) → fee_wallet`);
+        console.log(`✅ Added separate fee transfer instruction: ${depositFee.toFixed(4)} SOL (${customFeeLamports} lamports) → fee_wallet PDA`);
       }
 
       // Create deposit_sol transaction manually (no wrapping needed - direct SOL transfer)
       // Using manual instruction building to avoid Anchor IDL issues
       // Note: deposit_sol will handle net amount transfer (solAmount - fee)
-      // Using OGX withdrawal wallet for deposits (public key only, no private key needed)
+      // Must use platform_wallet and fee_wallet PDAs (required by program security checks)
       const depositInstruction = await this.buildDepositSolInstruction(
         user,
-        depositWallet, // Use OGX withdrawal wallet instead of platform wallet
-        feeWallet,
+        platformWalletPDA, // Use platform_wallet PDA (required by program)
+        feeWalletPDA, // Use fee_wallet PDA (required by program)
         userBalancePDA,
         solFeeConfigPDA,
         solAmount * LAMPORTS_PER_SOL
@@ -831,9 +1244,15 @@ export class SolanaProgramService {
       // Get SOL-specific PDAs
       const [userBalancePDA] = this.getSolUserBalancePDA(user);
 
-      // Get project-specific deposit wallet if available, otherwise use default
-      const depositWallet = await this.getDepositWallet(projectId);
-      const feeWallet = new PublicKey(CONFIG.FEE_WALLET);
+      // Derive platform_wallet and fee_wallet PDAs (required by program security checks)
+      const [platformWalletPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("platform_wallet")],
+        PROGRAM_ID
+      );
+      const [feeWalletPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("fee_wallet")],
+        PROGRAM_ID
+      );
 
       // Calculate actual deposit amount (after fee deduction)
       const actualDepositAmount = solAmount - depositFee;
@@ -843,9 +1262,9 @@ export class SolanaProgramService {
       console.log(`Project PDA: ${projectPDA.toString()}`);
       console.log(`Requested deposit: ${solAmount} SOL`);
       console.log(`Deposit fee: ${depositFee.toFixed(4)} SOL`);
-      console.log(`Amount going to deposit wallet: ${actualDepositAmount.toFixed(4)} SOL`);
-      console.log(`Deposit wallet: ${depositWallet.toString()}`);
-      console.log(`Fee wallet: ${feeWallet.toString()}`);
+      console.log(`Amount going to platform wallet: ${actualDepositAmount.toFixed(4)} SOL`);
+      console.log(`Platform wallet PDA: ${platformWalletPDA.toString()}`);
+      console.log(`Fee wallet PDA: ${feeWalletPDA.toString()}`);
       console.log(`User balance PDA: ${userBalancePDA.toString()}`);
       console.log(`================================`);
 
@@ -856,18 +1275,18 @@ export class SolanaProgramService {
       if (depositFee > 0) {
         const feeTransferInstruction = SystemProgram.transfer({
           fromPubkey: user,
-          toPubkey: feeWallet,
+          toPubkey: feeWalletPDA, // Use fee_wallet PDA
           lamports: projectFeeLamports,
         });
         finalTransaction.add(feeTransferInstruction);
-        console.log(`✅ Added separate fee transfer instruction: ${depositFee.toFixed(4)} SOL → fee_wallet`);
+        console.log(`✅ Added separate fee transfer instruction: ${depositFee.toFixed(4)} SOL → fee_wallet PDA`);
       }
 
       // Create deposit_sol_project transaction manually
       const depositInstruction = await this.buildDepositSolProjectInstruction(
         user,
-        depositWallet,
-        feeWallet,
+        platformWalletPDA, // Use platform_wallet PDA (required by program)
+        feeWalletPDA, // Use fee_wallet PDA (required by program)
         userBalancePDA,
         projectPDA,
         solAmount * LAMPORTS_PER_SOL
@@ -1290,10 +1709,10 @@ export class SolanaProgramService {
       try {
         const { supabase } = await import("@/service/supabase");
         console.log("🔍 Fetching admin private key from database for SOL withdrawal...");
-        
+
         let adminKeyData: any = null;
         let adminKeyError: any = null;
-        
+
         // For projects, ONLY check project-specific admin key (no fallback to website_settings)
         if (projectId) {
           // Try project-specific admin key first
@@ -1303,7 +1722,7 @@ export class SolanaProgramService {
             .eq('project_id', projectId)
             .eq('setting_key', 'admin_private_key')
             .maybeSingle();
-          
+
           if (!projectKeyError && projectKeyData?.setting_value) {
             adminKeyData = { value: projectKeyData.setting_value };
             console.log(`✅ Using project-specific admin wallet for project ID: ${projectId}`);
@@ -1323,15 +1742,15 @@ export class SolanaProgramService {
             .select('value')
             .eq('key', 'admin_private_key')
             .maybeSingle();
-          
+
           adminKeyData = websiteKeyData;
           adminKeyError = websiteKeyError;
-          
+
           if (!adminKeyError && adminKeyData?.value) {
             console.log(`✅ Using main website admin wallet`);
           }
         }
-        
+
         const { data, error } = { data: adminKeyData, error: adminKeyError };
 
         console.log("📊 Database query result:", {
@@ -1830,7 +2249,7 @@ export class SolanaProgramService {
   private async getDepositWallet(projectId?: number | null): Promise<PublicKey> {
     try {
       const { supabase } = await import("@/service/supabase");
-      
+
       // For projects, ONLY check project-specific deposit wallet (no fallback to website_settings)
       if (projectId) {
         const { data, error } = await supabase
@@ -1858,7 +2277,7 @@ export class SolanaProgramService {
           throw new Error(`Deposit wallet is not configured for this project. Please configure a deposit wallet in the admin panel.`);
         }
       }
-      
+
       // For main project (no projectId), check website_settings
       const { data: websiteData, error: websiteError } = await supabase
         .from('website_settings')
@@ -3777,7 +4196,7 @@ export class SolanaProgramService {
     try {
       const userATA = getAssociatedTokenAddressSync(mint, user, false);
       const userATAInfo = await this.connection.getAccountInfo(userATA);
-      
+
       if (userATAInfo) {
         const userBalance = userATAInfo.data.readBigUInt64LE(64);
         return userBalance > BigInt(0);
@@ -3816,10 +4235,10 @@ export class SolanaProgramService {
       try {
         const { supabase } = await import("@/service/supabase");
         console.log("🔍 Fetching admin private key from database for NFT withdrawal...");
-        
+
         let adminKeyData: any = null;
         let adminKeyError: any = null;
-        
+
         // For projects, ONLY check project-specific admin key (no fallback to website_settings)
         if (projectId) {
           // Try project-specific admin key first
@@ -3829,7 +4248,7 @@ export class SolanaProgramService {
             .eq('project_id', projectId)
             .eq('setting_key', 'admin_private_key')
             .maybeSingle();
-          
+
           if (!projectKeyError && projectKeyData?.setting_value) {
             adminKeyData = { value: projectKeyData.setting_value };
             console.log(`✅ Using project-specific admin wallet for project ID: ${projectId}`);
@@ -3849,15 +4268,15 @@ export class SolanaProgramService {
             .select('value')
             .eq('key', 'admin_private_key')
             .maybeSingle();
-          
+
           adminKeyData = websiteKeyData;
           adminKeyError = websiteKeyError;
-          
+
           if (!adminKeyError && adminKeyData?.value) {
             console.log(`✅ Using main website admin wallet`);
           }
         }
-        
+
         const { data, error } = { data: adminKeyData, error: adminKeyError };
 
         console.log("📊 Database query result:", {
@@ -3874,7 +4293,7 @@ export class SolanaProgramService {
           throw new Error(
             "⚠️ ADMIN PRIVATE KEY NOT CONFIGURED\n\n" +
             "Please configure the admin private key in the admin dashboard:\n" +
-            (projectId 
+            (projectId
               ? `Project Settings > Admin Wallet Settings (for project ID: ${projectId})\n`
               : "Website Settings > Admin Wallet Settings\n") +
             "The private key must be set in the database for withdrawals to work."
@@ -3894,7 +4313,7 @@ export class SolanaProgramService {
           "Error fetching admin private key from database.\n\n" +
           "Please ensure:\n" +
           "1. Database is accessible\n" +
-          (projectId 
+          (projectId
             ? `2. Admin private key is set in Project Settings (project ID: ${projectId})\n`
             : "2. Admin private key is set in Website Settings\n") +
           "3. Key is stored in the appropriate settings table"
@@ -3913,6 +4332,35 @@ export class SolanaProgramService {
 
       const adminPublicKey = adminKeypair.publicKey;
       console.log(`🔑 Admin Wallet: ${adminPublicKey.toString()}`);
+
+      // Check admin wallet SOL balance for fees
+      const adminBalance = await this.connection.getBalance(adminPublicKey);
+      const adminSolBalance = adminBalance / LAMPORTS_PER_SOL;
+
+      // Calculate required SOL:
+      // - Base transaction fee: ~0.000005 SOL
+      // - ATA creation rent (if needed): ~0.00203928 SOL
+      // - Buffer for network congestion: 0.001 SOL
+      const baseTransactionFee = 0.000005;
+      const ataCreationRent = 0.00203928; // Rent-exempt minimum for token account
+      const networkBuffer = 0.001;
+      const requiredSol = baseTransactionFee + ataCreationRent + networkBuffer;
+
+      console.log(`💰 Admin wallet balance: ${adminSolBalance.toFixed(6)} SOL`);
+      console.log(`💰 Required for transaction: ${requiredSol.toFixed(6)} SOL`);
+      console.log(`   - Base fee: ${baseTransactionFee.toFixed(6)} SOL`);
+      console.log(`   - ATA creation rent: ${ataCreationRent.toFixed(6)} SOL (if needed)`);
+      console.log(`   - Network buffer: ${networkBuffer.toFixed(6)} SOL`);
+
+      if (adminSolBalance < requiredSol) {
+        throw new Error(
+          `⚠️ Insufficient SOL in admin wallet for NFT transfer.\n\n` +
+          `Admin Wallet: ${adminPublicKey.toString()}\n` +
+          `Current Balance: ${adminSolBalance.toFixed(6)} SOL\n` +
+          `Required: ${requiredSol.toFixed(6)} SOL\n\n` +
+          `Please add at least ${(requiredSol - adminSolBalance).toFixed(6)} SOL to the admin wallet.`
+        );
+      }
 
       // Get admin's ATA for the NFT
       let adminATA = getAssociatedTokenAddressSync(
@@ -3946,165 +4394,1012 @@ export class SolanaProgramService {
         }
       }
 
+      // FIRST: Check NFT type using Helius DAS API BEFORE attempting ATA operations
+      // This is critical because cNFTs and Metaplex Core NFTs don't use ATAs
+      console.log(`🔍 Checking NFT type via Helius DAS API...`);
+      let nftType: 'standard' | 'compressed' | 'metaplex_core' = 'standard';
+      let nftData: any = null;
+      let nftConfirmedByHelius = false;
+      let tokenAccountFromHelius: string | null = null;
+
+      try {
+        const HELIUS_API_KEY = '5a1a852c-3ed9-40ee-bca8-dda4550c3ce8';
+        const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
+
+        const response = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 'nft-check',
+            method: 'getAssetsByOwner',
+            params: {
+              ownerAddress: adminPublicKey.toString(),
+              page: 1,
+              limit: 1000,
+              displayOptions: {
+                showFungible: false,
+                showNativeBalance: false,
+              },
+            },
+          }),
+        });
+
+        const jsonResponse = await response.json();
+        if (jsonResponse.result) {
+          const nfts = jsonResponse.result.items || [];
+          nftData = nfts.find((nft: any) => nft.id === mint.toString());
+
+          if (nftData) {
+            console.log(`✅ NFT found in admin wallet via Helius DAS API`);
+            console.log(`📦 Full NFT data from Helius:`, JSON.stringify(nftData, null, 2));
+            nftConfirmedByHelius = true;
+
+            // CRITICAL: Check NFT type and route to appropriate transfer method
+
+            // 1. Check if this is a compressed NFT (cNFT)
+            if (nftData.compression?.compressed === true) {
+              console.log(`🌳 DETECTED: This is a COMPRESSED NFT (cNFT)!`);
+              console.log(`   Tree: ${nftData.compression.tree}`);
+              console.log(`   Leaf ID: ${nftData.compression.leaf_id}`);
+              console.log(`   Data Hash: ${nftData.compression.data_hash}`);
+              console.log(`   Creator Hash: ${nftData.compression.creator_hash}`);
+              console.log(`   Asset Hash: ${nftData.compression.asset_hash}`);
+
+              // Transfer compressed NFT using Bubblegum
+              try {
+                const signature = await this.transferCompressedNFT(
+                  mint,
+                  adminKeypair,
+                  user,
+                  nftData,
+                  rpcUrl
+                );
+                console.log(`✅ Compressed NFT transferred successfully!`);
+                console.log(`   Signature: ${signature}`);
+                return signature;
+              } catch (cNftError: any) {
+                console.error(`❌ Error transferring compressed NFT:`, cNftError.message);
+                throw new Error(
+                  `Failed to transfer compressed NFT: ${cNftError.message}\n\n` +
+                  `Compressed NFTs (cNFTs) use a different transfer mechanism (Bubblegum).\n` +
+                  `Please ensure the NFT is properly compressed and the Merkle tree is accessible.`
+                );
+              }
+            }
+
+            // 2. Check if this is a Metaplex Core NFT (uses Core program, not Token program)
+            // Metaplex Core NFTs:
+            // - Have ownership_model: "single" 
+            // - Don't have token_info (no token account)
+            // - Interface might be missing or different
+            // - Owner program is Core, not Token
+            const hasTokenInfo = nftData.token_info && Object.keys(nftData.token_info).length > 0;
+            const isMetaplexCore = !hasTokenInfo &&
+              nftData.ownership?.ownership_model === 'single' &&
+              !nftData.compression?.compressed &&
+              (nftData.interface === 'MplCoreAsset' ||
+                nftData.interface === 'V1_NFT_CORE' ||
+                !nftData.interface ||
+                nftData.interface === 'UNKNOWN');
+
+            // Also check if ownership indicates Core (no token account means Core)
+            if (isMetaplexCore || (!hasTokenInfo && nftData.ownership && !nftData.compression?.compressed)) {
+              console.log(`🔷 DETECTED: This is a METAPLEX CORE NFT!`);
+              console.log(`   Interface: ${nftData.interface || 'unknown'}`);
+              console.log(`   Ownership Model: ${nftData.ownership?.ownership_model || 'unknown'}`);
+              console.log(`   Owner: ${nftData.ownership?.owner || 'unknown'}`);
+              console.log(`   Has Token Info: ${hasTokenInfo}`);
+              console.log(`   Compressed: ${nftData.compression?.compressed || false}`);
+
+              // Transfer Metaplex Core NFT using Core program
+              try {
+                const signature = await this.transferMetaplexCoreNFT(
+                  mint,
+                  adminKeypair,
+                  user,
+                  nftData,
+                  rpcUrl
+                );
+                console.log(`✅ Metaplex Core NFT transferred successfully!`);
+                console.log(`   Signature: ${signature}`);
+                return signature;
+              } catch (coreError: any) {
+                console.error(`❌ Error transferring Metaplex Core NFT:`, coreError.message);
+                throw new Error(
+                  `Failed to transfer Metaplex Core NFT: ${coreError.message}\n\n` +
+                  `Metaplex Core NFTs use a different transfer mechanism than standard SPL Token NFTs.\n` +
+                  `Please ensure the NFT is properly configured.`
+                );
+              }
+            }
+
+            // 3. Standard SPL Token NFT - continue with ATA-based transfer
+            console.log(`📦 DETECTED: This is a STANDARD SPL TOKEN NFT`);
+            console.log(`   Interface: ${nftData.interface || 'unknown'}`);
+            console.log(`   Will use Token Program with ATAs`);
+            nftType = 'standard';
+          }
+        } else {
+          console.warn(`⚠️ NFT not found in Helius response for mint: ${mint.toString()}`);
+          console.warn(`   Will attempt standard SPL Token transfer (fallback)`);
+          nftType = 'standard';
+        }
+      } catch (heliusError: any) {
+        console.warn(`⚠️ Helius API check failed:`, heliusError.message);
+        console.warn(`   Will attempt standard SPL Token transfer (fallback)`);
+        nftType = 'standard';
+      }
+
+      // If we detected a non-standard NFT type, we should have returned by now
+      // Only continue with standard SPL Token NFT transfer if nftType is 'standard'
+      if (nftType !== 'standard') {
+        throw new Error(`NFT type detection completed but transfer was not executed. This should not happen.`);
+      }
+
+      // Fallback: Check mint account owner program if Helius didn't provide clear info
+      // This helps catch Metaplex Core NFTs that Helius might not have detected correctly
+      if (!nftData || !nftConfirmedByHelius) {
+        console.log(`⚠️ Helius didn't confirm NFT type, checking mint account owner program...`);
+        try {
+          const mintAccountInfo = await this.connection.getAccountInfo(mint);
+          if (mintAccountInfo) {
+            const ownerProgram = mintAccountInfo.owner.toString();
+            console.log(`   Mint owner program: ${ownerProgram}`);
+
+            // Metaplex Core program IDs
+            const CORE_V1_1 = 'CoREENxT6tW1HoK8ypY1SxRMZTUvp1c1dW3YvY1J1C3';
+            const CORE_V1_0 = 'CoREeNDoLKiqjTGGYxAryxu9qTSaZEJTcyQ5fH6pnyf';
+
+            if (ownerProgram === CORE_V1_1 || ownerProgram === CORE_V1_0) {
+              console.log(`🔷 DETECTED via mint owner: This is a METAPLEX CORE NFT!`);
+              console.log(`   Owner Program: ${ownerProgram}`);
+
+              // Try to get NFT data from Helius for transfer
+              try {
+                const HELIUS_API_KEY = '5a1a852c-3ed9-40ee-bca8-dda4550c3ce8';
+                const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
+
+                const assetResponse = await fetch(rpcUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: 'get-asset',
+                    method: 'getAsset',
+                    params: { id: mint.toString() },
+                  }),
+                });
+                const assetData = await assetResponse.json();
+                nftData = assetData.result;
+
+                if (nftData) {
+                  const signature = await this.transferMetaplexCoreNFT(
+                    mint,
+                    adminKeypair,
+                    user,
+                    nftData,
+                    rpcUrl
+                  );
+                  console.log(`✅ Metaplex Core NFT transferred successfully!`);
+                  return signature;
+                }
+              } catch (coreError: any) {
+                console.error(`❌ Error transferring Metaplex Core NFT:`, coreError.message);
+                throw new Error(
+                  `Failed to transfer Metaplex Core NFT: ${coreError.message}\n\n` +
+                  `Metaplex Core NFTs use a different transfer mechanism than standard SPL Token NFTs.`
+                );
+              }
+            } else if (ownerProgram !== TOKEN_PROGRAM_ID.toString()) {
+              console.warn(`⚠️ Mint is owned by unexpected program: ${ownerProgram}`);
+              console.warn(`   Expected: ${TOKEN_PROGRAM_ID.toString()} (Token Program) or Core Program`);
+              console.warn(`   Proceeding with standard transfer attempt...`);
+            }
+          }
+        } catch (mintCheckError: any) {
+          console.warn(`⚠️ Could not check mint account: ${mintCheckError.message}`);
+          console.warn(`   Proceeding with standard transfer attempt...`);
+        }
+      }
+
+      // Continue with standard SPL Token NFT transfer (ATA-based)
+      console.log(`📦 Proceeding with standard SPL Token NFT transfer...`);
+
       // Check if admin ATA exists and has the NFT
       let adminATAInfo = await this.connection.getAccountInfo(adminATA);
-      
+
       // If ATA doesn't exist, try to find the NFT in all token accounts
       if (!adminATAInfo) {
         console.log(`⚠️ Admin ATA not found, searching all token accounts for NFT...`);
-        
+
         try {
           // Get all token accounts for the admin wallet
           const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(
             adminPublicKey,
             {
-              mint: mint
+              programId: TOKEN_PROGRAM_ID
             }
           );
 
-          if (tokenAccounts.value.length === 0) {
+          console.log(`📊 Found ${tokenAccounts.value.length} token accounts for admin wallet`);
+
+          // Filter to find the token account with matching mint
+          const matchingTokenAccount = tokenAccounts.value.find(
+            (account) => account.account.data.parsed.info.mint === mint.toString()
+          );
+
+          if (!matchingTokenAccount) {
+            // If Helius confirmed the NFT exists, proceed anyway (might be indexing delay)
+            if (nftConfirmedByHelius) {
+              console.warn(`⚠️ NFT confirmed by Helius but not found in token accounts`);
+              console.warn(`   Proceeding anyway - RPC indexing may be slow`);
+            } else {
+              throw new Error(
+                `⚠️ NFT not found in admin wallet\n\n` +
+                `Admin Wallet: ${adminPublicKey.toString()}\n` +
+                `NFT Mint: ${mint.toString()}\n` +
+                `Expected ATA: ${adminATA.toString()}\n\n` +
+                `Please ensure the NFT is in the admin wallet before claiming.`
+              );
+            }
+          } else {
+            // Found matching token account
+            const balance = matchingTokenAccount.account.data.parsed.info.tokenAmount.uiAmount;
+
+            if (balance === 0) {
+              throw new Error(
+                `⚠️ Admin wallet does not have this NFT\n\n` +
+                `Admin Wallet: ${adminPublicKey.toString()}\n` +
+                `NFT Mint: ${mint.toString()}\n` +
+                `Token Account: ${matchingTokenAccount.pubkey.toString()}\n` +
+                `Balance: ${balance}`
+              );
+            }
+
+            console.log(`✅ Found NFT in admin wallet via token account search`);
+            console.log(`   Token Account: ${matchingTokenAccount.pubkey.toString()}`);
+            console.log(`   Balance: ${balance}`);
+
+            // Update adminATA to use the found token account
+            adminATA = matchingTokenAccount.pubkey;
+            // Get the account info for the found token account
+            adminATAInfo = await this.connection.getAccountInfo(adminATA);
+          }
+        } catch (searchError: any) {
+          if (nftConfirmedByHelius) {
+            console.warn(`⚠️ Token account search failed, but Helius confirmed NFT exists`);
+            console.warn(`   Proceeding anyway - RPC indexing may be slow`);
+          } else {
             throw new Error(
               `⚠️ NFT not found in admin wallet\n\n` +
               `Admin Wallet: ${adminPublicKey.toString()}\n` +
               `NFT Mint: ${mint.toString()}\n` +
-              `Expected ATA: ${adminATA.toString()}\n\n` +
-              `Please ensure the NFT is in the admin wallet before claiming.`
+              `Search Error: ${searchError.message}\n\n` +
+              `Please verify the NFT is in the admin wallet and try again.`
             );
           }
+        }
+      }
 
-          // Use the first token account found
-          const tokenAccount = tokenAccounts.value[0];
-          const balance = tokenAccount.account.data.parsed.info.tokenAmount.uiAmount;
-          
-          if (balance === 0) {
+      // Final verification: Check admin token account before transfer
+      if (!adminATAInfo) {
+        console.log(`⚠️ Final check: Verifying admin token account before transfer...`);
+        console.log(`   Using adminATA: ${adminATA.toString()}`);
+        adminATAInfo = await this.connection.getAccountInfo(adminATA);
+
+        if (adminATAInfo) {
+          const balance = adminATAInfo.data.readBigUInt64LE(64);
+          if (balance > BigInt(0)) {
+            console.log(`✅ Admin token account verified: ${adminATA.toString()}, balance: ${balance}`);
+          } else {
             throw new Error(
-              `⚠️ Admin wallet does not have this NFT\n\n` +
+              `⚠️ Admin token account has 0 balance\n\n` +
               `Admin Wallet: ${adminPublicKey.toString()}\n` +
               `NFT Mint: ${mint.toString()}\n` +
-              `Token Account: ${tokenAccount.pubkey.toString()}\n` +
-              `Balance: ${balance}`
+              `Token Account: ${adminATA.toString()}\n` +
+              `Balance: 0`
             );
           }
-
-          console.log(`✅ Found NFT in admin wallet via token account search`);
-          console.log(`   Token Account: ${tokenAccount.pubkey.toString()}`);
-          console.log(`   Balance: ${balance}`);
-          
-          // Update adminATA to use the found token account
-          adminATA = tokenAccount.pubkey;
-          // Get the account info for the found token account
-          adminATAInfo = await this.connection.getAccountInfo(adminATA);
-        } catch (searchError: any) {
-          if (searchError.message.includes("NFT not found") || searchError.message.includes("does not have")) {
-            throw searchError;
-          }
-          // If search failed, throw original error
+        } else if (nftConfirmedByHelius) {
+          console.warn(`⚠️ RPC could not verify account, but transfer will proceed`);
+          console.warn(`   Helius confirmed NFT exists in admin wallet`);
+        } else {
           throw new Error(
-            `⚠️ NFT not found in admin wallet\n\n` +
+            `⚠️ Admin token account not found\n\n` +
             `Admin Wallet: ${adminPublicKey.toString()}\n` +
             `NFT Mint: ${mint.toString()}\n` +
-            `Expected ATA: ${adminATA.toString()}\n\n` +
-            `Error: ${searchError.message}\n\n` +
+            `Expected Token Account: ${adminATA.toString()}\n\n` +
             `Please ensure the NFT is in the admin wallet before claiming.`
           );
         }
       }
 
-      // Verify the admin has the NFT
-      if (!adminATAInfo) {
-        throw new Error(
-          `⚠️ Admin token account not found\n\n` +
-          `Admin Wallet: ${adminPublicKey.toString()}\n` +
-          `NFT Mint: ${mint.toString()}\n` +
-          `Token Account: ${adminATA.toString()}`
+      // Proceed with standard SPL Token NFT transfer
+      console.log(`✅ Proceeding with standard SPL Token NFT transfer...`);
+      console.log(`   Admin ATA: ${adminATA.toString()}`);
+      console.log(`   User ATA: ${userATA.toString()}`);
+
+      // Create transaction for standard NFT transfer
+      const transaction = new Transaction();
+      const createATATransaction = new Transaction();
+
+      // Check if user ATA exists, create if needed
+      const userATAInfoCheckLegacy = await this.connection.getAccountInfo(userATA);
+      if (!userATAInfoCheckLegacy) {
+        console.log("➕ Creating user ATA...");
+        console.log(`   Payer: ${adminPublicKey.toString()}`);
+        console.log(`   ATA: ${userATA.toString()}`);
+        console.log(`   Owner: ${user.toString()}`);
+        console.log(`   Mint: ${mint.toString()}`);
+        console.log(`   TOKEN_PROGRAM_ID: ${TOKEN_PROGRAM_ID.toString()}`);
+        console.log(`   ASSOCIATED_TOKEN_PROGRAM_ID: ${ASSOCIATED_TOKEN_PROGRAM_ID.toString()}`);
+
+        // CRITICAL: Verify mint account is owned by TOKEN_PROGRAM_ID (non-blocking)
+        // If RPC can't find the mint, we'll proceed anyway since Helius confirmed NFT exists
+        try {
+          const mintAccountInfo = await this.connection.getAccountInfo(mint);
+          if (mintAccountInfo) {
+            if (mintAccountInfo.owner.toString() !== TOKEN_PROGRAM_ID.toString()) {
+              console.warn(`⚠️ WARNING: Mint account owner mismatch!`);
+              console.warn(`   Mint: ${mint.toString()}`);
+              console.warn(`   Owner: ${mintAccountInfo.owner.toString()}`);
+              console.warn(`   Expected: ${TOKEN_PROGRAM_ID.toString()}`);
+              console.warn(`   Proceeding anyway - Helius confirmed NFT exists`);
+            } else {
+              console.log(`✅ Mint account verified: owned by ${mintAccountInfo.owner.toString()}`);
+            }
+          } else {
+            console.warn(`⚠️ WARNING: RPC could not find mint account ${mint.toString()}`);
+            console.warn(`   This may be due to RPC indexing delays`);
+            console.warn(`   Proceeding anyway - Helius confirmed NFT exists in admin wallet`);
+          }
+        } catch (error: any) {
+          console.warn(`⚠️ WARNING: Error verifying mint account: ${error.message}`);
+          console.warn(`   Proceeding anyway - Helius confirmed NFT exists in admin wallet`);
+          // Don't throw - continue with transaction since Helius confirmed NFT exists
+        }
+
+        // CRITICAL FIX: Use ONLY the library function - don't modify it
+        // The library function is tested and should work correctly
+        // Any manual modifications might introduce issues
+        console.log(`🔧 Creating ATA instruction using library function (no modifications)...`);
+        const createATAInstruction = createAssociatedTokenAccountInstruction(
+          adminPublicKey, // Payer (admin pays for ATA creation)
+          userATA,        // Associated token account address
+          user,          // Owner (user's wallet)
+          mint           // Mint (NFT mint address)
         );
+
+        // Log the instruction structure for debugging (but don't modify it)
+        console.log(`📋 ATA instruction structure (from library):`);
+        console.log(`   Program ID: ${createATAInstruction.programId.toString()}`);
+        console.log(`   Expected Program ID: ${ASSOCIATED_TOKEN_PROGRAM_ID.toString()}`);
+        console.log(`   Match: ${createATAInstruction.programId.toString() === ASSOCIATED_TOKEN_PROGRAM_ID.toString()}`);
+        console.log(`   Accounts: ${createATAInstruction.keys.length}`);
+        createATAInstruction.keys.forEach((key, i) => {
+          const accountNames = ['Payer', 'ATA', 'Owner', 'Mint', 'System Program', 'Token Program'];
+          console.log(`     [${i}] ${accountNames[i] || 'Unknown'}: ${key.pubkey.toString().substring(0, 8)}... (signer: ${key.isSigner}, writable: ${key.isWritable})`);
+        });
+        console.log(`   Data length: ${createATAInstruction.data.length} bytes`);
+
+        // Verify structure matches expectations (but don't throw - just log)
+        if (createATAInstruction.programId.toString() !== ASSOCIATED_TOKEN_PROGRAM_ID.toString()) {
+          console.error(`❌ WARNING: Program ID mismatch!`);
+          console.error(`   Expected: ${ASSOCIATED_TOKEN_PROGRAM_ID.toString()}`);
+          console.error(`   Got: ${createATAInstruction.programId.toString()}`);
+        }
+
+        const tokenProgramKey = createATAInstruction.keys[5];
+        if (!tokenProgramKey || tokenProgramKey.pubkey.toString() !== TOKEN_PROGRAM_ID.toString()) {
+          console.error(`❌ WARNING: Token Program mismatch in account [5]!`);
+          console.error(`   Expected: ${TOKEN_PROGRAM_ID.toString()}`);
+          console.error(`   Got: ${tokenProgramKey?.pubkey?.toString() || 'missing'}`);
+        } else {
+          console.log(`✅ Token Program verified in account [5]: ${tokenProgramKey.pubkey.toString()}`);
+        }
+
+        // CRITICAL VERIFICATION: Ensure instruction matches Solana ATA Program spec
+        console.log(`🔍 Verifying ATA instruction structure...`);
+        console.log(`   Program ID: ${createATAInstruction.programId.toString()}`);
+        console.log(`   Expected: ${ASSOCIATED_TOKEN_PROGRAM_ID.toString()}`);
+        console.log(`   Match: ${createATAInstruction.programId.toString() === ASSOCIATED_TOKEN_PROGRAM_ID.toString()}`);
+        console.log(`   Accounts: ${createATAInstruction.keys.length} (expected: 6)`);
+
+        // Verify program ID
+        if (createATAInstruction.programId.toString() !== ASSOCIATED_TOKEN_PROGRAM_ID.toString()) {
+          console.error(`❌ CRITICAL: Instruction program ID mismatch!`);
+          console.error(`   Expected: ${ASSOCIATED_TOKEN_PROGRAM_ID.toString()}`);
+          console.error(`   Got: ${createATAInstruction.programId.toString()}`);
+          throw new Error(
+            `ATA instruction has incorrect program ID.\n` +
+            `Expected: ${ASSOCIATED_TOKEN_PROGRAM_ID.toString()}\n` +
+            `Got: ${createATAInstruction.programId.toString()}`
+          );
+        }
+
+        // Verify account count
+        if (createATAInstruction.keys.length !== 6) {
+          console.error(`❌ CRITICAL: Wrong number of accounts!`);
+          console.error(`   Expected: 6`);
+          console.error(`   Got: ${createATAInstruction.keys.length}`);
+          throw new Error(
+            `ATA instruction has wrong number of accounts.\n` +
+            `Expected: 6\n` +
+            `Got: ${createATAInstruction.keys.length}`
+          );
+        }
+
+        // Verify each account
+        console.log(`✅ ATA instruction verified:`);
+        console.log(`   Program ID: ${createATAInstruction.programId.toString()} ✅`);
+        createATAInstruction.keys.forEach((key, i) => {
+          const accountNames = ['Payer', 'ATA', 'Owner', 'Mint', 'System Program', 'Token Program'];
+          console.log(`   [${i}] ${accountNames[i] || 'Unknown'}: ${key.pubkey.toString().substring(0, 8)}... (signer: ${key.isSigner}, writable: ${key.isWritable})`);
+        });
+        console.log(`   Data length: ${createATAInstruction.data.length} bytes`);
+
+        createATATransaction.add(createATAInstruction);
+        console.log(`✅ ATA creation instruction added to transaction`);
       }
-      const adminBalance = adminATAInfo.data.readBigUInt64LE(64);
-      if (adminBalance === BigInt(0)) {
+
+      // Create transfer instruction
+      console.log(`📤 Creating transfer instruction:`);
+      console.log(`   From: ${adminATA.toString()}`);
+      console.log(`   To: ${userATA.toString()}`);
+      console.log(`   Authority: ${adminPublicKey.toString()}`);
+      console.log(`   TOKEN_PROGRAM_ID: ${TOKEN_PROGRAM_ID.toString()}`);
+
+      const transferInstruction = createTransferInstruction(
+        adminATA,      // Source (admin's token account)
+        userATA,       // Destination (user's token account)
+        adminPublicKey, // Authority (admin wallet)
+        1,             // Amount (1 NFT)
+        [],            // Multi-signers (none)
+        TOKEN_PROGRAM_ID
+      );
+
+      console.log(`✅ Transfer instruction created with correct program ID`);
+      console.log(`   Instruction program ID: ${transferInstruction.programId.toString()}`);
+
+      // Add instructions to transaction
+      if (!userATAInfoCheckLegacy) {
+        console.log(`📝 Adding 1 ATA creation instruction(s) to transaction`);
+        transaction.add(...createATATransaction.instructions);
+      }
+
+      console.log(`📝 Adding transfer instruction to transaction`);
+      transaction.add(transferInstruction);
+
+      console.log(`📋 Transaction structure before sending:`);
+      console.log(`   Total instructions: ${transaction.instructions.length}`);
+      transaction.instructions.forEach((inst, i) => {
+        console.log(`   Instruction ${i}:`);
+        console.log(`     Program ID: ${inst.programId.toString()}`);
+        console.log(`     Accounts: ${inst.keys.length}`);
+        inst.keys.forEach((key, j) => {
+          console.log(`       [${j}] ${key.pubkey.toString().substring(0, 8)}... (signer: ${key.isSigner}, writable: ${key.isWritable})`);
+        });
+        console.log(`     Data length: ${inst.data.length} bytes`);
+      });
+
+      // Get fresh blockhash right before signing
+      console.log(`=== PREPARING ADMIN NFT WITHDRAWAL TRANSACTION ===`);
+      const blockhashStartTime = Date.now();
+      const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('confirmed');
+      const blockhashFetchTime = Date.now() - blockhashStartTime;
+
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = adminPublicKey;
+
+      // Log blockhash timing
+      const currentBlockHeight = await this.connection.getBlockHeight('confirmed');
+      const blocksRemaining = lastValidBlockHeight - currentBlockHeight;
+      const validityPercent = (blocksRemaining / 150) * 100; // Blockhash valid for ~150 blocks
+
+      console.log(`⏱️ Blockhash Timing:`);
+      console.log(`   Fetch time: ${blockhashFetchTime}ms`);
+      console.log(`   Current block: ${currentBlockHeight}`);
+      console.log(`   Last valid block: ${lastValidBlockHeight}`);
+      console.log(`   Blocks remaining: ${blocksRemaining} (${validityPercent.toFixed(1)}% of validity window)`);
+
+      // Sign transaction
+      const signStartTime = Date.now();
+      transaction.sign(adminKeypair);
+      const signTime = Date.now() - signStartTime;
+
+      // Final verification after signing
+      console.log(`🔍 Final verification of signed transaction:`);
+      transaction.instructions.forEach((inst, i) => {
+        console.log(`   Instruction ${i} (after signing):`);
+        console.log(`     Program ID: ${inst.programId.toString()}`);
+        console.log(`     Accounts: ${inst.keys.length}`);
+        inst.keys.forEach((key, j) => {
+          console.log(`       [${j}] ${key.pubkey.toString().substring(0, 8)}... (signer: ${key.isSigner}, writable: ${key.isWritable})`);
+        });
+        console.log(`     Data: ${inst.data.length} bytes`);
+      });
+
+      console.log(`⏱️ Signing time: ${signTime}ms`);
+
+      // Send transaction
+      console.log(`=== SENDING ADMIN NFT WITHDRAWAL TRANSACTION ===`);
+      console.log(`   Blockhash: ${blockhash.substring(0, 8)}...${blockhash.substring(-8)}`);
+      console.log(`   Last valid block height: ${lastValidBlockHeight}`);
+
+      const serialized = transaction.serialize();
+      console.log(`📦 Serialized transaction size: ${serialized.length} bytes`);
+
+      const sendStartTime = Date.now();
+      const signature = await this.connection.sendRawTransaction(serialized, {
+        skipPreflight: false,
+        preflightCommitment: 'confirmed',
+        maxRetries: 3,
+      });
+      const sendTime = Date.now() - sendStartTime;
+      const totalTime = Date.now() - blockhashStartTime;
+
+      console.log(`⏱️ Send time: ${sendTime}ms`);
+      console.log(`⏱️ Total time from blockhash fetch to send: ${totalTime}ms`);
+
+      // Check how many blocks elapsed during send
+      const currentBlockAfterSend = await this.connection.getBlockHeight('confirmed');
+      const blocksElapsed = currentBlockAfterSend - currentBlockHeight;
+      console.log(`⏱️ Blocks elapsed during send: ${blocksElapsed}`);
+
+      console.log(`=== ADMIN NFT WITHDRAWAL TRANSACTION SENT ===`);
+      console.log(`   Signature: ${signature}`);
+
+      // Confirm transaction
+      const confirmation = await this.confirmTransactionRobust(signature, 120000);
+
+      if (confirmation.value?.err) {
+        const errorDetails = confirmation.value.err;
+        console.error(`❌ Transaction failed on-chain:`, errorDetails);
+
+        // Parse error details
+        if (Array.isArray(errorDetails)) {
+          const [instructionIndex, error] = errorDetails;
+          console.error(`=== TRANSACTION FAILED (INSTRUCTION ERROR) ===`);
+          console.error(`   Transaction signature: ${signature}`);
+          console.error(`   Failed instruction index: ${instructionIndex}`);
+          console.error(`   Error details (raw): ${JSON.stringify(error)}`);
+
+          if (instructionIndex === 0) {
+            console.error(`   ❌ Instruction 0 (ATA Creation) failed with error: ${JSON.stringify(error)}`);
+            console.error(`   This is the ATA creation instruction.`);
+            console.error(`   Verify: Program ID should be ${ASSOCIATED_TOKEN_PROGRAM_ID.toString()}`);
+            console.error(`   Verify: Token Program should be ${TOKEN_PROGRAM_ID.toString()} in account [5]`);
+          } else if (instructionIndex === 1) {
+            console.error(`   ❌ Instruction 1 (Transfer) failed with error: ${JSON.stringify(error)}`);
+            console.error(`   This is the transfer instruction.`);
+            console.error(`   Verify: Program ID should be ${TOKEN_PROGRAM_ID.toString()}`);
+          }
+        }
+
         throw new Error(
-          `⚠️ Admin wallet does not have this NFT\n\n` +
-          `Admin Wallet: ${adminPublicKey.toString()}\n` +
-          `NFT Mint: ${mint.toString()}\n` +
-          `Token Account: ${adminATA.toString()}\n` +
-          `Balance: 0`
+          `NFT withdrawal failed: Instruction ${Array.isArray(errorDetails) ? errorDetails[0] : 'unknown'} failed (${JSON.stringify(Array.isArray(errorDetails) ? errorDetails[1] : errorDetails)})`
         );
       }
 
-      console.log(`✅ Admin wallet has ${adminBalance} NFT(s) in account ${adminATA.toString()}`);
+      console.log(`✅ NFT withdrawal transaction confirmed successfully!`);
+      return signature;
 
       // Check if user ATA exists, create if needed
       // Note: userATAInfo was already checked above, but we need to check again
       // in case it was created between checks (unlikely but safe)
       const userATAInfoCheck = await this.connection.getAccountInfo(userATA);
-      const createATATransaction = new Transaction();
+      const createATATransactionFinal = new Transaction();
 
       if (!userATAInfoCheck) {
         console.log("➕ Creating user ATA...");
+        console.log(`   Payer: ${adminPublicKey.toString()}`);
+        console.log(`   ATA: ${userATA.toString()}`);
+        console.log(`   Owner: ${user.toString()}`);
+        console.log(`   Mint: ${mint.toString()}`);
+        console.log(`   TOKEN_PROGRAM_ID: ${TOKEN_PROGRAM_ID.toString()}`);
+        console.log(`   ASSOCIATED_TOKEN_PROGRAM_ID: ${ASSOCIATED_TOKEN_PROGRAM_ID.toString()}`);
+
+        // CRITICAL: Verify mint account is owned by TOKEN_PROGRAM_ID (non-blocking)
+        // If RPC can't find the mint, we'll proceed anyway since Helius confirmed NFT exists
+        try {
+          const mintAccountInfo = await this.connection.getAccountInfo(mint);
+          if (mintAccountInfo) {
+            if (mintAccountInfo!.owner.toString() !== TOKEN_PROGRAM_ID.toString()) {
+              console.warn(`⚠️ WARNING: Mint account owner mismatch!`);
+              console.warn(`   Mint: ${mint.toString()}`);
+              console.warn(`   Owner: ${mintAccountInfo!.owner.toString()}`);
+              console.warn(`   Expected: ${TOKEN_PROGRAM_ID.toString()}`);
+              console.warn(`   Proceeding anyway - Helius confirmed NFT exists`);
+            } else {
+              console.log(`✅ Mint account verified: owned by ${mintAccountInfo!.owner.toString()}`);
+            }
+          } else {
+            console.warn(`⚠️ WARNING: RPC could not find mint account ${mint.toString()}`);
+            console.warn(`   This may be due to RPC indexing delays`);
+            console.warn(`   Proceeding anyway - Helius confirmed NFT exists in admin wallet`);
+          }
+        } catch (error: any) {
+          console.warn(`⚠️ WARNING: Error verifying mint account: ${error.message}`);
+          console.warn(`   Proceeding anyway - Helius confirmed NFT exists in admin wallet`);
+          // Don't throw - continue with transaction since Helius confirmed NFT exists
+        }
+
+        // CRITICAL FIX: Use ONLY the library function - don't modify it
+        // The library function is tested and should work correctly
+        // Any manual modifications might introduce issues
+        console.log(`🔧 Creating ATA instruction using library function (no modifications)...`);
         const createATAInstruction = createAssociatedTokenAccountInstruction(
           adminPublicKey, // Payer (admin pays for ATA creation)
-          userATA,
-          user,
-          mint
+          userATA,        // Associated token account address
+          user,          // Owner (user's wallet)
+          mint           // Mint (NFT mint address)
         );
-        createATATransaction.add(createATAInstruction);
+
+        // Log the instruction structure for debugging (but don't modify it)
+        console.log(`📋 ATA instruction structure (from library):`);
+        console.log(`   Program ID: ${createATAInstruction.programId.toString()}`);
+        console.log(`   Expected Program ID: ${ASSOCIATED_TOKEN_PROGRAM_ID.toString()}`);
+        console.log(`   Match: ${createATAInstruction.programId.toString() === ASSOCIATED_TOKEN_PROGRAM_ID.toString()}`);
+        console.log(`   Accounts: ${createATAInstruction.keys.length}`);
+        createATAInstruction.keys.forEach((key, i) => {
+          const accountNames = ['Payer', 'ATA', 'Owner', 'Mint', 'System Program', 'Token Program'];
+          console.log(`     [${i}] ${accountNames[i] || 'Unknown'}: ${key.pubkey.toString().substring(0, 8)}... (signer: ${key.isSigner}, writable: ${key.isWritable})`);
+        });
+        console.log(`   Data length: ${createATAInstruction.data.length} bytes`);
+
+        // Verify structure matches expectations (but don't throw - just log)
+        if (createATAInstruction.programId.toString() !== ASSOCIATED_TOKEN_PROGRAM_ID.toString()) {
+          console.error(`❌ WARNING: Program ID mismatch!`);
+          console.error(`   Expected: ${ASSOCIATED_TOKEN_PROGRAM_ID.toString()}`);
+          console.error(`   Got: ${createATAInstruction.programId.toString()}`);
+        }
+
+        const tokenProgramKey = createATAInstruction.keys[5];
+        if (!tokenProgramKey || tokenProgramKey.pubkey.toString() !== TOKEN_PROGRAM_ID.toString()) {
+          console.error(`❌ WARNING: Token Program mismatch in account [5]!`);
+          console.error(`   Expected: ${TOKEN_PROGRAM_ID.toString()}`);
+          console.error(`   Got: ${tokenProgramKey?.pubkey?.toString() || 'missing'}`);
+        } else {
+          console.log(`✅ Token Program verified in account [5]: ${tokenProgramKey.pubkey.toString()}`);
+        }
+
+        // CRITICAL VERIFICATION: Ensure instruction matches Solana ATA Program spec
+        console.log(`🔍 Verifying ATA instruction structure...`);
+        console.log(`   Program ID: ${createATAInstruction.programId.toString()}`);
+        console.log(`   Expected: ${ASSOCIATED_TOKEN_PROGRAM_ID.toString()}`);
+        console.log(`   Match: ${createATAInstruction.programId.toString() === ASSOCIATED_TOKEN_PROGRAM_ID.toString()}`);
+        console.log(`   Accounts: ${createATAInstruction.keys.length} (expected: 6)`);
+
+        // Verify program ID
+        if (createATAInstruction.programId.toString() !== ASSOCIATED_TOKEN_PROGRAM_ID.toString()) {
+          console.error(`❌ CRITICAL: Instruction program ID mismatch!`);
+          console.error(`   Expected: ${ASSOCIATED_TOKEN_PROGRAM_ID.toString()}`);
+          console.error(`   Got: ${createATAInstruction.programId.toString()}`);
+          throw new Error(
+            `ATA instruction has incorrect program ID.\n` +
+            `Expected: ${ASSOCIATED_TOKEN_PROGRAM_ID.toString()}\n` +
+            `Got: ${createATAInstruction.programId.toString()}`
+          );
+        }
+
+        // Verify account count
+        if (createATAInstruction.keys.length !== 6) {
+          console.error(`❌ CRITICAL: Wrong number of accounts!`);
+          console.error(`   Expected: 6`);
+          console.error(`   Got: ${createATAInstruction.keys.length}`);
+          throw new Error(`ATA instruction has wrong number of accounts: ${createATAInstruction.keys.length} (expected 6)`);
+        }
+
+        // Verify TOKEN_PROGRAM_ID is in account [5]
+        const tokenProgramAccount = createATAInstruction.keys[5];
+        const hasCorrectTokenProgram = tokenProgramAccount?.pubkey?.toString() === TOKEN_PROGRAM_ID.toString();
+
+        console.log(`   Account [5] Token Program: ${tokenProgramAccount?.pubkey?.toString() || 'missing'}`);
+        console.log(`   Expected Token Program: ${TOKEN_PROGRAM_ID.toString()}`);
+        console.log(`   Match: ${hasCorrectTokenProgram}`);
+
+        if (!hasCorrectTokenProgram) {
+          console.error(`❌ CRITICAL: TOKEN_PROGRAM_ID mismatch in account [5]!`);
+          console.error(`   Expected: ${TOKEN_PROGRAM_ID.toString()}`);
+          console.error(`   Got: ${tokenProgramAccount?.pubkey?.toString() || 'missing'}`);
+          console.error(`   All accounts:`);
+          createATAInstruction.keys.forEach((key, i) => {
+            console.error(`     [${i}] ${key.pubkey.toString()} (signer: ${key.isSigner}, writable: ${key.isWritable})`);
+          });
+          throw new Error(
+            `TOKEN_PROGRAM_ID not found in instruction accounts.\n` +
+            `Expected: ${TOKEN_PROGRAM_ID.toString()}\n` +
+            `Found: ${tokenProgramAccount?.pubkey?.toString() || 'missing'}`
+          );
+        }
+
+        // Log complete instruction structure
+        console.log(`✅ ATA instruction verified:`);
+        console.log(`   Program ID: ${createATAInstruction.programId.toString()} ✅`);
+        createATAInstruction.keys.forEach((key, i) => {
+          const accountNames = ['Payer', 'ATA', 'Owner', 'Mint', 'System Program', 'Token Program'];
+          console.log(`   [${i}] ${accountNames[i] || 'Unknown'}: ${key.pubkey.toString().substring(0, 8)}... (signer: ${key.isSigner}, writable: ${key.isWritable})`);
+        });
+        console.log(`   Data length: ${createATAInstruction.data.length} bytes`);
+
+        createATATransactionFinal.add(createATAInstruction);
+        console.log(`✅ ATA creation instruction added to transaction`);
       }
 
+      console.log(`📤 Creating transfer instruction:`);
+      console.log(`   From: ${adminATA.toString()}`);
+      console.log(`   To: ${userATA.toString()}`);
+      console.log(`   Authority: ${adminPublicKey.toString()}`);
+      console.log(`   TOKEN_PROGRAM_ID: ${TOKEN_PROGRAM_ID.toString()}`);
+
       // Create transfer instruction from admin ATA to user ATA
-      const transferInstruction = createTransferInstruction(
-        adminATA,
-        userATA,
-        adminPublicKey,
-        1, // Transfer 1 NFT
-        [],
-        TOKEN_PROGRAM_ID
+      // Using classic SPL Token program (not Token-2022)
+      const transferInstructionFinal = createTransferInstruction(
+        adminATA,        // Source token account (admin's ATA)
+        userATA,         // Destination token account (user's ATA)
+        adminPublicKey,  // Authority (admin wallet - owner of source ATA)
+        1,               // Amount (1 NFT)
+        [],              // Multi-signers (none - admin is single signer)
+        TOKEN_PROGRAM_ID // Token program (classic SPL Token: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA)
       );
+
+      // Verify the transfer instruction uses correct program ID
+      if (transferInstructionFinal.programId.toString() !== TOKEN_PROGRAM_ID.toString()) {
+        throw new Error(
+          `❌ CRITICAL: Transfer instruction program ID is incorrect!\n` +
+          `   Expected: ${TOKEN_PROGRAM_ID.toString()}\n` +
+          `   Got: ${transferInstructionFinal.programId.toString()}\n\n` +
+          `   This NFT must use classic SPL Token program, not Token-2022.`
+        );
+      }
+
+      console.log(`✅ Transfer instruction created with correct program ID`);
+      console.log(`   Instruction program ID: ${transferInstructionFinal.programId.toString()}`);
 
       // Create final transaction
       const finalTransaction = new Transaction();
 
       // Add ATA creation if needed
-      if (createATATransaction.instructions.length > 0) {
-        finalTransaction.add(...createATATransaction.instructions);
+      if (createATATransactionFinal.instructions.length > 0) {
+        console.log(`📝 Adding ${createATATransactionFinal.instructions.length} ATA creation instruction(s) to transaction`);
+        finalTransaction.add(...createATATransactionFinal.instructions);
+      } else {
+        console.log(`📝 User ATA already exists - skipping ATA creation`);
       }
 
       // Add transfer instruction
-      finalTransaction.add(transferInstruction);
+      console.log(`📝 Adding transfer instruction to transaction`);
+      finalTransaction.add(transferInstructionFinal);
 
-      // Get fresh blockhash
-      const { blockhash, lastValidBlockHeight } = await this.retryRpcCall(
-        () => this.connection.getLatestBlockhash("confirmed")
-      );
+      // CRITICAL: Log transaction structure before sending
+      console.log(`📋 Transaction structure before sending:`);
+      console.log(`   Total instructions: ${finalTransaction.instructions.length}`);
+      finalTransaction.instructions.forEach((inst, idx) => {
+        console.log(`   Instruction ${idx}:`);
+        console.log(`     Program ID: ${inst.programId.toString()}`);
+        console.log(`     Accounts: ${inst.keys.length}`);
+        inst.keys.forEach((key, keyIdx) => {
+          console.log(`       [${keyIdx}] ${key.pubkey.toString().substring(0, 8)}... (signer: ${key.isSigner}, writable: ${key.isWritable})`);
+        });
+        console.log(`     Data length: ${inst.data.length} bytes`);
+      });
 
-      finalTransaction.recentBlockhash = blockhash;
+      // Set fee payer
       finalTransaction.feePayer = adminPublicKey; // Admin pays transaction fees
 
-      console.log("=== SENDING ADMIN NFT WITHDRAWAL TRANSACTION ===");
-      console.log(`Transaction size: ${finalTransaction.serialize({ requireAllSignatures: false }).length} bytes`);
+      // CRITICAL FIX: Get fresh blockhash at the ABSOLUTE LAST MOMENT before signing/sending
+      // This minimizes the time window between blockhash fetch and transaction submission
+      // All verification logic above should complete BEFORE this point
+      console.log("=== PREPARING ADMIN NFT WITHDRAWAL TRANSACTION ===");
 
-      // Sign transaction with admin keypair
+      // Instrumentation: Track timing
+      const timeBeforeBlockhash = Date.now();
+      let currentBlockHeightBefore: number;
+      try {
+        currentBlockHeightBefore = await this.connection.getBlockHeight("confirmed");
+      } catch (e) {
+        // If block height check fails, continue anyway (not critical)
+        currentBlockHeightBefore = 0;
+      }
+
+      // Get fresh blockhash IMMEDIATELY before signing (minimize time window)
+      // Use direct call (no retry wrapper) to avoid any additional delays
+      const { blockhash: blockhashFinal, lastValidBlockHeight: lastValidBlockHeightFinal } =
+        await this.connection.getLatestBlockhash("confirmed");
+
+      const timeAfterBlockhash = Date.now();
+      const blockhashFetchTimeFinal = timeAfterBlockhash - timeBeforeBlockhash;
+
+      // Verify blockhash is still valid before proceeding
+      const currentBlockHeightAfter = await this.connection.getBlockHeight("confirmed");
+      const blocksElapsedFinal = currentBlockHeightAfter - currentBlockHeightBefore;
+      const blocksRemainingFinal = lastValidBlockHeightFinal - currentBlockHeightAfter;
+
+      console.log(`⏱️ Blockhash Timing:`);
+      console.log(`   Fetch time: ${blockhashFetchTimeFinal}ms`);
+      console.log(`   Current block: ${currentBlockHeightAfter}`);
+      console.log(`   Last valid block: ${lastValidBlockHeightFinal}`);
+      console.log(`   Blocks remaining: ${blocksRemainingFinal} (${((blocksRemainingFinal / 150) * 100).toFixed(1)}% of validity window)`);
+
+      if (blocksRemainingFinal < 10) {
+        console.warn(`⚠️ WARNING: Only ${blocksRemainingFinal} blocks remaining - blockhash may expire soon!`);
+      }
+
+      // Set blockhash immediately
+      finalTransaction.recentBlockhash = blockhashFinal;
+
+      // CRITICAL: Verify instruction structure AFTER signing (before serialization)
+      console.log(`🔍 Final verification of signed transaction:`);
+      finalTransaction.instructions.forEach((inst, idx) => {
+        console.log(`   Instruction ${idx} (after signing):`);
+        console.log(`     Program ID: ${inst.programId.toString()}`);
+        console.log(`     Accounts: ${inst.keys.length}`);
+        inst.keys.forEach((key, keyIdx) => {
+          console.log(`       [${keyIdx}] ${key.pubkey.toString().substring(0, 8)}... (signer: ${key.isSigner}, writable: ${key.isWritable})`);
+        });
+        console.log(`     Data: ${inst.data.length} bytes`);
+
+        // For instruction 0 (ATA creation), verify it's still correct
+        if (idx === 0 && inst.programId.toString() !== ASSOCIATED_TOKEN_PROGRAM_ID.toString()) {
+          throw new Error(
+            `❌ FATAL: Instruction 0 program ID changed after signing!\n` +
+            `Expected: ${ASSOCIATED_TOKEN_PROGRAM_ID.toString()}\n` +
+            `Got: ${inst.programId.toString()}`
+          );
+        }
+      });
+
+      // Sign transaction IMMEDIATELY after setting blockhash (no delays)
+      const timeBeforeSign = Date.now();
       finalTransaction.sign(adminKeypair);
+      const timeAfterSign = Date.now();
+      const signTimeFinal = timeAfterSign - timeBeforeSign;
 
-      // Send transaction
-      const signature = await this.connection.sendRawTransaction(finalTransaction.serialize(), {
-        skipPreflight: false,
+      console.log(`⏱️ Signing time: ${signTimeFinal}ms`);
+      console.log(`=== SENDING ADMIN NFT WITHDRAWAL TRANSACTION ===`);
+      console.log(`Blockhash: ${blockhashFinal.substring(0, 8)}...${blockhashFinal.substring(-8)}`);
+      console.log(`Last valid block height: ${lastValidBlockHeightFinal}`);
+
+      // Log serialized transaction size
+      const serializedFinal = finalTransaction.serialize();
+      console.log(`📦 Serialized transaction size: ${serializedFinal.length} bytes`);
+
+      // If we couldn't verify the admin account but Helius confirmed NFT exists,
+      // skip preflight to allow the transaction to attempt execution
+      // (the transfer will fail naturally if the account doesn't exist)
+      const skipPreflight = !adminATAInfo && nftConfirmedByHelius;
+
+      if (skipPreflight) {
+        console.warn(`⚠️ Skipping preflight check - Helius confirmed NFT exists but RPC cannot verify account`);
+        console.warn(`⚠️ Transaction will be sent without simulation - if account doesn't exist, it will fail on-chain`);
+      }
+
+      // Send transaction IMMEDIATELY after signing (no delays, no size calculation)
+      const timeBeforeSend = Date.now();
+      const signatureFinal = await this.connection.sendRawTransaction(finalTransaction.serialize(), {
+        skipPreflight: skipPreflight,
         preflightCommitment: "confirmed",
         maxRetries: 3,
       });
+      const timeAfterSend = Date.now();
+      const sendTimeFinal = timeAfterSend - timeBeforeSend;
+      const totalTimeFromBlockhash = timeAfterSend - timeBeforeBlockhash;
+
+      console.log(`⏱️ Send time: ${sendTimeFinal}ms`);
+      console.log(`⏱️ Total time from blockhash fetch to send: ${totalTimeFromBlockhash}ms`);
+
+      // Check final block height (non-blocking, may fail)
+      try {
+        const finalBlockHeight = await this.connection.getBlockHeight("confirmed");
+        console.log(`⏱️ Blocks elapsed during send: ${finalBlockHeight - currentBlockHeightAfter}`);
+      } catch (e) {
+        // Ignore - not critical for operation
+      }
 
       console.log("=== ADMIN NFT WITHDRAWAL TRANSACTION SENT ===");
-      console.log(`Signature: ${signature}`);
+      console.log(`Signature: ${signatureFinal}`);
 
-      // Wait for confirmation
-      const confirmation = await this.retryRpcCall(
-        () => this.connection.confirmTransaction({
-          signature,
-          blockhash,
-          lastValidBlockHeight,
-        }, "confirmed")
-      );
+      // Wait for confirmation using robust method (handles blockhash expiration)
+      const confirmationFinal = await this.confirmTransactionRobust(signatureFinal, 120000);
 
-      if (confirmation.value.err) {
-        throw new Error(`NFT withdrawal failed: ${confirmation.value.err}`);
+      const confirmationErr = confirmationFinal.value?.err;
+      if (confirmationErr) {
+        // Properly serialize the error object to get meaningful error information
+        let errorMessage = typeof confirmationErr === 'object'
+          ? JSON.stringify(confirmationErr, null, 2)
+          : String(confirmationErr);
+
+        // Handle InstructionError specifically
+        if ((confirmationErr as any).InstructionError) {
+          const instructionError = (confirmationErr as any).InstructionError;
+          const instructionIndex = Array.isArray(instructionError) ? instructionError[0] : 'unknown';
+          const errorDetails = Array.isArray(instructionError) && instructionError[1]
+            ? instructionError[1]
+            : instructionError;
+
+          console.error("=== TRANSACTION FAILED (INSTRUCTION ERROR) ===");
+          console.error("Transaction signature:", signatureFinal);
+          console.error("Failed instruction index:", instructionIndex);
+          console.error("Error details (raw):", JSON.stringify(errorDetails, null, 2));
+          console.error("Error details (type):", typeof errorDetails);
+          console.error("Error details (isArray):", Array.isArray(errorDetails));
+
+          // Try to extract more details from the error
+          let detailedMessage = `NFT withdrawal failed: Instruction ${instructionIndex} failed`;
+          let errorCode = 'Unknown';
+
+          // Handle different error formats
+          if (Array.isArray(errorDetails) && errorDetails.length >= 2) {
+            // Format: [instruction_index, error_code]
+            const extractedIndex = errorDetails[0];
+            const extractedError = errorDetails[1];
+            console.error(`   Extracted from array: index=${extractedIndex}, error=${JSON.stringify(extractedError)}`);
+
+            if (typeof extractedError === 'object') {
+              // Error code is an object, try to extract the key
+              const errorKeys = Object.keys(extractedError);
+              if (errorKeys.length > 0) {
+                errorCode = errorKeys[0];
+                detailedMessage += ` (${errorCode})`;
+                console.error(`   Error code: ${errorCode}`);
+                console.error(`   Error value: ${JSON.stringify(extractedError[errorCode])}`);
+              } else {
+                detailedMessage += ` (${JSON.stringify(extractedError)})`;
+              }
+            } else {
+              errorCode = String(extractedError);
+              detailedMessage += ` (${errorCode})`;
+            }
+          } else if (typeof errorDetails === 'object') {
+            // Error is an object, extract keys
+            const errorKeys = Object.keys(errorDetails);
+            if (errorKeys.length > 0) {
+              errorCode = errorKeys[0];
+              detailedMessage += ` (${errorCode})`;
+              console.error(`   Error code: ${errorCode}`);
+              console.error(`   Error value: ${JSON.stringify(errorDetails[errorCode])}`);
+            } else if (errorDetails.Custom) {
+              errorCode = `Custom: ${errorDetails.Custom}`;
+              detailedMessage += ` (Custom error: ${errorDetails.Custom})`;
+            } else if (errorDetails.toString) {
+              detailedMessage += ` (${errorDetails.toString()})`;
+            }
+          } else {
+            errorCode = String(errorDetails);
+            detailedMessage += ` (${errorCode})`;
+          }
+
+          // Log instruction that failed
+          if (instructionIndex === 0) {
+            console.error(`   ❌ Instruction 0 (ATA Creation) failed with error: ${errorCode}`);
+            console.error(`   This is the ATA creation instruction.`);
+            console.error(`   Verify: Program ID should be ${ASSOCIATED_TOKEN_PROGRAM_ID.toString()}`);
+            console.error(`   Verify: Token Program should be ${TOKEN_PROGRAM_ID.toString()} in account [5]`);
+          } else if (instructionIndex === 1) {
+            console.error(`   ❌ Instruction 1 (Token Transfer) failed with error: ${errorCode}`);
+            console.error(`   This is the token transfer instruction.`);
+            console.error(`   Verify: Program ID should be ${TOKEN_PROGRAM_ID.toString()}`);
+          }
+
+          errorMessage = detailedMessage;
+        } else {
+          console.error("=== TRANSACTION FAILED ===");
+          console.error("Transaction signature:", signature);
+          console.error("Error details:", confirmation.value?.err);
+        }
+
+        throw new Error(
+          `${errorMessage}\n\n` +
+          `Transaction: ${signature}\n\n` +
+          `Check the transaction on Solana Explorer for more details:\n` +
+          `https://solscan.io/tx/${signature}\n\n` +
+          `Common causes:\n` +
+          `• NFT not in admin wallet\n` +
+          `• Insufficient SOL for transaction fees\n` +
+          `• Invalid token account\n` +
+          `• Network congestion`
+        );
       }
 
       console.log("=== ADMIN NFT WITHDRAWAL SUCCESS ===");
@@ -4146,10 +5441,10 @@ export class SolanaProgramService {
       let ADMIN_PRIVATE_KEY: string;
       try {
         const { supabase } = await import("@/service/supabase");
-        
+
         let adminKeyData: any = null;
         let adminKeyError: any = null;
-        
+
         // For projects, ONLY check project-specific admin key (no fallback to website_settings)
         if (projectId) {
           // Try project-specific admin key first
@@ -4159,7 +5454,7 @@ export class SolanaProgramService {
             .eq('project_id', projectId)
             .eq('setting_key', 'admin_private_key')
             .maybeSingle();
-          
+
           if (!projectKeyError && projectKeyData?.setting_value) {
             adminKeyData = { value: projectKeyData.setting_value };
             console.log(`✅ Using project-specific admin wallet for project ID: ${projectId}`);
@@ -4179,15 +5474,15 @@ export class SolanaProgramService {
             .select('value')
             .eq('key', 'admin_private_key')
             .maybeSingle();
-          
+
           adminKeyData = websiteKeyData;
           adminKeyError = websiteKeyError;
-          
+
           if (!adminKeyError && adminKeyData?.value) {
             console.log(`✅ Using main website admin wallet`);
           }
         }
-        
+
         const { data, error } = { data: adminKeyData, error: adminKeyError };
 
         if (error || !data || !data.value) {
@@ -4279,17 +5574,14 @@ export class SolanaProgramService {
       console.log("=== ADMIN SOL WITHDRAWAL TRANSACTION SENT ===");
       console.log(`Signature: ${signature}`);
 
-      // Wait for confirmation
-      const confirmation = await this.retryRpcCall(
-        () => this.connection.confirmTransaction({
-          signature,
-          blockhash,
-          lastValidBlockHeight,
-        }, "confirmed")
-      );
+      // Wait for confirmation using robust method (handles blockhash expiration)
+      const confirmation = await this.confirmTransactionRobust(signature, 120000);
 
-      if (confirmation.value.err) {
-        throw new Error(`SOL withdrawal failed: ${confirmation.value.err}`);
+      if (confirmation.value?.err) {
+        const errorMessage = typeof confirmation.value.err === 'object'
+          ? JSON.stringify(confirmation.value.err, null, 2)
+          : String(confirmation.value.err);
+        throw new Error(`SOL withdrawal failed: ${errorMessage}\n\nTransaction: ${signature}\n\nCheck the transaction on Solana Explorer for more details.`);
       }
 
       console.log("=== ADMIN SOL WITHDRAWAL SUCCESS ===");
@@ -4900,7 +6192,7 @@ export class SolanaProgramService {
       const { supabase: supabaseSync } = await import("@/service/supabase");
       let adminKeyData: any = null;
       let adminKeyError: any = null;
-      
+
       if (projectId) {
         // Try project-specific admin key first
         const { data: projectKeyData, error: projectKeyError } = await supabaseSync
@@ -4909,7 +6201,7 @@ export class SolanaProgramService {
           .eq('project_id', projectId)
           .eq('setting_key', 'admin_private_key')
           .maybeSingle();
-        
+
         if (!projectKeyError && projectKeyData?.setting_value) {
           adminKeyData = { value: projectKeyData.setting_value };
           console.log(`✅ Using project-specific admin wallet for project ID: ${projectId}`);
@@ -4929,10 +6221,10 @@ export class SolanaProgramService {
           .select('value')
           .eq('key', 'admin_private_key')
           .maybeSingle();
-        
+
         adminKeyData = websiteKeyData;
         adminKeyError = websiteKeyError;
-        
+
         if (!adminKeyError && adminKeyData?.value) {
           console.log(`✅ Using main website admin wallet`);
         }

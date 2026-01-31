@@ -12,6 +12,7 @@ import Loader from "@/app/Components/Loader";
 import JackpotImage from "@/app/Components/JackpotImage";
 import { useThemeColor } from "@/lib/hooks/useThemeColor";
 import { ProductCardSkeleton, PrizeCardSkeleton } from "@/app/Components/Skeleton";
+import { useState, useEffect } from "react";
 
 // Types for the API responses
 interface Product {
@@ -96,11 +97,15 @@ export default function ProjectHomePage() {
             .select("*")
             .order("created_at", { ascending: false })
             .limit(20);
-        // Only filter by project_id if NOT main project
+        // Filter by project_id based on whether we're on main project or sub-project
         if (!isMainProject && projectId) {
+            // Sub-project: filter by specific project_id
             query = query.eq("project_id", projectId);
+        } else if (isMainProject) {
+            // Main project: ONLY show rewards where project_id IS NULL (legacy main project data)
+            // This isolates main project from sub-projects
+            query = query.is("project_id", null);
         }
-        // For main project, return all prize wins (legacy data without project_id)
         return query;
     };
 
@@ -151,6 +156,65 @@ export default function ProjectHomePage() {
 
     const { data: productsData, loading, error } = useRequest(getProducts);
     const { data: transactions, loading: transactionLoading, error: transactionError } = useRequest(getLatestTransaction);
+    
+    // State to store NFT images fetched from database
+    const [nftImageCache, setNftImageCache] = useState<Record<string, string>>({});
+    
+    // Fetch NFT images from database for entries that have mint but no image
+    useEffect(() => {
+        const fetchNFTImages = async () => {
+            if (!transactions?.data) return;
+            
+            const mintsToFetch: string[] = [];
+            transactions.data.forEach((win: any) => {
+                const rewardType = (win?.reward_type || '').toLowerCase();
+                const hasMint = !!win?.mint && win.mint.trim() !== '';
+                const hasImage = !!win?.image;
+                const isNFT = rewardType === 'nft' || (hasMint && rewardType !== 'sol');
+                
+                if (isNFT && hasMint && !hasImage && !nftImageCache[win.mint]) {
+                    mintsToFetch.push(win.mint);
+                }
+            });
+            
+            if (mintsToFetch.length === 0) return;
+            
+            console.log(`🔍 Fetching ${mintsToFetch.length} NFT images from database...`);
+            
+            try {
+                const { data: nftData } = await supabase
+                    .from('nft_reward_percentages')
+                    .select('mint_address, reward_image')
+                    .in('mint_address', mintsToFetch);
+                
+                if (nftData) {
+                    const cache: Record<string, string> = {};
+                    nftData.forEach((nft: any) => {
+                        if (nft.reward_image) {
+                            cache[nft.mint_address] = nft.reward_image;
+                        }
+                    });
+                    
+                    if (Object.keys(cache).length > 0) {
+                        setNftImageCache(prev => {
+                            // Only update if there are new entries
+                            const hasNew = Object.keys(cache).some(mint => !prev[mint]);
+                            if (hasNew) {
+                                return { ...prev, ...cache };
+                            }
+                            return prev;
+                        });
+                        console.log(`✅ Fetched ${Object.keys(cache).length} NFT images from database`);
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Error fetching NFT images:', error);
+            }
+        };
+        
+        fetchNFTImages();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [transactions?.data]);
 
     // Helper function to get product image by product_id
     const getProductImage = (productId: number) => {
@@ -260,6 +324,10 @@ export default function ProjectHomePage() {
                             Array.from({ length: 5 }).map((_, index) => (
                                 <PrizeCardSkeleton key={index} />
                             ))
+                        ) : !transactions?.data || transactions.data.length === 0 ? (
+                            <div className="flex items-center justify-center w-full min-h-[200px]">
+                                <p className="text-xl text-white">No data available</p>
+                            </div>
                         ) : (
                             transactions?.data?.map((win, index) => {
                             // Determine image source based on reward type
@@ -297,15 +365,32 @@ export default function ProjectHomePage() {
                                 image: win?.image,
                                 imageIsMint: imageIsMint,
                                 isNFT: isNFT,
-                                isSOL: isSOL
+                                isSOL: isSOL,
+                                cachedImage: hasMint ? nftImageCache[win.mint] : null
                             });
                             
                             if (isNFT) {
-                                // NFT reward - use mint address to fetch NFT image
-                                // Prefer mint field, fallback to image if it's a mint address
-                                imageSource = hasMint ? win.mint : (imageIsMint ? win.image : null);
+                                // NFT reward - prioritize cached image, then image field, then mint address
+                                const mintAddress = hasMint ? win.mint : (imageIsMint ? win.image : null);
+                                
+                                if (mintAddress && nftImageCache[mintAddress]) {
+                                    // Use cached image from database
+                                    imageSource = nftImageCache[mintAddress];
+                                    console.log(`✅ Using cached NFT image from database:`, imageSource);
+                                } else if (win?.image && !imageIsMint) {
+                                    // Use image field if it's a URL (not a mint address)
+                                    imageSource = win.image;
+                                    console.log(`🖼️ Using image URL from prizeWin:`, imageSource);
+                                } else if (mintAddress) {
+                                    // Use mint address (JackpotImage will fetch metadata)
+                                    imageSource = mintAddress;
+                                    console.log(`🎨 Using NFT mint address (will fetch metadata):`, imageSource);
+                                } else {
+                                    // No mint address or image URL found
+                                    imageSource = null;
+                                    console.warn(`⚠️ NFT detected but no mint address or image URL found. mint: ${win.mint}, image: ${win.image}`);
+                                }
                                 fallbackImage = null; // No placeholder for NFTs - only show real images
-                                console.log(`🎨 Using NFT image source:`, imageSource);
                             } else if (isSOL) {
                                 // SOL/token reward - use SOL logo
                                 imageSource = "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png";
@@ -376,6 +461,10 @@ export default function ProjectHomePage() {
                     Array.from({ length: 10 }).map((_, index) => (
                         <ProductCardSkeleton key={index} />
                     ))
+                ) : !productsData?.data || productsData.data.length === 0 ? (
+                    <div className="col-span-full flex items-center justify-center min-h-[200px]">
+                        <p className="text-xl text-white">No data available</p>
+                    </div>
                 ) : (
                     productsData?.data?.map((loot, index) => (
                     <div

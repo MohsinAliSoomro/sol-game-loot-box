@@ -4,7 +4,7 @@ import { useUserState } from "@/state/useUserState";
 import { useRequest } from "ahooks";
 import JackpotImage from "../../Components/JackpotImage";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Countdown from "react-countdown";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -154,10 +154,11 @@ export default function Page() {
     const [value, setValue] = useState("");
     const [user, setUser] = useUserState();
     const [isTimeExpired, setIsTimeExpired] = useState(false);
-    const [currentWinner, setCurrentWinner] = useState<{user_id: string; amount: number; created_at: string} | null>(null);
+    const [currentWinner, setCurrentWinner] = useState<{user_id: string; amount: number; created_at: string; reward_type?: string; is_nft?: boolean} | null>(null);
     const params = useParams<{ slug: string }>();
     const { data, loading, error, run } = useRequest(getJackpotData);
     const { publicKey, connected } = useWallet(); // Check wallet connection status
+    const balanceCreditedRef = useRef<Set<string>>(new Set()); // Track which winners have been credited in this session
     
     // Debug: Log user state and wallet connection changes
     useEffect(() => {
@@ -269,73 +270,72 @@ export default function Page() {
                                                !poolData.image.includes('.');
                             const isItemPrize = !isNFTJackpot && poolData?.item_price && poolData.item_price > 0;
                             
-                            // If it's an item prize, check and credit balance if not already done
+                            // If it's an item prize, claim reward via API (idempotent)
                             if (isItemPrize) {
                                 const itemPriceAmount = parseFloat(String(poolData.item_price)) || 0;
-                                console.log(`🎁 Existing winner found for item prize. Checking if ${itemPriceAmount} OGX was credited...`);
+                                console.log(`🎁 Existing winner found for item prize. Claiming ${itemPriceAmount} OGX via API...`);
                                 
-                                try {
-                                    // Try to find user by ID first
-                                    let { data: userData, error: userError } = await supabase
-                                        .from('user')
-                                        .select('id, apes, walletAddress')
-                                        .eq('id', existingWin.user_id)
-                                        .single();
-                                    
-                                    // If not found by ID, try by walletAddress
-                                    if (userError || !userData) {
-                                        console.log("⚠️ User not found by ID, trying walletAddress...");
-                                        const { data: walletUserData, error: walletError } = await supabase
-                                            .from('user')
-                                            .select('id, apes, walletAddress')
-                                            .eq('walletAddress', existingWin.user_id)
-                                            .single();
-                                        
-                                        if (!walletError && walletUserData) {
-                                            userData = walletUserData;
-                                            userError = null;
-                                            console.log("✅ User found by walletAddress:", userData.id);
-                                        }
-                                    }
-                                    
-                                    if (!userError && userData) {
-                                        // Check if balance needs to be credited
-                                        // We'll credit it anyway to ensure it's done (idempotent operation)
-                                        const currentBalance = parseFloat(String(userData.apes || 0));
-                                        const newBalance = currentBalance + itemPriceAmount;
-                                        
-                                        console.log(`💰 Crediting balance for existing winner: ${currentBalance} + ${itemPriceAmount} = ${newBalance}`);
-                                        
-                                        const { error: updateError } = await supabase
-                                            .from('user')
-                                            .update({ apes: newBalance })
-                                            .eq('id', userData.id);
-                                        
-                                        if (updateError) {
-                                            console.error("❌ Error crediting balance for existing winner:", updateError);
+                                // Create a unique key for this winner+pool combination
+                                const creditKey = `${poolId}-${existingWin.user_id}`;
+                                
+                                // Check if we've already claimed this winner in this session
+                                if (balanceCreditedRef.current.has(creditKey)) {
+                                    console.log(`⏭️ Skipping reward claim - already claimed for winner ${existingWin.user_id} in pool ${poolId} in this session`);
+                                } else {
+                                    try {
+                                        // Call backend API to claim reward (idempotent)
+                                        const response = await fetch('/api/claim-jackpot-reward', {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                            },
+                                            body: JSON.stringify({
+                                                winId: existingWin.id,
+                                                userId: existingWin.user_id,
+                                                poolId: poolId,
+                                                projectId: null // Main project
+                                            }),
+                                        });
+
+                                        const result = await response.json();
+
+                                        if (result.success) {
+                                            if (result.alreadyClaimed) {
+                                                console.log(`✅ Reward already claimed (idempotent check)`);
+                                            } else {
+                                                console.log(`✅ Reward claimed successfully: ${result.rewardAmount} tokens. New balance: ${result.newBalance}`);
+                                            }
+                                            // Mark as claimed to prevent duplicate API calls
+                                            balanceCreditedRef.current.add(creditKey);
                                         } else {
-                                            console.log(`✅ Balance credited for existing winner: ${itemPriceAmount} OGX. New balance: ${newBalance}`);
+                                            console.error("❌ Error claiming reward:", result.error);
                                         }
-                                    } else {
-                                        console.error("❌ Could not find user to credit balance:", userError);
+                                    } catch (claimError) {
+                                        console.error("❌ Exception claiming reward:", claimError);
                                     }
-                                } catch (creditError) {
-                                    console.error("❌ Exception crediting balance for existing winner:", creditError);
                                 }
                             }
                             
                             // For item prizes, display item_price instead of the stored amount
-                            const displayAmount = isItemPrize && poolData?.item_price 
-                                ? parseFloat(String(poolData.item_price)) 
-                                : existingWin.amount;
+                            // CRITICAL: For NFT jackpots, don't show OGX amount
+                            let displayAmount = 0;
+                            if (isItemPrize && poolData?.item_price) {
+                                displayAmount = parseFloat(String(poolData.item_price));
+                            } else if (!isNFTJackpot) {
+                                // Only show amount for token/SOL rewards, not NFT rewards
+                                displayAmount = parseFloat(String(existingWin.amount || 0));
+                            }
+                            // For NFT jackpots, displayAmount remains 0
                             
                             setCurrentWinner({
                                 user_id: existingWin.user_id,
                                 amount: displayAmount,
-                                created_at: existingWin.created_at
+                                created_at: existingWin.created_at,
+                                reward_type: isNFTJackpot ? 'nft' : (isItemPrize ? 'item' : 'sol'),
+                                is_nft: isNFTJackpot
                             });
                             
-                            console.log(`🎯 Display amount for existing winner: ${displayAmount} OGX (isItemPrize: ${isItemPrize}, item_price: ${poolData?.item_price}, stored amount: ${existingWin.amount})`);
+                            console.log(`🎯 Display amount for existing winner: ${displayAmount} (isNFTJackpot: ${isNFTJackpot}, isItemPrize: ${isItemPrize}, item_price: ${poolData?.item_price}, stored amount: ${existingWin.amount})`);
                             return;
                         }
                         
@@ -411,86 +411,8 @@ export default function Page() {
                                                !poolData.image.includes('.');
                             const isItemPrize = !isNFTJackpot && poolData?.item_price && poolData.item_price > 0;
                             
-                            // If it's an item prize, credit the item_price directly to user balance
-                            if (isItemPrize) {
-                                const itemPriceAmount = parseFloat(String(poolData.item_price)) || 0;
-                                console.log(`🎁 Item jackpot prize detected. Crediting ${itemPriceAmount} OGX directly to user balance.`);
-                                console.log(`🔍 DEBUG: Winner user_id: ${winner.user_id}, item_price: ${itemPriceAmount}`);
-                                
-                                try {
-                                    // Get current user balance (main project uses legacy 'user' table)
-                                    // Try to find user by ID first
-                                    let { data: userData, error: userError } = await supabase
-                                        .from('user')
-                                        .select('id, apes, walletAddress')
-                                        .eq('id', winner.user_id)
-                                        .single();
-                                    
-                                    // If not found by ID, try by walletAddress (in case user_id is actually a wallet address)
-                                    if (userError || !userData) {
-                                        console.log("⚠️ User not found by ID, trying walletAddress...");
-                                        const walletAddress = winner.user_id;
-                                        const { data: walletUserData, error: walletError } = await supabase
-                                            .from('user')
-                                            .select('id, apes, walletAddress')
-                                            .eq('walletAddress', walletAddress)
-                                            .single();
-                                        
-                                        if (!walletError && walletUserData) {
-                                            userData = walletUserData;
-                                            userError = null;
-                                            console.log("✅ User found by walletAddress:", walletUserData.id);
-                                        }
-                                    }
-                                    
-                                    if (userError || !userData) {
-                                        console.error("❌ Error fetching user balance for item jackpot prize:", {
-                                            userError,
-                                            userId: winner.user_id,
-                                            userData
-                                        });
-                                        // Show alert to user
-                                        alert(`Error: Could not find user account to credit ${itemPriceAmount} OGX. Please contact support with user ID: ${winner.user_id}`);
-                                    } else {
-                                        const currentBalance = parseFloat(String(userData.apes || 0));
-                                        const newBalance = currentBalance + itemPriceAmount;
-                                        
-                                        console.log(`💰 Balance update: ${currentBalance} + ${itemPriceAmount} = ${newBalance}`);
-                                        
-                                        // Update user balance using the correct user ID
-                                        const { data: updatedUser, error: updateError } = await supabase
-                                            .from('user')
-                                            .update({ apes: newBalance })
-                                            .eq('id', userData.id)
-                                            .select('apes')
-                                            .single();
-                                        
-                                        if (updateError) {
-                                            console.error("❌ Error crediting item jackpot prize to user balance:", {
-                                                updateError,
-                                                userId: userData.id,
-                                                newBalance
-                                            });
-                                            alert(`Error: Failed to credit ${itemPriceAmount} OGX to your balance. Please contact support.`);
-                                        } else {
-                                            console.log(`✅ Item jackpot prize credited: ${itemPriceAmount} OGX. New balance: ${updatedUser?.apes}`);
-                                            // Show success message
-                                            toast.success(`🎉 ${itemPriceAmount} OGX credited to your balance!`, {
-                                                position: "top-center",
-                                                autoClose: 5000,
-                                            });
-                                        }
-                                    }
-                                } catch (itemPrizeError) {
-                                    console.error("❌ Exception crediting item jackpot prize:", itemPrizeError);
-                                    alert(`Error: Exception while crediting ${itemPriceAmount} OGX. Please contact support.`);
-                                }
-                                
-                                // For item prizes, we don't add to prizeWin table - they're credited directly
-                                // Skip the prizeWin insertion below
-                            } else {
-                                console.log("ℹ️ Not an item prize - isNFTJackpot:", isNFTJackpot, "item_price:", poolData?.item_price);
-                            }
+                            // Note: Item prize balance crediting is now handled by the API after win is recorded
+                            // We'll call the claim API after inserting the win record
                             
                             // Verify user exists in auth.users before inserting
                             // The user_id from contributions should be a valid auth.users UUID
@@ -526,18 +448,26 @@ export default function Page() {
                                 .single();
                             
                             // Set current winner for display (regardless of jackpot_wins insert success)
+                            // CRITICAL: For NFT jackpots, don't show OGX amount - show 0 or null
                             // For item prizes, display item_price instead of prizeAmount
-                            const displayAmount = isItemPrize && poolData?.item_price 
-                                ? parseFloat(String(poolData.item_price)) 
-                                : prizeAmount;
+                            let displayAmount = 0;
+                            if (isItemPrize && poolData?.item_price) {
+                                displayAmount = parseFloat(String(poolData.item_price));
+                            } else if (!isNFTJackpot) {
+                                // Only show amount for token/SOL rewards, not NFT rewards
+                                displayAmount = prizeAmount;
+                            }
+                            // For NFT jackpots, displayAmount remains 0 (will be handled in UI)
                             
                             setCurrentWinner({
                                 user_id: winner.user_id,
                                 amount: displayAmount,
-                                created_at: winData?.created_at || new Date().toISOString()
+                                created_at: winData?.created_at || new Date().toISOString(),
+                                reward_type: isNFTJackpot ? 'nft' : (isItemPrize ? 'item' : 'sol'),
+                                is_nft: isNFTJackpot
                             });
                             
-                            console.log(`🎯 Display amount set: ${displayAmount} OGX (isItemPrize: ${isItemPrize}, item_price: ${poolData?.item_price}, prizeAmount: ${prizeAmount})`);
+                            console.log(`🎯 Display amount set: ${displayAmount} (isNFTJackpot: ${isNFTJackpot}, isItemPrize: ${isItemPrize}, item_price: ${poolData?.item_price}, prizeAmount: ${prizeAmount})`);
                             
                             if (!winError && winData) {
                                 console.log("🎉 FINAL WINNER SELECTED!", {
@@ -576,7 +506,6 @@ export default function Page() {
                                         userId: winner.user_id,
                                         name: jackpotName,
                                         image: jackpotImage,
-                                        sol: String(prizeAmount), // Prize amount as string
                                         isWithdraw: false, // Not withdrawn yet
                                         reward_type: rewardType, // 'nft' if NFT prize, 'sol' if SOL/OGX prize
                                         product_id: null, // Not from a product/lootbox
@@ -584,21 +513,28 @@ export default function Page() {
                                         // project_id will be NULL for main project (default)
                                     };
                                     
-                                    // If jackpot prize is an NFT, add mint address (required for sidebar cart to show it)
+                                    // CRITICAL: Only set 'sol' field for SOL/token rewards, NOT for NFT rewards
+                                    // For NFT jackpots, sol should be null or "0" to prevent showing token rewards
                                     if (isNFTJackpot) {
+                                        // NFT jackpot: set sol to null (or "0") and add mint address
+                                        prizeWinInsert.sol = null; // Explicitly null for NFT rewards
                                         prizeWinInsert.mint = poolData.image;
                                         console.log("🎨 Adding NFT jackpot prize to cart:", {
                                             mint: poolData.image,
                                             name: jackpotName,
                                             userId: winner.user_id,
-                                            reward_type: rewardType
+                                            reward_type: rewardType,
+                                            sol: null // Confirmed: no SOL reward for NFT jackpots
                                         });
                                     } else {
+                                        // SOL/token jackpot: set sol to prize amount
+                                        prizeWinInsert.sol = String(prizeAmount);
                                         console.log("💰 Adding SOL/OGX jackpot prize to cart:", {
                                             amount: prizeAmount,
                                             name: jackpotName,
                                             userId: winner.user_id,
-                                            reward_type: rewardType
+                                            reward_type: rewardType,
+                                            sol: prizeAmount
                                         });
                                     }
                                     
@@ -831,8 +767,7 @@ export default function Page() {
         let updateQuery = supabase
             .from("project_users")
             .update({ apes: remainApes })
-            .eq("id", user.id)
-            .select(); // Select to verify the update
+            .eq("id", user.id);
         
         // Filter by project_id if it's a sub-project
         if (!isMainProject && projectId) {
@@ -842,7 +777,7 @@ export default function Page() {
             updateQuery = updateQuery.is("project_id", null);
         }
         
-        let { data: updatedUser, error: updateError } = await updateQuery;
+        let { data: updatedUser, error: updateError } = await updateQuery.select(); // Select to verify the update
         
         // If update failed and we're on main project, try without project_id filter as fallback
         if ((!updatedUser || updatedUser.length === 0) && isMainProject && !updateError) {
@@ -1175,7 +1110,13 @@ export default function Page() {
                                             <span className="font-semibold">User:</span> {currentWinner.user_id.substring(0, 8)}...{currentWinner.user_id.substring(currentWinner.user_id.length - 6)}
                                         </p>
                                         <p className="text-xl font-bold text-green-600">
-                                            Prize: {parseFloat(String(currentWinner.amount)).toFixed(2)} OGX
+                                            {currentWinner.is_nft || currentWinner.reward_type === 'nft' ? (
+                                                <>Prize: <span className="text-purple-600">NFT</span></>
+                                            ) : currentWinner.amount > 0 ? (
+                                                <>Prize: {parseFloat(String(currentWinner.amount)).toFixed(2)} OGX</>
+                                            ) : (
+                                                <>Prize: <span className="text-gray-500">N/A</span></>
+                                            )}
                                         </p>
                                         <p className="text-sm text-gray-500 mt-2">
                                             Final winner selected at: {formatLocalDateTime(currentWinner.created_at)}

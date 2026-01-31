@@ -25,25 +25,46 @@ export const useAdminWallet = () => {
 
       // Get project_id from localStorage
       const projectId = localStorage.getItem('currentProjectId');
-      if (!projectId) {
-        setAdminWalletAddress(null);
-        setLoading(false);
-        return;
+      
+      let privateKeyValue: string | null = null;
+
+      // First, try to fetch from project_settings (project-specific)
+      if (projectId) {
+        console.log('🔍 Fetching admin wallet from project_settings for project:', projectId);
+        const { data: projectData, error: projectError } = await supabase
+          .from('project_settings')
+          .select('setting_value')
+          .eq('project_id', parseInt(projectId))
+          .eq('setting_key', 'admin_private_key')
+          .single();
+
+        if (!projectError && projectData?.setting_value) {
+          privateKeyValue = projectData.setting_value;
+          console.log('✅ Found project-specific admin wallet');
+        } else {
+          console.log('⚠️ No project-specific admin wallet found, trying website_settings...');
+        }
       }
 
-      // Fetch admin private key from project_settings table (project-scoped)
-      // Each project must have its own admin_private_key configured
-      // NO fallback to website_settings - each project is isolated
-      const { data, error: fetchError } = await supabase
-        .from('project_settings')
-        .select('setting_value')
-        .eq('project_id', parseInt(projectId))
-        .eq('setting_key', 'admin_private_key')
-        .single();
+      // If no project-specific key found, try website_settings (main website admin)
+      if (!privateKeyValue) {
+        console.log('🔍 Fetching admin wallet from website_settings (main website)');
+        const { data: websiteData, error: websiteError } = await supabase
+          .from('website_settings')
+          .select('value')
+          .eq('key', 'admin_private_key')
+          .single();
 
-      // If no project-specific admin key is configured, return null
-      // This ensures each project admin must configure their own wallet
-      if (fetchError || !data?.setting_value) {
+        if (!websiteError && websiteData?.value) {
+          privateKeyValue = websiteData.value;
+          console.log('✅ Found main website admin wallet');
+        } else {
+          console.log('⚠️ No admin wallet found in either project_settings or website_settings');
+        }
+      }
+
+      // If still no key found, return null
+      if (!privateKeyValue) {
         setAdminWalletAddress(null);
         setLoading(false);
         return;
@@ -52,17 +73,18 @@ export const useAdminWallet = () => {
       // Convert private key to public key
       try {
         const bs58 = (await import('bs58')).default;
-        const privateKeyBytes = bs58.decode(data.setting_value.trim());
+        const privateKeyBytes = bs58.decode(privateKeyValue.trim());
         const keypair = Keypair.fromSecretKey(privateKeyBytes);
         const walletAddress = keypair.publicKey.toString();
+        console.log('✅ Admin wallet address derived:', walletAddress);
         setAdminWalletAddress(walletAddress);
       } catch (decodeError: any) {
-        console.error('Error decoding private key:', decodeError);
+        console.error('❌ Error decoding private key:', decodeError);
         setError('Invalid private key format in database');
         setAdminWalletAddress(null);
       }
     } catch (err: any) {
-      console.error('Error in fetchAdminWallet:', err);
+      console.error('❌ Error in fetchAdminWallet:', err);
       setError(err.message);
       setAdminWalletAddress(null);
     } finally {
@@ -76,32 +98,45 @@ export const useAdminWallet = () => {
 
     try {
       const projectId = localStorage.getItem('currentProjectId');
-      if (!projectId) {
-        setAdminWalletAddress(null);
-        setLoading(false);
-        return;
+      
+      let privateKeyValue: string | null = null;
+
+      // First, try to fetch from project_settings (project-specific)
+      if (projectId) {
+        const { data: projectData, error: projectError } = await supabase
+          .from('project_settings')
+          .select('setting_value')
+          .eq('project_id', parseInt(projectId))
+          .eq('setting_key', 'admin_private_key')
+          .single();
+
+        if (!projectError && projectData?.setting_value) {
+          privateKeyValue = projectData.setting_value;
+        }
       }
 
-      // Fetch admin private key from project_settings table (project-scoped)
-      // Each project must have its own admin_private_key configured
-      // NO fallback to website_settings - each project is isolated
-      const { data, error: fetchError } = await supabase
-        .from('project_settings')
-        .select('setting_value')
-        .eq('project_id', parseInt(projectId))
-        .eq('setting_key', 'admin_private_key')
-        .single();
+      // If no project-specific key found, try website_settings (main website admin)
+      if (!privateKeyValue) {
+        const { data: websiteData, error: websiteError } = await supabase
+          .from('website_settings')
+          .select('value')
+          .eq('key', 'admin_private_key')
+          .single();
 
-      // If no project-specific admin key is configured, return null
-      // This ensures each project admin must configure their own wallet
-      if (fetchError || !data?.setting_value) {
+        if (!websiteError && websiteData?.value) {
+          privateKeyValue = websiteData.value;
+        }
+      }
+
+      // If still no key found, return null
+      if (!privateKeyValue) {
         setAdminWalletAddress(null);
         setLoading(false);
         return;
       }
 
       const bs58 = (await import('bs58')).default;
-      const privateKeyBytes = bs58.decode(data.setting_value.trim());
+      const privateKeyBytes = bs58.decode(privateKeyValue.trim());
       const keypair = Keypair.fromSecretKey(privateKeyBytes);
       const walletAddress = keypair.publicKey.toString();
       setAdminWalletAddress(walletAddress);
