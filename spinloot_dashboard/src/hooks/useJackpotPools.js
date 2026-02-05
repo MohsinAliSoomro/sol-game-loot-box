@@ -58,48 +58,57 @@ export const useJackpotPools = () => {
 
       // Handle image upload if provided
       if (jackpotData.image) {
-        // Check if it's a File object (image upload) or string (NFT mint address)
+        // Check if it's a File object (image upload) or string (NFT mint address or image URL)
         if (typeof jackpotData.image === 'string') {
-          // It's an NFT mint address, check if it's already used
-          const isNFT = jackpotData.image.length >= 32 && 
-                       jackpotData.image.length <= 44 && 
-                       !jackpotData.image.includes('/') &&
-                       !jackpotData.image.includes('.')
+          // Check if it's already a valid HTTP URL (new format - image URL stored directly)
+          const isImageUrl = jackpotData.image.startsWith('http://') || jackpotData.image.startsWith('https://')
           
-          if (isNFT) {
-            // Check if this NFT is already used in another jackpot
-            const exists = await checkNFTExists(jackpotData.image)
-            if (exists) {
-              throw new Error('This NFT is already added to another jackpot. Please select a different NFT.')
+          if (isImageUrl) {
+            // It's already an image URL, use it directly
+            imageUrl = jackpotData.image
+          } else {
+            // It's an NFT mint address, check if it's already used
+            const isNFT = jackpotData.image.length >= 32 && 
+                         jackpotData.image.length <= 44 && 
+                         !jackpotData.image.includes('/') &&
+                         !jackpotData.image.includes('.')
+            
+            if (isNFT) {
+              // Check if this NFT is already used in another jackpot
+              const exists = await checkNFTExists(jackpotData.image)
+              if (exists) {
+                throw new Error('This NFT is already added to another jackpot. Please select a different NFT.')
+              }
+              
+              // Check if this NFT is already used in a lootbox
+              const { data: lootboxData, error: lootboxError } = await supabase
+                .from('nft_reward_percentages')
+                .select('id, product_id')
+                .eq('mint_address', jackpotData.image)
+                .limit(1)
+              
+              if (!lootboxError && lootboxData && lootboxData.length > 0) {
+                throw new Error('This NFT is already added to a lootbox. Please select a different NFT.')
+              }
+              
+              // Check if this NFT is in a user's cart (prizeWin with isWithdraw: false and reward_type: 'nft')
+              // NFTs in cart are won by users but not yet claimed - they shouldn't be reused in jackpots
+              const { data: cartData, error: cartError } = await supabase
+                .from('prizeWin')
+                .select('id, userId, isWithdraw, reward_type')
+                .eq('mint', jackpotData.image)
+                .eq('isWithdraw', false) // Block if in user's cart (won but not claimed)
+                .eq('reward_type', 'nft') // Only check NFT rewards (not SOL rewards)
+                .limit(1)
+              
+              if (!cartError && cartData && cartData.length > 0) {
+                throw new Error('This NFT is currently in a user\'s cart (won but not yet claimed). It cannot be added to a jackpot until the user claims it.')
+              }
             }
             
-            // Check if this NFT is already used in a lootbox
-            const { data: lootboxData, error: lootboxError } = await supabase
-              .from('nft_reward_percentages')
-              .select('id, product_id')
-              .eq('mint_address', jackpotData.image)
-              .limit(1)
-            
-            if (!lootboxError && lootboxData && lootboxData.length > 0) {
-              throw new Error('This NFT is already added to a lootbox. Please select a different NFT.')
-            }
-            
-            // Check if this NFT is in a user's cart (prizeWin with isWithdraw: false and reward_type: 'nft')
-            // NFTs in cart are won by users but not yet claimed - they shouldn't be reused in jackpots
-            const { data: cartData, error: cartError } = await supabase
-              .from('prizeWin')
-              .select('id, userId, isWithdraw, reward_type')
-              .eq('mint', jackpotData.image)
-              .eq('isWithdraw', false) // Block if in user's cart (won but not claimed)
-              .eq('reward_type', 'nft') // Only check NFT rewards (not SOL rewards)
-              .limit(1)
-            
-            if (!cartError && cartData && cartData.length > 0) {
-              throw new Error('This NFT is currently in a user\'s cart (won but not yet claimed). It cannot be added to a jackpot until the user claims it.')
-            }
+            // Use mint address (old format) or image URL (new format)
+            imageUrl = jackpotData.image
           }
-          
-          imageUrl = jackpotData.image
         } else if (jackpotData.image.name) {
           // It's a file upload
           const fileExt = jackpotData.image.name.split('.').pop()

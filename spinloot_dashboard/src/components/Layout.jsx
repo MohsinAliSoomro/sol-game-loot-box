@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { NavLink, useLocation, Outlet } from 'react-router-dom';
+import { NavLink, useLocation, Outlet, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 const navLinks = [
   { name: 'Dashboard', path: '/' },
@@ -28,10 +29,16 @@ function getPageTitle(pathname) {
 
 function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
   const pageTitle = getPageTitle(location.pathname);
   const [openSettings, setOpenSettings] = useState(location.pathname.startsWith('/settings') || location.pathname.startsWith('/jackpot-settings') || location.pathname.startsWith('/website-settings') || location.pathname.startsWith('/token-management'));
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/login');
+  };
 
   return (
     <div className="flex h-screen bg-gray-100">
@@ -98,14 +105,29 @@ function Layout() {
           </ul>
         </nav>
         <div className="p-6 border-t border-gray-100">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
-              <span className="text-orange-600 font-semibold">A</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
+                <span className="text-orange-600 font-semibold">
+                  {user?.username?.[0]?.toUpperCase() || 'A'}
+                </span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">
+                  {user?.username || 'Admin'}
+                </p>
+                <p className="text-xs text-gray-500">Administrator</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-gray-900">Admin User</p>
-              <p className="text-xs text-gray-500">admin@lootbox.com</p>
-            </div>
+            <button
+              onClick={handleLogout}
+              className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+              title="Logout"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </button>
           </div>
         </div>
       </aside>

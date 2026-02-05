@@ -1,6 +1,6 @@
 import { Connection, PublicKey } from '@solana/web3.js'
 
-const RPC_ENDPOINT = 'https://api.devnet.solana.com'
+const RPC_ENDPOINT = 'https://mainnet.helius-rpc.com/?api-key=5a1a852c-3ed9-40ee-bca8-dda4550c3ce8'
 
 /**
  * Fetch NFT metadata from mint address

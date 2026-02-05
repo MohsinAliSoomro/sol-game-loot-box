@@ -3,6 +3,7 @@ import { useJackpotPools } from '../hooks/useJackpotPools';
 import { useWalletNFTs } from '../hooks/useWalletNFTs';
 import { useAdminWallet } from '../hooks/useAdminWallet';
 import { fetchNFTMetadata } from '../utils/fetchNFTMetadata';
+import { convertIPFSToHTTP } from '../utils/ipfs';
 
 function JackpotSettings() {
   const { jackpots, loading, error, addJackpot, updateJackpot, deleteJackpot, getUsedNFTMints, getLootboxNFTMints, getCartNFTMints, checkNFTExists } = useJackpotPools();
@@ -55,12 +56,15 @@ function JackpotSettings() {
     };
     
     fetchUsedNFTs();
-  }, [jackpots, getUsedNFTMints, getLootboxNFTMints, getCartNFTMints]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jackpots]); // Only depend on jackpots, not the functions (they're stable from the hook)
 
   // Fetch NFT images for jackpots that have NFT mint addresses
   useEffect(() => {
     const fetchNFTImages = async () => {
-      const imageCache = {};
+      // Preserve existing cache
+      const imageCache = { ...jackpotNFTImages };
+      let hasChanges = false;
       
       for (const jackpot of jackpots) {
         if (jackpot.image) {
@@ -71,30 +75,68 @@ function JackpotSettings() {
                            !jackpot.image.includes('/') &&
                            !jackpot.image.includes('.');
           
+          // Only fetch if not already cached
           if (isNFTMint && !imageCache[jackpot.image]) {
-            try {
-              const metadata = await fetchNFTMetadata(jackpot.image);
-              if (metadata && metadata.image) {
-                imageCache[jackpot.image] = metadata.image;
+            // First, try to find the NFT in walletNFTs (from Helius - already has image)
+            const walletNFT = walletNFTs.find((nft) => nft.mint === jackpot.image);
+            
+            if (walletNFT && walletNFT.image) {
+              // Use image from walletNFTs (already converted from IPFS by useWalletNFTs)
+              const convertedImage = convertIPFSToHTTP(walletNFT.image) || walletNFT.image;
+              imageCache[jackpot.image] = convertedImage;
+              hasChanges = true;
+            } else if (!nftsLoading) {
+              // Only fetch metadata if walletNFTs has finished loading (to avoid duplicate fetches)
+              // Fallback to fetching metadata
+              try {
+                const metadata = await fetchNFTMetadata(jackpot.image);
+                if (metadata && metadata.image) {
+                  // Convert IPFS URLs to HTTP gateway URLs
+                  const convertedImage = convertIPFSToHTTP(metadata.image) || metadata.image;
+                  imageCache[jackpot.image] = convertedImage;
+                  hasChanges = true;
+                }
+              } catch (error) {
+                console.error('Error fetching NFT image for', jackpot.image, error);
               }
-            } catch (error) {
-              console.error('Error fetching NFT image for', jackpot.image, error);
+            }
+          } else if (!isNFTMint && jackpot.image) {
+            // It's already an image URL, convert IPFS if needed
+            const convertedImage = convertIPFSToHTTP(jackpot.image) || jackpot.image;
+            if (convertedImage && (convertedImage.startsWith('http://') || convertedImage.startsWith('https://'))) {
+              // Store it with a key based on jackpot ID for reference
+              const cacheKey = `url_${jackpot.id}`;
+              if (!imageCache[cacheKey]) {
+                imageCache[cacheKey] = convertedImage;
+                hasChanges = true;
+              }
             }
           }
         }
       }
       
-      setJackpotNFTImages(imageCache);
+      // Only update state if there are actual changes
+      if (hasChanges) {
+        setJackpotNFTImages(imageCache);
+      }
     };
     
     if (jackpots.length > 0) {
       fetchNFTImages();
     }
-  }, [jackpots]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jackpots, nftsLoading]); // Only depend on jackpots and loading state, not walletNFTs array
 
   // Helper function to get image URL for a jackpot
   const getJackpotImageUrl = (jackpot) => {
     if (!jackpot.image) return null;
+    
+    // Check if it's already a valid HTTP URL (image URL stored directly in database)
+    if (typeof jackpot.image === 'string' && 
+        (jackpot.image.startsWith('http://') || jackpot.image.startsWith('https://'))) {
+      // It's already an image URL, convert IPFS if needed and use it directly
+      return convertIPFSToHTTP(jackpot.image) || jackpot.image;
+    }
     
     // Check if it's an NFT mint address
     const isNFTMint = typeof jackpot.image === 'string' && 
@@ -104,12 +146,29 @@ function JackpotSettings() {
                      !jackpot.image.includes('.');
     
     if (isNFTMint) {
-      // Return cached NFT image or null
-      return jackpotNFTImages[jackpot.image] || null;
+      // First, check if we have it in walletNFTs (faster, already has image)
+      const walletNFT = walletNFTs.find((nft) => nft.mint === jackpot.image);
+      if (walletNFT && walletNFT.image) {
+        return convertIPFSToHTTP(walletNFT.image) || walletNFT.image;
+      }
+      
+      // Then check cache
+      const cachedImage = jackpotNFTImages[jackpot.image];
+      if (cachedImage) {
+        const finalUrl = convertIPFSToHTTP(cachedImage) || cachedImage;
+        // Validate URL
+        if (finalUrl && (finalUrl.startsWith('http://') || finalUrl.startsWith('https://'))) {
+          return finalUrl;
+        }
+      }
+      
+      // Return null if not cached yet - will show placeholder
+      return null;
     }
     
-    // It's a file path, return full URL
-    return `https://zkltmkbmzxvfovsgotpt.supabase.co/storage/v1/object/public/apes-bucket/${jackpot.image}`;
+    // For regular images (Supabase storage paths), construct the full URL
+    const imagePath = `https://zkltmkbmzxvfovsgotpt.supabase.co/storage/v1/object/public/apes-bucket/${jackpot.image}`;
+    return convertIPFSToHTTP(imagePath) || imagePath;
   };
 
   const handleInputChange = (e) => {
@@ -276,8 +335,11 @@ function JackpotSettings() {
       formData.name = selectedNFT.name;
       formData.title = selectedNFT.name;
       formData.nftMintAddress = selectedNFT.mint;
-      formData.image = selectedNFT.mint; // Store mint in image field
-      // Note: NFT image URL will be fetched dynamically when displaying
+      // Store the actual image URL (already converted from IPFS by useWalletNFTs) instead of mint address
+      // This ensures new jackpots have direct image URLs in the database
+      formData.image = selectedNFT.image && (selectedNFT.image.startsWith('http://') || selectedNFT.image.startsWith('https://'))
+        ? selectedNFT.image 
+        : selectedNFT.mint; // Fallback to mint if image URL is invalid
     } else {
       // Form validation for image upload mode
       if (!formData.name.trim()) {
@@ -306,6 +368,14 @@ function JackpotSettings() {
         endTime: formData.endTime ? convertToISO(formData.endTime) : null
       };
 
+      // Capture NFT image before clearing selectedNFT
+      const nftImageToCache = depositType === 'nft' && formData.image && selectedNFT?.image 
+        ? selectedNFT.image 
+        : null;
+      const nftMintToCache = depositType === 'nft' && selectedNFT?.mint 
+        ? selectedNFT.mint 
+        : null;
+      
       if (editingJackpot) {
         await updateJackpot(editingJackpot.id, formDataToSave);
       } else {
@@ -316,6 +386,18 @@ function JackpotSettings() {
       setEditingJackpot(null);
       setSelectedNFT(null);
       setDepositType('image');
+      
+      // If we added an NFT jackpot, cache the image immediately
+      if (nftMintToCache && nftImageToCache) {
+        const convertedImage = convertIPFSToHTTP(nftImageToCache) || nftImageToCache;
+        if (convertedImage && (convertedImage.startsWith('http://') || convertedImage.startsWith('https://'))) {
+          setJackpotNFTImages(prev => ({
+            ...prev,
+            [nftMintToCache]: convertedImage
+          }));
+        }
+      }
+      
       // Refresh used NFT mints after adding/updating
       const [usedMints, lootboxMints] = await Promise.all([
         getUsedNFTMints(),

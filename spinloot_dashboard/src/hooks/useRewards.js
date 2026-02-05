@@ -184,13 +184,26 @@ export const useRewards = (lootboxId) => {
         reward_name: rewardData.name,
         reward_price: rewardData.rewardType === 'token' ? rewardData.tokenAmount : rewardData.value,
         percentage: parseFloat(rewardData.chance) || 0,
-        reward_image: null, // Will be updated after image upload
+        reward_image: null, // Will be updated after image upload (unless on-chain token item)
         is_active: true
       }
 
       // Non-NFT path keeps previous behavior
 
-      // Handle image upload if provided
+      // If this is an on-chain token ITEM, store mint + symbol using existing columns.
+      // Some schemas use `collection`, others `mint_address` – set both for compatibility.
+      if (rewardData.rewardType === 'item' && rewardData.isOnChain && rewardData.tokenMintAddress) {
+        insertData.collection = rewardData.tokenMintAddress // legacy mint column
+        insertData.mint_address = rewardData.tokenMintAddress // explicit mint column
+        insertData.token_symbol = rewardData.tokenSymbol || 'Token'
+        // Ensure amount is stored in reward_price
+        if (rewardData.tokenAmount) {
+          insertData.reward_price = rewardData.tokenAmount
+        }
+      }
+
+      // Handle image upload if provided.
+      // For on-chain token items we ALSO allow custom image upload (admin's image takes priority).
       if (rewardData.image) {
         const fileExt = rewardData.image.name.split('.').pop()
         const fileName = `${Date.now()}.${fileExt}`

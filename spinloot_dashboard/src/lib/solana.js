@@ -1,9 +1,8 @@
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
 
-// Solana RPC endpoint - configured for devnet
-const SOLANA_RPC_URL = 'https://api.devnet.solana.com'
-// For mainnet: 'https://api.mainnet-beta.solana.com'
-// For testnet: 'https://api.testnet.solana.com'
+// Solana RPC endpoint - configured for mainnet
+const SOLANA_RPC_URL = 'https://mainnet.helius-rpc.com/?api-key=5a1a852c-3ed9-40ee-bca8-dda4550c3ce8'
+// Alternative public mainnet: 'https://api.mainnet-beta.solana.com'
 
 // Create connection to Solana network
 export const connection = new Connection(SOLANA_RPC_URL, 'confirmed')

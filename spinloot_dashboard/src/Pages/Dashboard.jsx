@@ -1,14 +1,14 @@
 import React, { useState } from 'react'
 import { useDashboardStats, useRecentActivity } from '../hooks/useDashboardStats'
 import { usePlatformSOLBalance, useFeeCollection } from '../hooks/usePlatformBalance'
-import VaultAddressFinder from '../components/VaultAddressFinder'
+// import VaultAddressFinder from '../components/VaultAddressFinder'
 
 function Dashboard() {
   const stats = useDashboardStats()
   const { activities, loading: activitiesLoading, error: activitiesError } = useRecentActivity()
   const platformSOL = usePlatformSOLBalance()
   const feeCollection = useFeeCollection()
-  const [showVaultFinder, setShowVaultFinder] = useState(false)
+  // const [showVaultFinder, setShowVaultFinder] = useState(false)
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {
@@ -123,26 +123,11 @@ function Dashboard() {
     <div className="p-6">
       {/* Header */}
       <div className="mb-8">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-800">Welcome to Dashboard</h1>
-            <p className="text-gray-600 mt-1">Here's what's happening with your lootbox platform today.</p>
-          </div>
-          <button
-            onClick={() => setShowVaultFinder(!showVaultFinder)}
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
-          >
-            {showVaultFinder ? 'Hide' : 'Find'} Vault Addresses
-          </button>
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-800">Welcome to Dashboard</h1>
+          <p className="text-gray-600 mt-1">Here's what's happening with your lootbox platform today.</p>
         </div>
       </div>
-
-      {/* Vault Address Finder */}
-      {showVaultFinder && (
-        <div className="mb-8">
-          <VaultAddressFinder />
-        </div>
-      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6 mb-8">

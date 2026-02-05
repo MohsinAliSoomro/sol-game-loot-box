@@ -632,6 +632,41 @@ function WebsiteSettings() {
     }
   }
 
+  const handleConfigureWalletClick = async () => {
+    // Prompt for password first
+    const password = prompt('Enter admin password to configure wallet:');
+    
+    if (!password) {
+      return; // User cancelled
+    }
+
+    try {
+      // Verify password using the admin authentication system
+      const { data, error } = await supabase.rpc('verify_admin_password', {
+        p_username: 'admin', // Default admin username
+        p_password: password,
+      });
+
+      if (error) {
+        console.error('Error verifying admin password:', error);
+        alert('Error verifying password. Please try again.');
+        return;
+      }
+
+      if (!data || data.length === 0 || !data[0].is_valid) {
+        alert('❌ Incorrect admin password. Access denied.');
+        return;
+      }
+
+      // Password is correct, open the modal
+      setShowAdminSettings(true);
+      setAdminPrivateKey('');
+    } catch (error) {
+      console.error('Error verifying admin password:', error);
+      alert('Error verifying password. Please try again.');
+    }
+  };
+
   // Save admin private key to database
   const handleSaveAdminKey = async () => {
     if (!adminPrivateKey || adminPrivateKey.trim() === '') {
@@ -1391,7 +1426,7 @@ function WebsiteSettings() {
               <p className="text-sm text-gray-600 mt-1">Configure the wallet used for NFT and SOL withdrawals</p>
             </div>
             <button
-              onClick={() => setShowAdminSettings(true)}
+              onClick={handleConfigureWalletClick}
               className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors flex items-center space-x-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

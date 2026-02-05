@@ -20,8 +20,8 @@ export const getPlatformSOLBalance = async () => {
   try {
     console.log('🔍 Checking platform SOL balance...')
     
-    // Create connection to Solana devnet
-    const connection = new Connection('https://api.devnet.solana.com', 'confirmed')
+    // Create connection to Solana mainnet
+    const connection = new Connection('https://mainnet.helius-rpc.com/?api-key=5a1a852c-3ed9-40ee-bca8-dda4550c3ce8', 'confirmed')
     
     // Get platform wallet public key
     const platformWallet = new PublicKey(PLATFORM_WALLET)

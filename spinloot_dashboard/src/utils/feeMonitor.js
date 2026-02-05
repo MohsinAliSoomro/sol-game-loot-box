@@ -17,7 +17,7 @@ export const checkFeeCollectionStatus = async () => {
   try {
     console.log('🔍 Checking fee collection status...')
     
-    const connection = new Connection('https://api.devnet.solana.com', 'confirmed')
+    const connection = new Connection('https://mainnet.helius-rpc.com/?api-key=5a1a852c-3ed9-40ee-bca8-dda4550c3ce8', 'confirmed')
     
     // Check if fee vault ATA exists
     const accountInfo = await connection.getAccountInfo(new PublicKey(FEE_VAULT_ATA))
@@ -121,7 +121,7 @@ export const getFeeCollectionReport = async () => {
   try {
     console.log('📊 Generating fee collection report...')
     
-    const connection = new Connection('https://api.devnet.solana.com', 'confirmed')
+    const connection = new Connection('https://mainnet.helius-rpc.com/?api-key=5a1a852c-3ed9-40ee-bca8-dda4550c3ce8', 'confirmed')
     
     // Check fee vault
     const feeStatus = await checkFeeCollectionStatus()
