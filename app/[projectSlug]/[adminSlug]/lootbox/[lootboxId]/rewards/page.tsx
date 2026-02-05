@@ -8,6 +8,8 @@ import { useAdminWallet } from '@/lib/hooks/useAdminWallet';
 import { useProjectJackpotPools } from '@/lib/hooks/useProjectJackpotPools';
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { supabase } from '@/service/supabase';
+import { fetchNFTMetadata } from '@/lib/fetchNFTMetadata';
+import { convertIPFSToHTTP } from '@/lib/utils/ipfs';
 
 export default function LootboxRewards() {
   const params = useParams();
@@ -34,6 +36,7 @@ export default function LootboxRewards() {
   const [jackpotNFTMints, setJackpotNFTMints] = useState<string[]>([]);
   const [isOnChainToken, setIsOnChainToken] = useState(false);
   const [allLootboxNFTMints, setAllLootboxNFTMints] = useState<string[]>([]); // NFTs used in ANY project's lootboxes
+  const [nftImages, setNftImages] = useState<Record<string, string>>({}); // Cache NFT images: { mintAddress: imageUrl }
   
   // Get admin wallet address from database
   const { adminWalletAddress, loading: adminWalletLoading, error: adminWalletError, refreshAdminWallet } = useAdminWallet();
@@ -108,6 +111,70 @@ export default function LootboxRewards() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminWalletAddress]);
+
+  // Fetch NFT images for rewards that don't have images
+  useEffect(() => {
+    const fetchNFTImages = async () => {
+      if (!rewards.length || nftsLoading) return;
+
+      const nftRewards = rewards.filter((r: any) => r.rewardType === 'nft' && r.mintAddress);
+      if (nftRewards.length === 0) return;
+
+      const imagesToFetch: Record<string, string> = {};
+
+      for (const reward of nftRewards) {
+        // Skip if already cached
+        if (nftImages[reward.mintAddress]) continue;
+
+        // First, check if image is stored in walletNFTs (fastest)
+        const walletNFT = walletNFTs.find((nft: any) => nft.mint === reward.mintAddress);
+        if (walletNFT?.image) {
+          imagesToFetch[reward.mintAddress] = convertIPFSToHTTP(walletNFT.image) || walletNFT.image;
+          continue;
+        }
+
+        // Check if reward has image stored in database
+        if (reward.image) {
+          const convertedImage = convertIPFSToHTTP(reward.image);
+          if (convertedImage) {
+            imagesToFetch[reward.mintAddress] = convertedImage;
+            continue;
+          }
+        }
+
+        // If image is a mint address (old format), fetch metadata
+        if (reward.image && reward.image.length > 30 && reward.image.length < 50 && !reward.image.startsWith('http')) {
+          try {
+            const metadata = await fetchNFTMetadata(reward.image);
+            if (metadata?.image) {
+              imagesToFetch[reward.mintAddress] = convertIPFSToHTTP(metadata.image) || metadata.image;
+            }
+          } catch (err) {
+            console.error('Error fetching NFT metadata for', reward.image, err);
+          }
+        }
+
+        // Last resort: fetch from mint address
+        if (!imagesToFetch[reward.mintAddress] && reward.mintAddress) {
+          try {
+            const metadata = await fetchNFTMetadata(reward.mintAddress);
+            if (metadata?.image) {
+              imagesToFetch[reward.mintAddress] = convertIPFSToHTTP(metadata.image) || metadata.image;
+            }
+          } catch (err) {
+            console.error('Error fetching NFT metadata for', reward.mintAddress, err);
+          }
+        }
+      }
+
+      if (Object.keys(imagesToFetch).length > 0) {
+        setNftImages(prev => ({ ...prev, ...imagesToFetch }));
+      }
+    };
+
+    fetchNFTImages();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rewards, walletNFTs, nftsLoading]);
 
   // Predefined SOL reward amounts
   const SOL_REWARD_OPTIONS = [0.01, 0.05, 0.08, 0.1, 0.2];
@@ -414,19 +481,55 @@ export default function LootboxRewards() {
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-3">
                         <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden">
-                          {reward.image ? (
-                            <img 
-                              src={getImageUrl(reward.image)} 
-                              alt={reward.name}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                (e.currentTarget as HTMLImageElement).style.display = 'none';
-                                const nextSibling = e.currentTarget.nextElementSibling as HTMLElement;
-                                if (nextSibling) nextSibling.style.display = 'flex';
-                              }}
-                            />
-                          ) : null}
-                          <span className="text-gray-500 text-xs" style={{ display: reward.image ? 'none' : 'flex' }}>IMG</span>
+                          {(() => {
+                            // Determine image URL based on reward type
+                            let imageUrl: string | null = null;
+                            
+                            if (reward.rewardType === 'nft') {
+                              // For NFT rewards, check multiple sources
+                              // 1. Cached NFT image
+                              if (reward.mintAddress && nftImages[reward.mintAddress]) {
+                                imageUrl = nftImages[reward.mintAddress];
+                              }
+                              // 2. Wallet NFT image (if available)
+                              else if (reward.mintAddress) {
+                                const walletNFT = walletNFTs.find((nft: any) => nft.mint === reward.mintAddress);
+                                if (walletNFT?.image) {
+                                  imageUrl = convertIPFSToHTTP(walletNFT.image) || walletNFT.image;
+                                }
+                              }
+                              // 3. Stored reward_image from database
+                              if (!imageUrl && reward.image) {
+                                imageUrl = convertIPFSToHTTP(reward.image) || reward.image;
+                              }
+                              // 4. If image is a mint address (old format), try fetching
+                              if (!imageUrl && reward.image && reward.image.length > 30 && reward.image.length < 50 && !reward.image.startsWith('http')) {
+                                // Will be fetched by useEffect
+                                imageUrl = null;
+                              }
+                            } else if (reward.rewardType === 'sol') {
+                              // SOL rewards use Solana logo
+                              imageUrl = 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png';
+                            } else if (reward.image) {
+                              // Other rewards use stored image
+                              imageUrl = getImageUrl(reward.image) || convertIPFSToHTTP(reward.image) || reward.image;
+                            }
+
+                            return imageUrl ? (
+                              <img 
+                                src={imageUrl} 
+                                alt={reward.name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                  const nextSibling = e.currentTarget.nextElementSibling as HTMLElement;
+                                  if (nextSibling) nextSibling.style.display = 'flex';
+                                }}
+                              />
+                            ) : (
+                              <span className="text-gray-500 text-xs">IMG</span>
+                            );
+                          })()}
                         </div>
                         <span className="text-sm font-medium text-gray-900">{reward.name}</span>
                       </div>

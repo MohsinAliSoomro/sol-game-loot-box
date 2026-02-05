@@ -3,10 +3,17 @@ import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { fetchMultipleNFTMetadata, getDepositedNFTs } from "@/lib/nft-metadata";
 import Loader from "@/app/Components/Loader";
+import { convertIPFSToHTTP } from "@/lib/utils/ipfs";
 
 // Helper function to convert Supabase storage path to full URL
 const getImageUrl = (path: string | null | undefined): string => {
   if (!path) return '/default-item.png';
+  
+  // First, check if it's an IPFS URL and convert it
+  const ipfsConverted = convertIPFSToHTTP(path);
+  if (ipfsConverted && ipfsConverted !== path) {
+    return ipfsConverted;
+  }
   
   // If it's already a full URL, return it
   if (path.startsWith('http://') || path.startsWith('https://')) {

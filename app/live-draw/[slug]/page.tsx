@@ -10,7 +10,7 @@ import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import Loader from "../../Components/Loader";
 import TopNav from "../../Components/TopNav";
-import { pickJackpotWinner } from "@/lib/pick-jackpot-winner";
+// Removed pickJackpotWinner - winner selection is now handled by backend API
 import { fetchNFTMetadata } from "@/lib/nft-metadata";
 import { formatLocalDateTime, getCurrentUTCTime, isPastDate } from "@/lib/timezone-utils";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -234,10 +234,153 @@ export default function Page() {
                 const selectFinalWinner = async () => {
                     const poolId = parseInt(params.slug);
                     try {
-                        // Check if final winner already exists to avoid duplicates
-                        // Use UTC ISO string for comparison
+                        // CRITICAL: Check if jackpot is already settled by reading is_settled from jackpot_pools
+                        // This is the authoritative source - if is_settled === true, winner is fixed permanently
                         const endTimeISO = endTimeUTC.toISOString();
                         
+                        // First, try to check jackpot_pools for is_settled and winner_user_id
+                        // These columns may not exist if migration wasn't run
+                        let poolSettledData: any = null;
+                        try {
+                            const { data, error } = await supabase
+                                .from('jackpot_pools')
+                                .select('id, name, image, item_price, is_settled, winner_user_id, settled_at')
+                                .eq('id', poolId)
+                                .is('project_id', null) // Main project has NULL project_id
+                                .single();
+                            
+                            if (!error) {
+                                poolSettledData = data;
+                            } else {
+                                console.log("⚠️ Could not fetch settlement columns (may not exist):", error.message);
+                            }
+                        } catch (err) {
+                            console.log("⚠️ Exception fetching settlement data:", err);
+                        }
+                        
+                        // If is_settled === true, use the saved winner_user_id (NEVER recompute)
+                        if (poolSettledData?.is_settled === true && poolSettledData?.winner_user_id) {
+                            console.log("🏆 Jackpot already settled (is_settled=true), using saved winner:", poolSettledData.winner_user_id);
+                            
+                            // Get win details from jackpot_wins for display
+                            const { data: existingWin } = await supabase
+                                .from('jackpot_wins')
+                                .select('id, user_id, amount, created_at')
+                                .eq('pool_id', poolId)
+                                .eq('user_id', poolSettledData.winner_user_id)
+                                .eq('win_type', 'jackpot_final')
+                                .is('project_id', null) // Main project
+                                .maybeSingle();
+                            
+                            // Use pool data for display
+                            const poolData = poolSettledData;
+                            
+                            // Check if it's an NFT jackpot:
+                            // 1. If image is a mint address (old format: 32-44 chars, no slashes/dots)
+                            // 2. OR if image is a URL but item_price is NULL/0 (new format: image URL stored, but it's still an NFT)
+                            // 3. OR check existing prizeWin entries to see if there's a mint field (for already-settled jackpots)
+                            const isMintAddress = poolData?.image && 
+                                               typeof poolData.image === 'string' && 
+                                               poolData.image.length >= 32 && 
+                                               poolData.image.length <= 44 && 
+                                               !poolData.image.includes('/') && 
+                                               !poolData.image.includes('.');
+                            
+                            let isNFTJackpot = isMintAddress;
+                            // If not a mint address but image exists and item_price is NULL/0, check existing prizeWin
+                            if (!isMintAddress && poolData?.image && (!poolData.item_price || poolData.item_price === 0)) {
+                              // Check if there's an existing prizeWin entry with a mint field for this jackpot
+                              const { data: existingPrizeWin } = await supabase
+                                .from('prizeWin')
+                                .select('mint, reward_type')
+                                .eq('name', poolData.name)
+                                .not('mint', 'is', null)
+                                .limit(1)
+                                .maybeSingle();
+                              
+                              if (existingPrizeWin?.mint || existingPrizeWin?.reward_type === 'nft') {
+                                isNFTJackpot = true;
+                                console.log('🎨 Detected NFT jackpot from existing prizeWin entry');
+                              }
+                            }
+                            
+                            const isItemPrize = !isNFTJackpot && poolData?.item_price && poolData.item_price > 0;
+                            
+                            // If it's an item prize, claim reward via API (idempotent)
+                            if (isItemPrize && existingWin) {
+                                const itemPriceAmount = parseFloat(String(poolData.item_price)) || 0;
+                                console.log(`🎁 Existing winner found for item prize. Claiming ${itemPriceAmount} OGX via API...`);
+                                
+                                // Create a unique key for this winner+pool combination
+                                const creditKey = `${poolId}-${existingWin.user_id}`;
+                                
+                                // Check if we've already claimed this winner in this session
+                                if (balanceCreditedRef.current.has(creditKey)) {
+                                    console.log(`⏭️ Skipping reward claim - already claimed for winner ${existingWin.user_id} in pool ${poolId} in this session`);
+                                } else {
+                                    try {
+                                        // Call backend API to claim reward (idempotent)
+                                        const response = await fetch('/api/claim-jackpot-reward', {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                            },
+                                            body: JSON.stringify({
+                                                winId: existingWin.id,
+                                                userId: existingWin.user_id,
+                                                poolId: poolId,
+                                                projectId: null // Main project
+                                            }),
+                                        });
+
+                                        const result = await response.json();
+
+                                        if (result.success) {
+                                            if (result.alreadyClaimed) {
+                                                console.log(`✅ Reward already claimed (idempotent check)`);
+                                            } else {
+                                                console.log(`✅ Reward claimed successfully: ${result.rewardAmount} tokens. New balance: ${result.newBalance}`);
+                                            }
+                                            // Mark as claimed to prevent duplicate API calls
+                                            balanceCreditedRef.current.add(creditKey);
+                                        } else {
+                                            console.error("❌ Error claiming reward:", result.error);
+                                        }
+                                    } catch (claimError) {
+                                        console.error("❌ Exception claiming reward:", claimError);
+                                    }
+                                }
+                            }
+                            
+                            // For item prizes, display item_price instead of the stored amount
+                            // CRITICAL: For NFT jackpots, don't show OGX amount
+                            let displayAmount = 0;
+                            if (isItemPrize && poolData?.item_price) {
+                                displayAmount = parseFloat(String(poolData.item_price));
+                            } else if (!isNFTJackpot && existingWin) {
+                                // Only show amount for token/SOL rewards, not NFT rewards
+                                displayAmount = parseFloat(String(existingWin.amount || 0));
+                            }
+                            // For NFT jackpots, displayAmount remains 0
+                            
+                            setCurrentWinner({
+                                user_id: poolSettledData.winner_user_id,
+                                amount: displayAmount,
+                                created_at: poolSettledData.settled_at || existingWin?.created_at || new Date().toISOString(),
+                                reward_type: isNFTJackpot ? 'nft' : (isItemPrize ? 'item' : 'sol'),
+                                is_nft: isNFTJackpot
+                            });
+                            
+                            console.log("✅ Winner loaded from database (fixed permanently):", {
+                                winnerId: poolSettledData.winner_user_id,
+                                isSettled: true,
+                                settledAt: poolSettledData.settled_at
+                            });
+                            
+                            return; // Don't proceed to settle - already settled
+                        }
+                        
+                        // Check if winner already exists in jackpot_wins (fallback for old data)
                         // Main project: filter for project_id IS NULL
                         const { data: existingWin } = await supabase
                             .from('jackpot_wins')
@@ -251,7 +394,7 @@ export default function Page() {
                         
                         if (existingWin) {
                             // Winner already selected, but we need to check if balance was credited
-                            console.log("🏆 Final winner already selected:", existingWin);
+                            console.log("🏆 Final winner already selected (from jackpot_wins):", existingWin);
                             
                             // Get pool data to check if it's an item prize that needs crediting
                             const { data: poolData } = await supabase
@@ -261,13 +404,35 @@ export default function Page() {
                                 .is('project_id', null) // MAIN PROJECT ONLY
                                 .single();
                             
-                            // Check if it's an item prize
-                            const isNFTJackpot = poolData?.image && 
+                            // Check if it's an NFT jackpot:
+                            // 1. If image is a mint address (old format: 32-44 chars, no slashes/dots)
+                            // 2. OR if image is a URL but item_price is NULL/0 (new format: image URL stored, but it's still an NFT)
+                            // 3. OR check existing prizeWin entries to see if there's a mint field (for already-settled jackpots)
+                            const isMintAddress = poolData?.image && 
                                                typeof poolData.image === 'string' && 
                                                poolData.image.length >= 32 && 
                                                poolData.image.length <= 44 && 
                                                !poolData.image.includes('/') && 
                                                !poolData.image.includes('.');
+                            
+                            let isNFTJackpot = isMintAddress;
+                            // If not a mint address but image exists and item_price is NULL/0, check existing prizeWin
+                            if (!isMintAddress && poolData?.image && (!poolData.item_price || poolData.item_price === 0)) {
+                              // Check if there's an existing prizeWin entry with a mint field for this jackpot
+                              const { data: existingPrizeWin } = await supabase
+                                .from('prizeWin')
+                                .select('mint, reward_type')
+                                .eq('name', poolData.name)
+                                .not('mint', 'is', null)
+                                .limit(1)
+                                .maybeSingle();
+                              
+                              if (existingPrizeWin?.mint || existingPrizeWin?.reward_type === 'nft') {
+                                isNFTJackpot = true;
+                                console.log('🎨 Detected NFT jackpot from existing prizeWin entry');
+                              }
+                            }
+                            
                             const isItemPrize = !isNFTJackpot && poolData?.item_price && poolData.item_price > 0;
                             
                             // If it's an item prize, claim reward via API (idempotent)
@@ -339,113 +504,164 @@ export default function Page() {
                             return;
                         }
                         
-                        console.log("⏰ Jackpot time expired! Selecting final winner from all contributions...");
+                        console.log("⏰ Jackpot time expired! Calling backend to settle jackpot...");
                         
-                        // Pick final winner from all contributions (random selection)
-                        const winner = await pickJackpotWinner(poolId);
+                        // CRITICAL: Use backend API to settle jackpot (NOT frontend winner selection)
+                        // This ensures only ONE winner is selected atomically
+                        let winner: { user_id: string; amount?: number } | null = null;
+                        try {
+                            const settleResponse = await fetch('/api/jackpot/settle', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    poolId: poolId,
+                                    projectId: null // Main project
+                                })
+                            });
+                            
+                            const settleResult = await settleResponse.json();
+                            
+                            if (settleResult.success && settleResult.winner) {
+                                winner = {
+                                    user_id: settleResult.winner.userId,
+                                    amount: settleResult.winner.prizeAmount
+                                };
+                                console.log('✅ Backend returned winner:', settleResult);
+                                if (settleResult.alreadySettled) {
+                                    console.log('ℹ️ Winner was already settled - returning saved winner');
+                                }
+                            } else if (settleResult.noWinner) {
+                                console.log('⚠️ No winner - no contributions found for this pool');
+                                winner = null;
+                            } else {
+                                console.error('❌ Backend settle failed:', settleResult.error);
+                                // DO NOT fallback to frontend winner selection - this would cause the bug
+                                winner = null;
+                            }
+                        } catch (settleError) {
+                            console.error('❌ Error calling settle API:', settleError);
+                            // DO NOT fallback to frontend winner selection - this would cause the bug
+                            winner = null;
+                        }
                         
                         if (winner && winner.user_id) {
-                            // Get pool data for prize amount, image, and item_price
-                            // MAIN PROJECT: Filter by project_id IS NULL
+                            // Get pool data for display
                             const { data: poolData } = await supabase
                                 .from('jackpot_pools')
-                                .select('current_amount, name, image, item_price')
+                                .select('name, image, item_price')
                                 .eq('id', poolId)
                                 .is('project_id', null) // MAIN PROJECT ONLY
                                 .single();
                             
-                            console.log("🔍 DEBUG: Pool data fetched:", {
-                                poolId,
-                                poolName: poolData?.name,
-                                item_price: poolData?.item_price,
-                                image: poolData?.image
-                            });
+                            // Fetch win data from backend (already created by settle API)
+                            let winData: any = null;
+                            let winError: any = null;
                             
-                            // Calculate total contributions for prize
-                            const { data: contributions } = await supabase
-                                .from('jackpot_contribution')
-                                .select('amount')
-                                .eq('pool_id', poolId);
-                            
-                            const totalContributions = contributions?.reduce((sum, c) => sum + parseFloat(String(c.amount || 0)), 0) || 0;
-                            const prizeAmount = poolData?.current_amount || totalContributions || 0;
-                            
-                            // Get jackpot pool name for prizeWin entry
-                            const jackpotName = poolData?.name || `Jackpot Pool ${poolId}`;
-                            
-                            // Determine jackpot image - check if it's an NFT mint or file path
-                            let jackpotImage = '/coin.png'; // Default fallback
-                            if (poolData?.image) {
-                                // Check if it's an NFT mint address
-                                const isNFTMint = typeof poolData.image === 'string' && 
-                                                 poolData.image.length >= 32 && 
-                                                 poolData.image.length <= 44 && 
-                                                 !poolData.image.includes('/') &&
-                                                 !poolData.image.includes('.');
+                            try {
+                                const { data: existingWinData, error: fetchError } = await supabase
+                                    .from('jackpot_wins')
+                                    .select('*')
+                                    .eq('pool_id', poolId)
+                                    .eq('user_id', winner.user_id)
+                                    .eq('win_type', 'jackpot_final')
+                                    .is('project_id', null) // Main project
+                                    .order('created_at', { ascending: false })
+                                    .limit(1)
+                                    .maybeSingle();
                                 
-                                if (isNFTMint) {
-                                    // It's an NFT - fetch the NFT image
-                                    try {
-                                        const nftMetadata = await fetchNFTMetadata(poolData.image);
-                                        jackpotImage = nftMetadata?.image || '/coin.png';
-                                    } catch (error) {
-                                        console.error('Error fetching NFT image for jackpot:', error);
-                                        jackpotImage = '/coin.png';
-                                    }
-                                } else {
-                                    // It's a file path
-                                    if (poolData.image.startsWith('http')) {
-                                        jackpotImage = poolData.image;
-                                    } else {
-                                        jackpotImage = `https://zkltmkbmzxvfovsgotpt.supabase.co/storage/v1/object/public/apes-bucket/${poolData.image}`;
-                                    }
+                                winData = existingWinData;
+                                winError = fetchError;
+                                
+                                if (winData) {
+                                    console.log("✅ Found existing winner record from backend:", winData);
                                 }
+                            } catch (fetchErr) {
+                                console.warn("⚠️ Could not fetch win data:", fetchErr);
                             }
                             
-                            // Check if jackpot prize is an item (not NFT and has item_price)
-                            const isNFTJackpot = poolData?.image && 
+                            // Check if it's an NFT jackpot:
+                            // 1. If image is a mint address (old format: 32-44 chars, no slashes/dots)
+                            // 2. OR if image is a URL but item_price is NULL/0 (new format: image URL stored, but it's still an NFT)
+                            // 3. OR check existing prizeWin entries to see if there's a mint field (for already-settled jackpots)
+                            const isMintAddress = poolData?.image && 
                                                typeof poolData.image === 'string' && 
                                                poolData.image.length >= 32 && 
                                                poolData.image.length <= 44 && 
                                                !poolData.image.includes('/') && 
                                                !poolData.image.includes('.');
-                            const isItemPrize = !isNFTJackpot && poolData?.item_price && poolData.item_price > 0;
                             
-                            // Note: Item prize balance crediting is now handled by the API after win is recorded
-                            // We'll call the claim API after inserting the win record
-                            
-                            // Verify user exists in auth.users before inserting
-                            // The user_id from contributions should be a valid auth.users UUID
-                            // If it's from project_users, we need to get the auth user_id
-                            let validUserId = winner.user_id;
-                            
-                            // Check if user exists in project_users and get auth user_id if needed
-                            const { data: projectUser } = await supabase
-                                .from('project_users')
-                                .select('user_id')
-                                .eq('user_id', winner.user_id)
+                            let isNFTJackpot = isMintAddress;
+                            // If not a mint address but image exists and item_price is NULL/0, check existing prizeWin
+                            if (!isMintAddress && poolData?.image && (!poolData.item_price || poolData.item_price === 0)) {
+                              // Check if there's an existing prizeWin entry with a mint field for this jackpot
+                              const { data: existingPrizeWin } = await supabase
+                                .from('prizeWin')
+                                .select('mint, reward_type')
+                                .eq('name', poolData.name)
+                                .not('mint', 'is', null)
+                                .limit(1)
                                 .maybeSingle();
                             
-                            // If not found in project_users, try to verify it's a valid UUID
-                            // The user_id should be a UUID that exists in auth.users
-                            // For now, we'll use the user_id directly and let the database handle the constraint
+                              if (existingPrizeWin?.mint || existingPrizeWin?.reward_type === 'nft') {
+                                isNFTJackpot = true;
+                                console.log('🎨 Detected NFT jackpot from existing prizeWin entry');
+                              }
+                            }
                             
-                            // Record the final winner in jackpot_wins table
-                            // Main project: don't set project_id (will be NULL)
-                            const winDataToInsert: any = {
-                                pool_id: poolId,
-                                user_id: validUserId,
-                                amount: prizeAmount,
-                                win_type: 'jackpot_final',
-                                is_claimed: false
-                                // project_id will be NULL for main project
-                            };
+                            // Check if it's an item prize
+                            const isItemPrize = !isNFTJackpot && poolData?.item_price && poolData.item_price > 0;
                             
-                            const { data: winData, error: winError } = await supabase
-                                .from('jackpot_wins')
-                                .insert(winDataToInsert)
-                                .select()
-                                .single();
+                            // If it's an item prize, claim reward via API (idempotent)
+                            if (isItemPrize && winData) {
+                                const itemPriceAmount = parseFloat(String(poolData?.item_price)) || 0;
+                                console.log(`🎁 Item jackpot prize detected. Claiming ${itemPriceAmount} tokens via API...`);
+                            
+                                // Create a unique key for this winner+pool combination
+                                const creditKey = `${poolId}-${winner.user_id}`;
+                                
+                                // Check if we've already claimed this winner in this session
+                                if (balanceCreditedRef.current.has(creditKey)) {
+                                    console.log(`⏭️ Skipping reward claim - already claimed for winner ${winner.user_id} in pool ${poolId} in this session`);
+                                } else {
+                                    try {
+                                        // Call backend API to claim reward (idempotent)
+                                        const response = await fetch('/api/claim-jackpot-reward', {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                            },
+                                            body: JSON.stringify({
+                                                winId: winData.id,
+                                                userId: winner.user_id,
+                                                poolId: poolId,
+                                                projectId: null // Main project
+                                            }),
+                                        });
+
+                                        const result = await response.json();
+
+                                        if (result.success) {
+                                            if (result.alreadyClaimed) {
+                                                console.log(`✅ Reward already claimed (idempotent check)`);
+                                            } else {
+                                                console.log(`✅ Reward claimed successfully: ${result.rewardAmount} tokens. New balance: ${result.newBalance}`);
+                                                toast.success(`🎉 ${result.rewardAmount} tokens credited to your balance!`, {
+                                                    position: "top-center",
+                                                    autoClose: 5000,
+                                                });
+                                            }
+                                            // Mark as claimed to prevent duplicate API calls
+                                            balanceCreditedRef.current.add(creditKey);
+                                } else {
+                                            console.error("❌ Error claiming reward:", result.error);
+                                            alert(`Error: Failed to claim reward. ${result.error}`);
+                                        }
+                                    } catch (claimError) {
+                                        console.error("❌ Exception claiming reward:", claimError);
+                                        alert(`Error: Exception while claiming reward. Please contact support.`);
+                                    }
+                                }
+                            }
                             
                             // Set current winner for display (regardless of jackpot_wins insert success)
                             // CRITICAL: For NFT jackpots, don't show OGX amount - show 0 or null
@@ -453,9 +669,9 @@ export default function Page() {
                             let displayAmount = 0;
                             if (isItemPrize && poolData?.item_price) {
                                 displayAmount = parseFloat(String(poolData.item_price));
-                            } else if (!isNFTJackpot) {
+                            } else if (!isNFTJackpot && winner.amount) {
                                 // Only show amount for token/SOL rewards, not NFT rewards
-                                displayAmount = prizeAmount;
+                                displayAmount = winner.amount;
                             }
                             // For NFT jackpots, displayAmount remains 0 (will be handled in UI)
                             
@@ -467,99 +683,23 @@ export default function Page() {
                                 is_nft: isNFTJackpot
                             });
                             
-                            console.log(`🎯 Display amount set: ${displayAmount} (isNFTJackpot: ${isNFTJackpot}, isItemPrize: ${isItemPrize}, item_price: ${poolData?.item_price}, prizeAmount: ${prizeAmount})`);
+                            console.log(`🎯 Display amount set: ${displayAmount} (isNFTJackpot: ${isNFTJackpot}, isItemPrize: ${isItemPrize}, item_price: ${poolData?.item_price}, prizeAmount: ${winner.amount})`);
                             
-                            if (!winError && winData) {
-                                console.log("🎉 FINAL WINNER SELECTED!", {
-                                    winner_id: winner.user_id,
-                                    prize_amount: prizeAmount,
-                                    total_contributions: totalContributions
-                                });
-                            } else {
-                                console.warn("⚠️ jackpot_wins insert failed, but continuing with prizeWin insert:", winError);
-                            }
+                            // CRITICAL FIX: DO NOT create jackpot_wins entries from frontend!
+                            // The backend settle API (/api/jackpot/settle) handles jackpot_wins creation
+                            // Frontend creating entries was causing race conditions
+                            console.log("ℹ️ jackpot_wins entry creation handled by backend settle API");
                             
-                            // Add winner to prizeWin table (for sidebar cart and user rewards)
-                            // This should happen regardless of jackpot_wins insert success
-                            // because prizeWin uses userId (TEXT) which doesn't have the same constraint
-                            // SKIP for item prizes - they're credited directly to balance
-                            if (!isItemPrize) {
-                                try {
-                                    // Determine reward type: 'nft' if prize is NFT, 'sol' if it's SOL/OGX
-                                    const rewardType = isNFTJackpot ? 'nft' : 'sol';
-                                
-                                // Check if already exists in prizeWin to avoid duplicates
-                                // Check for both 'nft' and 'sol' types to catch any existing entry
-                                // Main project: filter by project_id IS NULL
-                                const { data: existingPrizeWin } = await supabase
-                                    .from('prizeWin')
-                                    .select('id, project_id')
-                                    .eq('userId', winner.user_id)
-                                    .in('reward_type', ['nft', 'sol', 'jackpot']) // Check all possible types
-                                    .eq('name', jackpotName)
-                                    .is('project_id', null) // Main project only
-                                    .gte('created_at', endTimeISO)
-                                    .maybeSingle();
-                                
-                                if (!existingPrizeWin) {
-                                    const prizeWinInsert: any = {
+                            // CRITICAL FIX: DO NOT create prizeWin entries from frontend!
+                            // The backend settle API (/api/jackpot/settle) handles prizeWin creation
+                            // Frontend creating entries was causing the bug where ALL users got NFT rewards
+                            console.log("ℹ️ PrizeWin entry creation handled by backend settle API - skipping frontend insertion");
+                            console.log("🎯 Winner details:", {
                                         userId: winner.user_id,
-                                        name: jackpotName,
-                                        image: jackpotImage,
-                                        isWithdraw: false, // Not withdrawn yet
-                                        reward_type: rewardType, // 'nft' if NFT prize, 'sol' if SOL/OGX prize
-                                        product_id: null, // Not from a product/lootbox
-                                        created_at: getCurrentUTCTime()
-                                        // project_id will be NULL for main project (default)
-                                    };
-                                    
-                                    // CRITICAL: Only set 'sol' field for SOL/token rewards, NOT for NFT rewards
-                                    // For NFT jackpots, sol should be null or "0" to prevent showing token rewards
-                                    if (isNFTJackpot) {
-                                        // NFT jackpot: set sol to null (or "0") and add mint address
-                                        prizeWinInsert.sol = null; // Explicitly null for NFT rewards
-                                        prizeWinInsert.mint = poolData.image;
-                                        console.log("🎨 Adding NFT jackpot prize to cart:", {
-                                            mint: poolData.image,
-                                            name: jackpotName,
-                                            userId: winner.user_id,
-                                            reward_type: rewardType,
-                                            sol: null // Confirmed: no SOL reward for NFT jackpots
-                                        });
-                                    } else {
-                                        // SOL/token jackpot: set sol to prize amount
-                                        prizeWinInsert.sol = String(prizeAmount);
-                                        console.log("💰 Adding SOL/OGX jackpot prize to cart:", {
-                                            amount: prizeAmount,
-                                            name: jackpotName,
-                                            userId: winner.user_id,
-                                            reward_type: rewardType,
-                                            sol: prizeAmount
-                                        });
-                                    }
-                                    
-                                    const { data: prizeWinData, error: prizeWinError } = await supabase
-                                        .from('prizeWin')
-                                        .insert(prizeWinInsert)
-                                        .select()
-                                        .single();
-                                    
-                                    if (prizeWinError) {
-                                        console.error("❌ ERROR: Error adding winner to prizeWin table:", prizeWinError);
-                                        // Don't fail the whole process if prizeWin insert fails
-                                    } else {
-                                        console.log("✅ Winner added to prizeWin table:", prizeWinData);
-                                    }
-                                } else {
-                                    console.log("ℹ️ Winner already exists in prizeWin table");
-                                }
-                                } catch (prizeWinException) {
-                                    console.error("❌ EXCEPTION: Error adding to prizeWin:", prizeWinException);
-                                    // Continue even if prizeWin insert fails
-                                }
-                            } else {
-                                console.log("ℹ️ Item prize - skipped prizeWin insertion (balance credited directly)");
-                            }
+                                poolId: poolId,
+                                isNFTJackpot: isNFTJackpot,
+                                isItemPrize: isItemPrize
+                            });
                             
                             toast.success(`🏆 Final Winner Selected!`, {
                                 position: "top-center",
@@ -1148,12 +1288,7 @@ export default function Page() {
                         ) : null}
 
                         {/* Purchase Form */}
-                        {isTimeExpired ? (
-                            <div className="bg-red-50 border-2 border-red-300 rounded-xl p-6 text-center">
-                                <p className="text-xl font-bold text-red-600 mb-2">⏰ Jackpot Time Expired</p>
-                                <p className="text-gray-600">Ticket purchases are no longer available for this jackpot.</p>
-                            </div>
-                        ) : (
+                        {!isTimeExpired && (
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div className="relative">
                                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#ff914d] text-sm">Price:</span>

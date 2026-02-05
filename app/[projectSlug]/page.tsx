@@ -13,6 +13,7 @@ import JackpotImage from "@/app/Components/JackpotImage";
 import { useThemeColor } from "@/lib/hooks/useThemeColor";
 import { ProductCardSkeleton, PrizeCardSkeleton } from "@/app/Components/Skeleton";
 import { useState, useEffect } from "react";
+import { convertIPFSToHTTP } from "@/lib/utils/ipfs";
 
 // Types for the API responses
 interface Product {
@@ -374,12 +375,13 @@ export default function ProjectHomePage() {
                                 const mintAddress = hasMint ? win.mint : (imageIsMint ? win.image : null);
                                 
                                 if (mintAddress && nftImageCache[mintAddress]) {
-                                    // Use cached image from database
-                                    imageSource = nftImageCache[mintAddress];
+                                    // Use cached image from database - convert IPFS URLs if needed
+                                    const cachedImage = nftImageCache[mintAddress];
+                                    imageSource = convertIPFSToHTTP(cachedImage) || cachedImage;
                                     console.log(`✅ Using cached NFT image from database:`, imageSource);
                                 } else if (win?.image && !imageIsMint) {
-                                    // Use image field if it's a URL (not a mint address)
-                                    imageSource = win.image;
+                                    // Use image field if it's a URL (not a mint address) - convert IPFS URLs if needed
+                                    imageSource = convertIPFSToHTTP(win.image) || win.image;
                                     console.log(`🖼️ Using image URL from prizeWin:`, imageSource);
                                 } else if (mintAddress) {
                                     // Use mint address (JackpotImage will fetch metadata)

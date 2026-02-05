@@ -30,7 +30,8 @@ const nextConfig = {
             'dweb.link',
             'nftstorage.link',
             'ap-assets.pinit.io',
-            'we-assets.pinit.io'
+            'we-assets.pinit.io',
+            'cdn.helius-rpc.com'
         ],
         remotePatterns: [
             {
@@ -64,6 +65,10 @@ const nextConfig = {
             {
                 protocol: 'https',
                 hostname: 'we-assets.pinit.io',
+            },
+            {
+                protocol: 'https',
+                hostname: 'cdn.helius-rpc.com',
             }
         ]
     },

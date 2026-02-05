@@ -35,6 +35,7 @@ export default function TokenManagement() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [tokenLimit, setTokenLimit] = useState<number | null>(null);
   
   // Form state for offchain token
   const [showOffchainForm, setShowOffchainForm] = useState(false);
@@ -89,8 +90,14 @@ export default function TokenManagement() {
         }
       });
       const offchainData = await offchainResponse.json();
+      console.log('Offchain API Response:', offchainData);
       if (offchainResponse.ok && offchainData.data && offchainData.data.length > 0) {
         setOffchainToken(offchainData.data[0]);
+        // Set token limit from response if available
+        if (offchainData.token_limit !== undefined) {
+          console.log('Setting token limit from offchain:', offchainData.token_limit);
+          setTokenLimit(offchainData.token_limit);
+        }
       } else {
         setOffchainToken(null);
       }
@@ -103,8 +110,14 @@ export default function TokenManagement() {
         }
       });
       const onchainData = await onchainResponse.json();
+      console.log('Onchain API Response:', onchainData);
       if (onchainResponse.ok) {
         setOnchainTokens(onchainData.data || []);
+        // Set token limit from response if available (in case offchain token doesn't exist)
+        if (onchainData.token_limit !== undefined && tokenLimit === null) {
+          console.log('Setting token limit from onchain:', onchainData.token_limit);
+          setTokenLimit(onchainData.token_limit);
+        }
       } else {
         setOnchainTokens([]);
       }
@@ -231,6 +244,15 @@ export default function TokenManagement() {
 
     setError(null);
     setSuccess(null);
+
+    // Check token limit before adding (only count on-chain tokens)
+    if (tokenLimit !== null) {
+      const currentOnchainTokenCount = onchainTokens.length;
+      if (currentOnchainTokenCount >= tokenLimit) {
+        setError(`On-chain token limit reached. This project has a maximum of ${tokenLimit} on-chain token(s). Current count: ${currentOnchainTokenCount}. Please delete an existing on-chain token before adding a new one.`);
+        return;
+      }
+    }
 
     if (!isValidSolanaAddress(onchainFormData.mint_address)) {
       setError('Invalid mint address. Please enter a valid Solana mint address (32-44 characters, Base58 encoded).');
@@ -396,6 +418,16 @@ export default function TokenManagement() {
           <p className="text-sm text-gray-500 mt-1">
           Manage tokens for <strong>{currentProject?.name || 'this project'}</strong>
         </p>
+        {tokenLimit !== null && (
+          <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-800">
+              <strong>On-Chain Token Limit:</strong> {onchainTokens.length} / {tokenLimit} on-chain tokens used
+              {onchainTokens.length >= tokenLimit && (
+                <span className="ml-2 text-red-600 font-semibold">(Limit Reached)</span>
+              )}
+            </p>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -578,10 +610,19 @@ export default function TokenManagement() {
             <div className="mb-4">
               <button
                 onClick={() => {
+                  // Check token limit before showing form (only count on-chain tokens)
+                  if (tokenLimit !== null) {
+                    const currentOnchainTokenCount = onchainTokens.length;
+                    if (currentOnchainTokenCount >= tokenLimit) {
+                      setError(`On-chain token limit reached. This project has a maximum of ${tokenLimit} on-chain token(s). Current count: ${currentOnchainTokenCount}. Please delete an existing on-chain token before adding a new one.`);
+                      return;
+                    }
+                  }
                   resetOnchainForm();
                   setShowOnchainForm(true);
                 }}
-                className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+                disabled={tokenLimit !== null && onchainTokens.length >= tokenLimit}
+                className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
                 + Add On-Chain Token
               </button>

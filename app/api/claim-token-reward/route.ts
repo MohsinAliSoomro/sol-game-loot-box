@@ -5,7 +5,15 @@ import bs58 from 'bs58';
 import { supabase } from '@/service/supabase';
 
 // Initialize Solana connection (default to mainnet for OGX and other mainnet tokens)
-const connection = new Connection(process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com', 'confirmed');
+// Use http endpoint to avoid websocket issues, or configure websocket separately
+const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+const connection = new Connection(rpcUrl, {
+  commitment: 'confirmed',
+  confirmTransactionInitialTimeout: 30000,
+  disableRetryOnRateLimit: false,
+  // Use http for RPC calls to avoid websocket bufferutil issues
+  // Websockets are only needed for subscriptions, which we'll handle separately
+});
 
 export async function POST(request: NextRequest) {
   try {
@@ -151,12 +159,55 @@ export async function POST(request: NextRequest) {
     transaction.sign(adminKeypair);
     
     console.log('📡 Sending token transfer transaction...');
-    const signature = await connection.sendRawTransaction(transaction.serialize());
+    const signature = await connection.sendRawTransaction(transaction.serialize(), {
+      skipPreflight: false,
+      maxRetries: 3
+    });
     
     console.log('⏳ Confirming transaction:', signature);
-    await connection.confirmTransaction(signature, 'confirmed');
     
-    console.log('✅ Token transfer confirmed:', signature);
+    // Use polling instead of websocket subscription to avoid bufferUtil errors
+    // Poll for transaction status instead of using confirmTransaction (which uses websockets)
+    let confirmed = false;
+    const maxAttempts = 30; // 30 attempts * 1 second = 30 seconds max
+    const pollInterval = 1000; // 1 second
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const status = await connection.getSignatureStatus(signature);
+        
+        if (status?.value?.err) {
+          throw new Error(`Transaction failed: ${JSON.stringify(status.value.err)}`);
+        }
+        
+        if (status?.value?.confirmationStatus === 'confirmed' || status?.value?.confirmationStatus === 'finalized') {
+          confirmed = true;
+          console.log(`✅ Token transfer confirmed (attempt ${attempt + 1}):`, signature);
+          break;
+        }
+        
+        // Wait before next poll
+        if (attempt < maxAttempts - 1) {
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+        }
+      } catch (pollError: any) {
+        // If it's a transaction error, throw it
+        if (pollError.message?.includes('Transaction failed')) {
+          throw pollError;
+        }
+        // Otherwise, continue polling
+        console.warn(`⚠️ Poll attempt ${attempt + 1} failed, retrying...`, pollError.message);
+        if (attempt < maxAttempts - 1) {
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+        }
+      }
+    }
+    
+    if (!confirmed) {
+      console.warn('⚠️ Transaction confirmation timeout, but transaction was sent:', signature);
+      // Don't throw - transaction was sent, even if we couldn't confirm it
+      // Frontend can check transaction status later
+    }
 
     return NextResponse.json({
       success: true,

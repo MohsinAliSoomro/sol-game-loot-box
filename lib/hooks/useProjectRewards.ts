@@ -82,7 +82,7 @@ export const useProjectRewards = (lootboxId: string | number | null) => {
       const nftRewards = (nftRows || []).map(r => ({
         id: r.id,
         rewardType: 'nft',
-        name: r.mint_address,
+        name: r.reward_name || r.mint_address,
         type: 'nft',
         value: '',
         tokenAmount: '',
@@ -91,7 +91,7 @@ export const useProjectRewards = (lootboxId: string | number | null) => {
         tokenId: '',
         mintAddress: r.mint_address,
         chance: r.percentage || 0,
-        image: null,
+        image: r.reward_image || null, // Use reward_image from database if available
         created_at: r.created_at
       }));
 

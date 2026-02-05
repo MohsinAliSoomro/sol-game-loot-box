@@ -8,6 +8,7 @@ import { solanaProgramService } from "@/lib/solana-program";
 import Image from "next/image";
 import JackpotImage from "./JackpotImage";
 import { useProject } from "@/lib/project-context";
+import { convertIPFSToHTTP } from "@/lib/utils/ipfs";
 
 /**
  * Fetches the prizes won by a user that are available to claim.
@@ -95,10 +96,83 @@ const getWinPrizes = async (userId: string) => {
             pathname: typeof window !== 'undefined' ? window.location.pathname : 'N/A'
         });
 
+        // CRITICAL: For jackpot NFT rewards, verify user is actually the winner
+        // This prevents non-winners from seeing jackpot NFTs in their sidebar
+        // Winner is determined by winner_user_id in jackpot_pools OR jackpot_wins
+        const verifiedRewards = [];
+        for (const reward of response.data) {
+            if (reward.reward_type === 'nft' && reward.mint) {
+                // Check if this is a jackpot reward by looking up the pool
+                try {
+                    // First try with new columns
+                    let jackpotPool: any = null;
+                    const { data: poolWithCols, error: poolError } = await supabase
+                        .from('jackpot_pools')
+                        .select('id, winner_user_id, is_settled, name')
+                        .eq('image', reward.mint)
+                        .maybeSingle();
+                    
+                    if (!poolError && poolWithCols) {
+                        jackpotPool = poolWithCols;
+                    } else {
+                        // Fallback: try without new columns
+                        const { data: basicPool } = await supabase
+                            .from('jackpot_pools')
+                            .select('id, name')
+                            .eq('image', reward.mint)
+                            .maybeSingle();
+                        
+                        if (basicPool) {
+                            // Check jackpot_wins for winner
+                            const { data: winData } = await supabase
+                                .from('jackpot_wins')
+                                .select('user_id')
+                                .eq('pool_id', basicPool.id)
+                                .eq('win_type', 'jackpot_final')
+                                .maybeSingle();
+                            
+                            jackpotPool = {
+                                ...basicPool,
+                                is_settled: !!winData,
+                                winner_user_id: winData?.user_id || null
+                            };
+                        }
+                    }
+                    
+                    if (jackpotPool) {
+                        // This is a jackpot NFT - verify jackpot is settled AND user is the winner
+                        if (!jackpotPool.is_settled) {
+                            console.log(`🚫 Filtering out jackpot NFT - jackpot not yet settled:`, {
+                                poolName: jackpotPool.name,
+                                mint: reward.mint
+                            });
+                            continue; // Skip - jackpot not settled yet
+                        }
+                        
+                        if (jackpotPool.winner_user_id !== userId) {
+                            console.log(`🚫 Filtering out jackpot NFT - user is not winner:`, {
+                                userId,
+                                winnerId: jackpotPool.winner_user_id,
+                                poolName: jackpotPool.name,
+                                mint: reward.mint,
+                                isSettled: jackpotPool.is_settled
+                            });
+                            continue; // Skip this reward - user is not the winner
+                        }
+                        console.log(`✅ Verified: jackpot settled AND user is winner for ${jackpotPool.name}`);
+                    }
+                } catch (err) {
+                    console.warn('⚠️ Error checking jackpot winner status:', err);
+                    // On error, include the reward (fail open for now)
+                }
+            }
+            verifiedRewards.push(reward);
+        }
+
         // Separate NFT and SOL rewards (case-insensitive check)
         // Explicitly exclude item rewards - they should never appear in sidebar
         // Handle legacy entries that might not have reward_type set
-        const nftRewards = response.data.filter((reward: any) => {
+        const nftRewards = verifiedRewards.filter((reward: any) => {
             const rewardType = (reward.reward_type || '').toLowerCase();
             const hasMint = !!reward.mint && reward.mint.trim() !== '';
             const isNFT = rewardType === 'nft';
@@ -138,7 +212,7 @@ const getWinPrizes = async (userId: string) => {
 
             return false;
         });
-        const solRewards = response.data.filter((reward: any) => {
+        const solRewards = verifiedRewards.filter((reward: any) => {
             const rewardType = (reward.reward_type || '').toLowerCase();
             const hasMint = !!reward.mint && reward.mint.trim() !== '';
             const isItem = rewardType === 'item';
@@ -176,7 +250,7 @@ const getWinPrizes = async (userId: string) => {
         });
 
         // Filter token rewards (on-chain tokens like OGX)
-        const tokenRewards = response.data.filter((reward: any) => {
+        const tokenRewards = verifiedRewards.filter((reward: any) => {
             const rewardType = (reward.reward_type || '').toLowerCase();
             const hasMint = !!reward.mint && reward.mint.trim() !== '';
             const isItem = rewardType === 'item';
@@ -335,10 +409,12 @@ export default function SidebarCart() {
                 },
                 (payload) => {
                     console.log('🔄 PrizeWin database changed for user:', payload);
-                    // Refresh cart when prizeWin changes
-                    if (user) {
+                    // Don't refresh if we're currently claiming a reward (prevents loops)
+                    if (user && !claimingReward && !claimingAll) {
                         console.log("🔄 Auto-refreshing cart due to prizeWin change...");
                         run(user.id);
+                    } else {
+                        console.log("⏸️ Skipping cart refresh - claim in progress");
                     }
                 }
             )
@@ -349,7 +425,7 @@ export default function SidebarCart() {
             console.log("🔄 Cleaning up prizeWin subscription...");
             subscription.unsubscribe();
         };
-    }, [user, run]);
+    }, [user, run, claimingReward, claimingAll]);
 
     // Claim NFT reward function
     const claimNFTReward = async (rewardId: string, rewardName: string, mintAddress?: string, bulkMode: boolean = false) => {
@@ -405,24 +481,67 @@ export default function SidebarCart() {
                 return;
             }
             
-            // Additional validation: For jackpot NFT rewards, verify user is the winner in jackpot_wins table
+            // CRITICAL: For jackpot NFT rewards, verify with BACKEND that user is the winner
+            // This prevents frontend manipulation and ensures only the actual winner can claim
             if (existingReward?.reward_type === 'nft' && existingReward?.name) {
-                // Check if this is a jackpot reward by checking jackpot_wins table
-                const { data: jackpotWin, error: jackpotError } = await supabase
-                    .from('jackpot_wins')
-                    .select('user_id, pool_id, win_type')
-                    .eq('user_id', user?.id)
-                    .eq('win_type', 'jackpot_final')
+                // First check if this is a jackpot reward by looking up the pool
+                const { data: jackpotPool, error: poolError } = await supabase
+                    .from('jackpot_pools')
+                    .select('id, winner_user_id, is_settled, name')
+                    .eq('name', existingReward.name)
                     .maybeSingle();
                 
-                if (jackpotError) {
-                    console.warn('⚠️ Could not verify jackpot win status:', jackpotError);
-                    // Continue anyway - prizeWin entry is the source of truth
-                } else if (!jackpotWin) {
-                    console.warn('⚠️ User has prizeWin entry but no corresponding jackpot_wins entry');
-                    // This could be a lootbox reward, not a jackpot reward - allow it
+                if (jackpotPool) {
+                    // This IS a jackpot reward - verify with backend
+                    console.log('🔐 Verifying jackpot NFT claim with backend...');
+                    
+                    try {
+                        const verifyResponse = await fetch(`/api/claim-jackpot-nft?poolId=${jackpotPool.id}&userId=${user?.id}&projectId=${projectId || ''}`);
+                        const verifyResult = await verifyResponse.json();
+                        
+                        if (!verifyResult.success) {
+                            console.error('❌ Backend verification failed:', verifyResult.error);
+                            if (!bulkMode) {
+                                alert(`❌ Claim Failed!\n\n${verifyResult.error}`);
+                                run(user?.id);
+                            }
+                            return;
+                        }
+                        
+                        if (!verifyResult.isWinner) {
+                            console.error('🚨 SECURITY: User is NOT the jackpot winner!', {
+                                userId: user?.id,
+                                poolId: jackpotPool.id,
+                                poolName: jackpotPool.name
+                            });
+                            if (!bulkMode) {
+                                alert(`❌ Access Denied!\n\nYou are not the winner of this jackpot.\n\nOnly the jackpot winner can claim this NFT.`);
+                                run(user?.id);
+                            }
+                            return;
+                        }
+                        
+                        if (verifyResult.claimed) {
+                            console.log('✅ NFT already claimed');
+                            if (!bulkMode) {
+                                alert(`🎉 NFT Already Claimed!\n\nYou already claimed this NFT!\n\nCheck your wallet.`);
+                                run(user?.id);
+                            }
+                            return;
+                        }
+                        
+                        console.log('✅ Backend verified: User is the winner and can claim NFT');
+                    } catch (verifyError) {
+                        console.error('❌ Error calling backend verification:', verifyError);
+                        // For security, don't proceed if we can't verify
+                        if (!bulkMode) {
+                            alert(`❌ Verification Failed!\n\nCould not verify your winner status. Please try again.`);
+                        }
+                        return;
+                    }
                 } else {
-                    console.log('✅ Verified user is jackpot winner:', jackpotWin);
+                    // Not a jackpot reward (might be a lootbox reward) - use existing prizeWin check
+                    console.log('ℹ️ Not a jackpot reward, using prizeWin verification');
                 }
             }
 
@@ -1314,11 +1433,41 @@ export default function SidebarCart() {
 
             console.log("✅ Token reward claimed successfully:", result);
 
-            // Mark as withdrawn in database
-            const { error: updateError } = await supabase
+            // Get current project ID and check if main project (for filtering update query)
+            const projectId = typeof window !== 'undefined'
+                ? localStorage.getItem('currentProjectId')
+                : null;
+            const projectSlug = typeof window !== 'undefined'
+                ? localStorage.getItem('currentProjectSlug')
+                : null;
+
+            let isMainProject = false;
+            if (typeof window !== 'undefined') {
+                const pathParts = window.location.pathname.split('/').filter(Boolean);
+                const firstSegment = pathParts[0];
+                isMainProject = !firstSegment ||
+                    firstSegment === 'lootboxes' ||
+                    firstSegment === 'live-draw' ||
+                    firstSegment === 'leaderboard' ||
+                    (!projectSlug && !projectId);
+            }
+
+            // Mark as withdrawn in database (with project_id filtering)
+            let updateQuery = supabase
                 .from("prizeWin")
                 .update({ isWithdraw: true })
                 .eq("id", rewardId);
+
+            // Filter by project_id based on whether we're on main project or sub-project
+            if (isMainProject) {
+                // Main project: only update rewards where project_id IS NULL
+                updateQuery = updateQuery.is("project_id", null);
+            } else if (projectId) {
+                // Sub-project: filter by specific project_id
+                updateQuery = updateQuery.eq("project_id", parseInt(projectId));
+            }
+
+            const { error: updateError } = await updateQuery;
 
             if (updateError) {
                 console.error("Error updating reward status:", updateError);
@@ -1327,7 +1476,13 @@ export default function SidebarCart() {
 
             if (!bulkMode) {
                 alert(`🎉 Token Reward Claimed!\n\nYou received ${tokenAmount} ${tokenSymbol}!\n\nCheck your wallet for the tokens!`);
-                run(user?.id); // Refresh to update UI
+                // Refresh cart after a short delay to ensure database update is complete
+                // The subscription will also handle this, but we add a fallback refresh
+                setTimeout(() => {
+                    if (!claimingReward) {
+                        run(user?.id);
+                    }
+                }, 500);
             }
 
         } catch (error: any) {
@@ -1451,6 +1606,8 @@ export default function SidebarCart() {
                                             {(data as any)?.data?.map((item: any, index: number) => {
                                                 // Determine image source based on reward type
                                                 let imageSource: string | null = null;
+                                                const isNFT = (item?.reward_type || '').toLowerCase() === 'nft';
+                                                
                                                 if (item?.reward_type === 'sol') {
                                                     // For SOL rewards, use default SOL logo
                                                     imageSource = 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png';
@@ -1469,21 +1626,50 @@ export default function SidebarCart() {
                                                         // Fallback to generic token icon
                                                         imageSource = 'https://cryptologos.cc/logos/solana-sol-logo.png';
                                                     }
+                                                } else if (isNFT) {
+                                                    // For NFT rewards, prioritize image URL, then mint address
+                                                    if (item?.image && item.image.trim() !== '') {
+                                                        // Check if it's a URL (new format) or mint address (old format)
+                                                        const isUrl = item.image.startsWith('http://') || item.image.startsWith('https://') || item.image.startsWith('/');
+                                                        if (isUrl) {
+                                                            // It's already a URL, convert IPFS if needed
+                                                            imageSource = convertIPFSToHTTP(item.image) || item.image;
+                                                        } else {
+                                                            // Check if it's a mint address (base58, 32-44 chars)
+                                                            const isMintAddress = item.image.length >= 32 && 
+                                                                                 item.image.length <= 44 && 
+                                                                                 !item.image.includes('/') &&
+                                                                                 !item.image.includes('.');
+                                                            if (isMintAddress) {
+                                                                // It's a mint address, use it to fetch NFT metadata
+                                                                imageSource = item.image;
+                                                            } else {
+                                                                // Unknown format, try using it anyway
+                                                                imageSource = item.image;
+                                                            }
+                                                        }
+                                                    } else if (item?.mint && item.mint.trim() !== '') {
+                                                        // Use mint address if image field is not available
+                                                        imageSource = item.mint;
+                                                    } else {
+                                                        console.warn('⚠️ SidebarCart: NFT reward without image or mint:', {
+                                                            name: item?.name,
+                                                            reward_type: item?.reward_type,
+                                                            hasImage: !!item?.image,
+                                                            hasMint: !!item?.mint,
+                                                            item
+                                                        });
+                                                    }
                                                 } else if (item?.image && item.image.trim() !== '') {
-                                                    // For NFT rewards, prefer image field if it exists (may already be a URL or mint address)
-                                                    // Check if it's a URL
+                                                    // For other reward types, use image if available
                                                     const isUrl = item.image.startsWith('http://') || item.image.startsWith('https://') || item.image.startsWith('/');
                                                     if (isUrl) {
-                                                        // It's already a URL, use it directly
                                                         imageSource = item.image;
                                                     } else {
-                                                        // Image field might contain a mint address - use it to fetch metadata
-                                                        // JackpotImage component will handle mint addresses
                                                         imageSource = item.image;
                                                     }
                                                 } else if (item?.mint && item.mint.trim() !== '') {
-                                                    // Fallback to mint address if image field is not available
-                                                    // This is the primary way to fetch NFT images
+                                                    // Fallback to mint address
                                                     imageSource = item.mint;
                                                 } else {
                                                     console.warn('⚠️ SidebarCart: No image source for reward:', {
@@ -1511,7 +1697,7 @@ export default function SidebarCart() {
                                                             width={64}
                                                             height={64}
                                                             className="h-full w-full object-cover object-center"
-                                                            fallbackSrc="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
+                                                            fallbackSrc={isNFT ? undefined : "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"}
                                                         />
                                                     </div>
                                                     <div className="ml-4 flex justify-between w-full">

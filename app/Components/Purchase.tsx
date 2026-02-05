@@ -1233,7 +1233,7 @@ export default function PurchaseModal() {
         {/* <div className="relative p-4 w-full"> */}
         <div className="relative bg-background rounded-lg shadow ">
           <div className="flex items-center justify-between p-4 md:p-5 border-b rounded-t dark:border-gray-600">
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mx-auto -mr-5">
+            <h3 className="text-xl font-semibold text-white mx-auto -mr-5">
               Deposit Tokens
             </h3>
             <button
@@ -1263,26 +1263,26 @@ export default function PurchaseModal() {
           <div className="flex justify-center space-x-2 border-b w-full">
             <button
               onClick={() => setActiveTab("deposit")}
-               className={`flex-1 max-w-[200px] py-2 px-3 text-sm text-center whitespace-nowrap ${activeTab === "deposit"
-                ? "border-b-2 bg-gray-200"
+               className={`flex-1 max-w-[200px] py-2 px-3 text-sm text-center whitespace-nowrap font-medium ${activeTab === "deposit"
+                ? "border-b-2 bg-white/10"
                 : "bg-transparent"
                 }`}
               style={{
-                borderBottomColor: activeTab === "deposit" ? modalThemeColor : 'transparent',
-                color: modalThemeColor
+                borderBottomColor: activeTab === "deposit" ? '#ffffff' : 'transparent',
+                color: activeTab === "deposit" ? '#ffffff' : 'rgba(255, 255, 255, 0.7)'
               }}
             >
               Deposit Tokens
             </button>
             <button
               onClick={() => setActiveTab("history")}
-             className={`flex-1 max-w-[200px] py-2 px-3 text-sm text-center whitespace-nowrap ${activeTab === "history"
-                ? "border-b-2 bg-gray-200"
+             className={`flex-1 max-w-[200px] py-2 px-3 text-sm text-center whitespace-nowrap font-medium ${activeTab === "history"
+                ? "border-b-2 bg-white/10"
                 : "bg-transparent"
                 }`}
               style={{
-                borderBottomColor: activeTab === "history" ? modalThemeColor : 'transparent',
-                color: modalThemeColor
+                borderBottomColor: activeTab === "history" ? '#ffffff' : 'transparent',
+                color: activeTab === "history" ? '#ffffff' : 'rgba(255, 255, 255, 0.7)'
               }}
             >
               Deposit History
@@ -1306,7 +1306,7 @@ export default function PurchaseModal() {
                   <>
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-sm font-medium text-orange-600 mb-2">
+                        <label className="block text-sm font-medium text-white mb-2">
                           Select Token
                         </label>
                         <select
@@ -1326,7 +1326,7 @@ export default function PurchaseModal() {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-orange-600 mb-2">
+                        <label className="block text-sm font-medium text-white mb-2">
                           Deposit Amount ({selectedTokenInfo?.symbol})
                         </label>
                         <input
@@ -1342,7 +1342,7 @@ export default function PurchaseModal() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-orange-600 mb-2">
+                        <label className="block text-sm font-medium text-white mb-2">
                           Estimated {projectTokenSymbol} You&apos;ll Receive
                         </label>
                         <input
@@ -1365,7 +1365,7 @@ export default function PurchaseModal() {
                         </p>
                       </div> */}
                       <div>
-                        <label className="block text-sm font-medium text-orange-600 mb-2">
+                        <label className="block text-sm font-medium text-white mb-2">
                           Available {selectedTokenInfo?.symbol} in Wallet
                         </label>
                         <input
@@ -1445,35 +1445,35 @@ export default function PurchaseModal() {
                         className="flex-grow flex items-center justify-center"
                         style={{ height: "400px" }}
                       >
-                        <p className="text-gray-500 dark:text-gray-400">
+                        <p className="text-white">
                           No Deposit history found
                         </p>
                       </div>
                     ) : (
-                      <div className="overflow-y-auto overflow-x-auto max-h-[400px] border border-gray-200 dark:border-gray-700 rounded-lg">
-                        <table className="w-full text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400 min-w-full table-fixed">
-                          <thead className="text-xs text-gray-700 uppercase dark:text-gray-400 sticky top-0 bg-gray-50 dark:bg-gray-800 z-10">
+                      <div className="overflow-y-auto overflow-x-auto max-h-[400px] border border-white/20 rounded-lg">
+                        <table className="w-full text-sm text-left rtl:text-right text-white min-w-full table-fixed">
+                          <thead className="text-xs uppercase text-white sticky top-0 bg-transparent z-10">
                             <tr>
                               <th
                                 scope="col"
-                                className="px-6 py-3 bg-gray-50 dark:bg-gray-800 w-1/3"
+                                className="px-6 py-3 bg-transparent w-1/3"
                               >
-                                <span className="flex justify-center">
+                                <span className="flex justify-center text-white">
                                   Transaction ID
                                 </span>
                               </th>
 
                               <th
                                 scope="col"
-                                className="px-6 py-3 bg-gray-50 dark:bg-gray-800 flex justify-center"
+                                className="px-6 py-3 bg-transparent flex justify-center"
                               >
-                                <span className="">{projectTokenSymbol}</span>
+                                <span className="text-white">{projectTokenSymbol}</span>
                               </th>
                               <th
                                 scope="col"
-                                className="px-6 py-3 bg-gray-50 dark:bg-gray-800 w-1/3"
+                                className="px-6 py-3 bg-transparent w-1/3"
                               >
-                                <span className="flex justify-center">
+                                <span className="flex justify-center text-white">
                                   Status
                                 </span>
                               </th>
@@ -1483,16 +1483,16 @@ export default function PurchaseModal() {
                             {data?.data?.map((item) => (
                               <tr
                                 key={item?.id}
-                                className="border-b border-gray-200 dark:border-gray-700 w-full hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                                className="border-b border-white/20 w-full hover:bg-white/10 transition-colors"
                               >
                                 <th
                                   scope="row"
-                                  className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap bg-gray-50 dark:text-white dark:bg-gray-800 truncate"
+                                  className="px-6 py-4 font-medium text-white whitespace-nowrap bg-transparent truncate"
                                 >
                                   {truncate(item?.transactionId, 10)}
                                 </th>
-                                <td className="px-6 py-4">{item?.ogx}</td>
-                                <td className="px-6 py-4 bg-gray-50 dark:bg-gray-800">
+                                <td className="px-6 py-4 text-white">{item?.ogx}</td>
+                                <td className="px-6 py-4 bg-transparent text-white">
                                   {item?.t_status}
                                 </td>
                               </tr>
@@ -1501,12 +1501,12 @@ export default function PurchaseModal() {
                         </table>
                       </div>
                     )}
-                    <div className="flex items-center justify-end pt-4 space-x-3 border-t border-[#ff914d]/20 mt-4">
+                    <div className="flex items-center justify-end pt-4 space-x-3 border-t border-white/20 mt-4">
                       <button
                         onClick={() =>
                           setState({ ...state, purchase: false })
                         }
-                        className="px-5 py-2.5 text-sm font-medium rounded-lg border border-[#ff914d]/20 text-gray-300 hover:bg-[#ff914d]/20 focus:ring-2 focus:ring-[#ff914d]/50"
+                        className="px-5 py-2.5 text-sm font-medium rounded-lg border border-white/30 text-white hover:bg-white/20 focus:ring-2 focus:ring-white/50"
                       >
                         Cancel
                       </button>

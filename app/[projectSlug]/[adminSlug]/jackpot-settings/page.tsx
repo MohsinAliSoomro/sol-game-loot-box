@@ -7,6 +7,7 @@ import { useAdminWallet } from '@/lib/hooks/useAdminWallet';
 import { fetchNFTMetadata } from '@/lib/fetchNFTMetadata';
 import { supabase } from '@/service/supabase';
 import { useProject } from '@/lib/project-context';
+import { convertIPFSToHTTP } from '@/lib/utils/ipfs';
 
 export default function JackpotSettings() {
   const { getProjectId, getProjectTokenSymbol } = useProject();
@@ -67,7 +68,9 @@ export default function JackpotSettings() {
   // Fetch NFT images for jackpots that have NFT mint addresses
   useEffect(() => {
     const fetchNFTImages = async () => {
-      const imageCache: Record<string, string> = {};
+      const imageCache: Record<string, string> = { ...jackpotNFTImages }; // Preserve existing cache
+      
+      console.log('🔄 Fetching NFT images for', jackpots.length, 'jackpots. Wallet NFTs:', walletNFTs.length);
       
       for (const jackpot of jackpots) {
         if (jackpot.image) {
@@ -77,30 +80,110 @@ export default function JackpotSettings() {
                            !jackpot.image.includes('/') &&
                            !jackpot.image.includes('.');
           
-          if (isNFTMint && !imageCache[jackpot.image]) {
-            try {
-              const metadata = await fetchNFTMetadata(jackpot.image);
-              if (metadata && metadata.image) {
-                imageCache[jackpot.image] = metadata.image;
+          if (isNFTMint) {
+            // Only fetch if not already cached
+            if (!imageCache[jackpot.image]) {
+              // First, try to find the NFT in wallet NFTs (they already have images from Helius)
+              console.log('🔍 Looking for NFT in wallet:', jackpot.image);
+              console.log('📊 Wallet NFTs count:', walletNFTs.length);
+              if (walletNFTs.length > 0) {
+                console.log('📋 Wallet NFT mints:', walletNFTs.map((nft: any) => nft.mint).slice(0, 5));
               }
-            } catch (error) {
-              console.error('Error fetching NFT image for', jackpot.image, error);
+              
+              const walletNFT = walletNFTs.find((nft: any) => nft.mint === jackpot.image);
+              
+              if (walletNFT) {
+                console.log('📦 Found wallet NFT:', {
+                  mint: walletNFT.mint,
+                  name: walletNFT.name,
+                  hasImage: !!walletNFT.image,
+                  imageValue: walletNFT.image
+                });
+                
+                if (walletNFT.image) {
+                  // Use the image from wallet NFT (already converted from Helius)
+                  // The image from Helius should already be a valid HTTP URL, but convert IPFS just in case
+                  let finalImage = walletNFT.image;
+                  
+                  // Only convert if it's an IPFS URL, otherwise use as-is (Helius already provides HTTP URLs)
+                  if (finalImage && !finalImage.startsWith('http://') && !finalImage.startsWith('https://')) {
+                    finalImage = convertIPFSToHTTP(finalImage) || finalImage;
+                  }
+                  
+                  console.log('🖼️ Wallet NFT image (original):', walletNFT.image);
+                  console.log('🖼️ Wallet NFT image (final):', finalImage);
+                  
+                  if (finalImage && (finalImage.startsWith('http://') || finalImage.startsWith('https://'))) {
+                    imageCache[jackpot.image] = finalImage;
+                    console.log('✅ Cached wallet NFT image for', jackpot.image, ':', finalImage);
+                  } else {
+                    console.warn('⚠️ Invalid wallet NFT image URL:', finalImage);
+                    console.warn('⚠️ Original image value:', walletNFT.image);
+                  }
+                } else {
+                  console.warn('⚠️ Wallet NFT found but has no image property');
+                  console.warn('⚠️ Wallet NFT object:', JSON.stringify(walletNFT, null, 2));
+                }
+              } else {
+                console.log('⚠️ NFT not found in wallet NFTs, will fetch from metadata');
+                // Fall back to fetching metadata
+                try {
+                  console.log('🖼️ Fetching NFT image for jackpot:', jackpot.image);
+              const metadata = await fetchNFTMetadata(jackpot.image);
+                  console.log('📦 Metadata received for', jackpot.image, ':', {
+                    hasMetadata: !!metadata,
+                    hasImage: !!(metadata?.image),
+                    imageValue: metadata?.image,
+                    name: metadata?.name
+                  });
+                  
+              if (metadata && metadata.image) {
+                    // Convert IPFS URLs to HTTP gateway URLs
+                    const convertedImage = convertIPFSToHTTP(metadata.image) || metadata.image;
+                    
+                    // Validate the converted image URL
+                    if (convertedImage && (convertedImage.startsWith('http://') || convertedImage.startsWith('https://'))) {
+                      imageCache[jackpot.image] = convertedImage;
+                      console.log('✅ Cached NFT image for', jackpot.image, ':', convertedImage);
+                    } else {
+                      console.warn('⚠️ Invalid image URL after conversion:', convertedImage, 'for mint:', jackpot.image);
+              }
+                  } else {
+                    console.warn('⚠️ No image found in metadata for:', jackpot.image);
+                    console.warn('⚠️ Full metadata object:', JSON.stringify(metadata, null, 2));
+                  }
+                } catch (error: any) {
+                  console.error('❌ Error fetching NFT image for', jackpot.image, error);
+                  console.error('❌ Error details:', error?.message, error?.stack);
+            }
+          }
+            } else {
+              console.log('✅ Using cached image for', jackpot.image, ':', imageCache[jackpot.image]);
             }
           }
         }
       }
       
+      console.log('📊 Final image cache:', Object.keys(imageCache).length, 'images');
       setJackpotNFTImages(imageCache);
     };
     
     if (jackpots.length > 0) {
       fetchNFTImages();
     }
-  }, [jackpots]);
+  }, [jackpots, walletNFTs]);
 
   const getJackpotImageUrl = (jackpot: any) => {
     if (!jackpot.image) return null;
     
+    // Check if it's already a valid HTTP URL (image URL stored directly)
+    if (typeof jackpot.image === 'string' && 
+        (jackpot.image.startsWith('http://') || jackpot.image.startsWith('https://'))) {
+      // It's already an image URL, use it directly
+      return convertIPFSToHTTP(jackpot.image) || jackpot.image;
+    }
+    
+    // Check if it's an NFT mint address
     const isNFTMint = typeof jackpot.image === 'string' && 
                      jackpot.image.length >= 32 && 
                      jackpot.image.length <= 44 && 
@@ -108,10 +191,23 @@ export default function JackpotSettings() {
                      !jackpot.image.includes('.');
     
     if (isNFTMint) {
-      return jackpotNFTImages[jackpot.image] || null;
+      const cachedImage = jackpotNFTImages[jackpot.image];
+      // Convert IPFS URLs if needed (as a safety measure)
+      if (cachedImage) {
+        const finalUrl = convertIPFSToHTTP(cachedImage) || cachedImage;
+        // Validate URL
+        if (finalUrl && (finalUrl.startsWith('http://') || finalUrl.startsWith('https://'))) {
+          return finalUrl;
+    }
+        console.warn('⚠️ Invalid cached image URL for', jackpot.image, ':', finalUrl);
+      }
+      // Return null if not cached yet - will show placeholder
+      return null;
     }
     
-    return `https://zkltmkbmzxvfovsgotpt.supabase.co/storage/v1/object/public/apes-bucket/${jackpot.image}`;
+    // For regular images (Supabase storage paths), construct the full URL
+    const imagePath = `https://zkltmkbmzxvfovsgotpt.supabase.co/storage/v1/object/public/apes-bucket/${jackpot.image}`;
+    return convertIPFSToHTTP(imagePath) || imagePath;
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -249,7 +345,20 @@ export default function JackpotSettings() {
       formData.name = selectedNFT.name;
       formData.title = selectedNFT.name;
       formData.nftMintAddress = selectedNFT.mint;
-      formData.image = selectedNFT.mint;
+      // Store the actual image URL instead of mint address
+      // The image URL is already converted from IPFS by useWalletNFTs
+      if (selectedNFT.image) {
+        let imageUrl = selectedNFT.image;
+        // Ensure it's a valid HTTP URL
+        if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+          imageUrl = convertIPFSToHTTP(imageUrl) || imageUrl;
+        }
+        formData.image = imageUrl.startsWith('http://') || imageUrl.startsWith('https://') 
+          ? imageUrl 
+          : selectedNFT.mint; // Fallback to mint if URL is invalid
+      } else {
+        formData.image = selectedNFT.mint; // Fallback to mint if no image
+      }
     } else {
       if (!formData.name.trim()) {
         alert('Please enter a jackpot name');
@@ -281,6 +390,14 @@ export default function JackpotSettings() {
       } else {
         await addJackpot(formDataToSave);
       }
+      // Capture NFT image before clearing selectedNFT
+      const nftImageToCache = depositType === 'nft' && formData.image && selectedNFT?.image 
+        ? selectedNFT.image 
+        : null;
+      const nftMintToCache = depositType === 'nft' && formData.image 
+        ? formData.image 
+        : null;
+      
       setShowModal(false);
       setFormData(initialFormState);
       setEditingJackpot(null);
@@ -293,6 +410,64 @@ export default function JackpotSettings() {
       setUsedNFTMints(usedMints);
       setLootboxNFTMints(lootboxMints);
       await refreshAdminWallet();
+      
+      // If we added an NFT jackpot, use the selected NFT's image immediately
+      if (nftMintToCache && nftImageToCache) {
+        const isNFTMint = typeof nftMintToCache === 'string' && 
+                         nftMintToCache.length >= 32 && 
+                         nftMintToCache.length <= 44 && 
+                         !nftMintToCache.includes('/') &&
+                         !nftMintToCache.includes('.');
+        
+        if (isNFTMint) {
+          console.log('💾 Caching image for newly added NFT jackpot:', {
+            mint: nftMintToCache,
+            originalImage: nftImageToCache
+          });
+          
+          // Use the image from the selected NFT (already has image from Helius)
+          let finalImage = nftImageToCache;
+          
+          // Only convert if it's an IPFS URL, otherwise use as-is (Helius already provides HTTP URLs)
+          if (finalImage && !finalImage.startsWith('http://') && !finalImage.startsWith('https://')) {
+            finalImage = convertIPFSToHTTP(finalImage) || finalImage;
+          }
+          
+          console.log('🖼️ Final image URL for new jackpot:', finalImage);
+          
+          if (finalImage && (finalImage.startsWith('http://') || finalImage.startsWith('https://'))) {
+            setJackpotNFTImages(prev => {
+              const updated = {
+                ...prev,
+                [nftMintToCache]: finalImage
+              };
+              console.log('✅ Updated image cache. New cache keys:', Object.keys(updated));
+              return updated;
+            });
+            console.log('✅ Cached new NFT image from selected NFT:', finalImage);
+          } else {
+            console.warn('⚠️ Invalid image URL for new jackpot:', finalImage);
+            // Fall back to fetching metadata
+            try {
+              console.log('🖼️ Fetching image for newly added NFT jackpot:', nftMintToCache);
+              const metadata = await fetchNFTMetadata(nftMintToCache);
+              
+              if (metadata && metadata.image) {
+                const fallbackImage = convertIPFSToHTTP(metadata.image) || metadata.image;
+                if (fallbackImage && (fallbackImage.startsWith('http://') || fallbackImage.startsWith('https://'))) {
+                  setJackpotNFTImages(prev => ({
+                    ...prev,
+                    [nftMintToCache]: fallbackImage
+                  }));
+                  console.log('✅ Cached new NFT image from metadata:', fallbackImage);
+                }
+              }
+            } catch (error: any) {
+              console.error('❌ Error fetching image for new NFT jackpot:', error);
+            }
+          }
+        }
+      }
     } catch (error: any) {
       console.error('Error saving jackpot:', error);
       alert(error.message || 'Error saving jackpot. Please try again.');
@@ -365,7 +540,7 @@ export default function JackpotSettings() {
                   <tr key={jackpot.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden">
+                        <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden relative">
                           {(() => {
                             const imageUrl = getJackpotImageUrl(jackpot);
                             const isNFTMint = jackpot.image && typeof jackpot.image === 'string' && 
@@ -374,22 +549,69 @@ export default function JackpotSettings() {
                                              !jackpot.image.includes('/') &&
                                              !jackpot.image.includes('.');
                             
-                            if (imageUrl) {
+                            // Debug logging
+                            if (isNFTMint) {
+                              const walletNFT = walletNFTs.find((nft: any) => nft.mint === jackpot.image);
+                              console.log('🖼️ Admin Panel - Jackpot NFT Image Debug:', {
+                                mint: jackpot.image,
+                                jackpotName: jackpot.name,
+                                walletNFTsCount: walletNFTs.length,
+                                walletNFTFound: !!walletNFT,
+                                walletNFTImage: walletNFT?.image,
+                                cachedImage: jackpotNFTImages[jackpot.image],
+                                imageUrl,
+                                hasImage: !!imageUrl,
+                                imageUrlValue: imageUrl
+                              });
+                              
+                              // If we have a cached image but imageUrl is null, there's a mismatch
+                              if (jackpotNFTImages[jackpot.image] && !imageUrl) {
+                                console.error('❌ CACHE MISMATCH: Image is cached but getJackpotImageUrl returned null!');
+                                console.error('❌ Cached value:', jackpotNFTImages[jackpot.image]);
+                              }
+                            }
+                            
+                            if (imageUrl && imageUrl.trim() !== '') {
+                              // Validate URL before rendering
+                              const isValidUrl = imageUrl.startsWith('http://') || imageUrl.startsWith('https://') || imageUrl.startsWith('/');
+                              
+                              if (isValidUrl) {
                               return (
+                                  <>
                                 <img 
                                   src={imageUrl}
-                                  alt={jackpot.name}
+                                      alt={jackpot.name || 'NFT'}
                                   className="w-full h-full object-cover"
+                                      loading="lazy"
                                   onError={(e) => {
-                                    (e.target as HTMLImageElement).style.display = 'none';
-                                    const next = (e.target as HTMLImageElement).nextElementSibling as HTMLElement;
-                                    if (next) next.style.display = 'flex';
+                                        console.error('❌ Image failed to load:', imageUrl);
+                                        console.error('❌ Mint address:', jackpot.image);
+                                        console.error('❌ Jackpot name:', jackpot.name);
+                                        const imgElement = e.target as HTMLImageElement;
+                                        imgElement.style.display = 'none';
+                                        const placeholder = imgElement.parentElement?.querySelector('.nft-placeholder') as HTMLElement;
+                                        if (placeholder) {
+                                          placeholder.style.display = 'flex';
+                                        }
+                                      }}
+                                      onLoad={() => {
+                                        console.log('✅ Image loaded successfully:', imageUrl);
                                   }}
                                 />
-                              );
+                                    {isNFTMint && (
+                                      <div className="nft-placeholder w-full h-full flex items-center justify-center bg-purple-100 absolute inset-0" style={{ display: 'none' }}>
+                                        <span className="text-purple-600 text-xs">NFT</span>
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              } else {
+                                console.warn('⚠️ Invalid image URL format:', imageUrl);
+                              }
                             }
                             
                             if (isNFTMint) {
+                              // If it's an NFT but no image URL yet, show loading state
                               return (
                                 <div className="w-full h-full flex items-center justify-center bg-purple-100">
                                   <span className="text-purple-600 text-xs">NFT</span>

@@ -37,8 +37,38 @@ export const fetchNFTMetadata = async (mintAddress: string): Promise<{image: str
       }
     }
 
+    // Convert IPFS URLs to HTTP gateway URLs
+    let imageUrl = offChainData?.image || null;
+    if (imageUrl && typeof imageUrl === 'string') {
+      console.log("🖼️ Original image URL:", imageUrl);
+      
+      // Handle IPFS URLs (ipfs://... or ipfs/...)
+      if (imageUrl.startsWith('ipfs://')) {
+        const cid = imageUrl.replace('ipfs://', '').replace(/^\/+/, '');
+        imageUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
+        console.log("🔄 Converted ipfs:// to:", imageUrl);
+      } else if (imageUrl.startsWith('ipfs/')) {
+        const cid = imageUrl.replace('ipfs/', '').replace(/^\/+/, '');
+        imageUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
+        console.log("🔄 Converted ipfs/ to:", imageUrl);
+      } else if (imageUrl.startsWith('Qm') && imageUrl.length === 46 && !imageUrl.includes('/') && !imageUrl.includes('http')) {
+        // If it's just a CID (Qm...), prepend gateway URL
+        imageUrl = `https://gateway.pinata.cloud/ipfs/${imageUrl}`;
+        console.log("🔄 Converted CID to:", imageUrl);
+      } else if (!imageUrl.startsWith('http')) {
+        // If it's a relative path or just a CID, try to extract it
+        const cidMatch = imageUrl.match(/(Qm[a-zA-Z0-9]{44})/);
+        if (cidMatch) {
+          imageUrl = `https://gateway.pinata.cloud/ipfs/${cidMatch[1]}`;
+          console.log("🔄 Extracted and converted CID to:", imageUrl);
+        }
+      }
+      
+      console.log("✅ Final image URL:", imageUrl);
+    }
+
     return {
-      image: offChainData?.image || null,
+      image: imageUrl,
       name: metadata.name || offChainData?.name || mintAddress.substring(0, 8) + '...',
       description: offChainData?.description || '',
       symbol: metadata.symbol || ''

@@ -1048,13 +1048,13 @@ export default function WithdrawModal() {
         <div className="fixed top-0 left-0 w-screen h-screen flex items-center 
         justify-center bg-black/40 z-50">            <div className="z-50 flex justify-center items-center w-full">
                 <div className="relative p-4 w-full max-w-2xl">
-                    <div className="relative bg-orange-400 rounded-lg shadow dark:bg-gray-700 h-full overflow-hidden">
-                        <div className="flex items-center justify-between p-4 md:p-5 border-b rounded-t dark:border-gray-600">
-                            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mx-auto -mr-5">Withdraw Tokens</h3>
+                    <div className="relative rounded-lg shadow h-full overflow-hidden" style={{ backgroundColor: '#ff914d' }}>
+                        <div className="flex items-center justify-between p-4 md:p-5 border-b rounded-t">
+                            <h3 className="text-xl font-semibold text-white mx-auto -mr-5">Withdraw Tokens</h3>
                             <button
                                 onClick={() => setState({ ...state, withdraw: false })}
                                 type="button"
-                                className="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm w-8 h-8 ms-auto inline-flex justify-center items-center dark:hover:bg-gray-600 dark:hover:text-white"
+                                className="text-white bg-transparent hover:bg-white/20 hover:text-white rounded-lg text-sm w-8 h-8 ms-auto inline-flex justify-center items-center"
                                 data-modal-hide="default-modal">
                                 <svg
                                     className="w-3 h-3"
@@ -1076,19 +1076,27 @@ export default function WithdrawModal() {
                         <div className="flex justify-center space-x-2 border-b w-full">
                             <button
                                 onClick={() => setTab("withdraw")}
-                             className={`flex-1 max-w-[200px] py-2 px-3 text-sm text-center whitespace-nowrap ${tab === "withdraw"
-                                        ? "border-b-2 border-[#ff914d] text-orange-600 bg-gray-200"
-                                        : "text-orange-600 bg-transparent"
+                             className={`flex-1 max-w-[200px] py-2 px-3 text-sm text-center whitespace-nowrap font-medium ${tab === "withdraw"
+                                        ? "border-b-2 bg-white/10"
+                                        : "bg-transparent"
                                     }`}
+                                    style={{
+                                        borderBottomColor: tab === "withdraw" ? '#ffffff' : 'transparent',
+                                        color: tab === "withdraw" ? '#ffffff' : 'rgba(255, 255, 255, 0.7)'
+                                    }}
                             >
                                 Withdraw Tokens
                             </button>
                             <button
                                 onClick={() => setTab("history")}
-                            className={`flex-1 max-w-[200px] py-2 px-3 text-sm text-center whitespace-nowrap ${tab === "history"
-                                        ? "border-b-2 border-[#ff914d] text-orange-600 bg-gray-200"
-                                        : "text-orange-600 bg-transparent"
+                            className={`flex-1 max-w-[200px] py-2 px-3 text-sm text-center whitespace-nowrap font-medium ${tab === "history"
+                                        ? "border-b-2 bg-white/10"
+                                        : "bg-transparent"
                                     }`}
+                                    style={{
+                                        borderBottomColor: tab === "history" ? '#ffffff' : 'transparent',
+                                        color: tab === "history" ? '#ffffff' : 'rgba(255, 255, 255, 0.7)'
+                                    }}
                             >
                                 Withdraw History
                             </button>
@@ -1100,7 +1108,7 @@ export default function WithdrawModal() {
                                 </p> */}
                                 <div className="space-y-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-orange-600 mb-2">
+                                        <label className="block text-sm font-medium text-white mb-2">
                                             Select Token to Withdraw
                                         </label>
                                         <select
@@ -1119,7 +1127,7 @@ export default function WithdrawModal() {
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-orange-600 mb-2">
+                                        <label className="block text-sm font-medium text-white mb-2">
                                             Available {projectTokenSymbol} Balance
                                         </label>
                                         <input
@@ -1129,7 +1137,7 @@ export default function WithdrawModal() {
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-orange-600 mb-2">
+                                        <label className="block text-sm font-medium text-white mb-2">
                                             {projectTokenSymbol} Amount to Withdraw
                                         </label>
                                         <input
@@ -1143,7 +1151,7 @@ export default function WithdrawModal() {
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-orange-600 mb-2">
+                                        <label className="block text-sm font-medium text-white mb-2">
                                             You Will Receive ({selectedTokenInfo?.symbol})
                                         </label>
                                         <input
@@ -1153,7 +1161,7 @@ export default function WithdrawModal() {
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-orange-600 mb-2">
+                                        <label className="block text-sm font-medium text-white mb-2">
                                             Available {selectedTokenInfo?.symbol} in Wallet
                                         </label>
                                         <input
@@ -1182,7 +1190,7 @@ export default function WithdrawModal() {
                                         )}
                                     </div> */}
                                 </div>
-                                <div className="flex items-center justify-end pt-4 space-x-3 border-t border-[#ff914d]/20">
+                                <div className="flex items-center justify-end pt-4 space-x-3 border-t border-white/20">
                                     {adminWalletConfigured === false && (
                                         <div className="flex-1 mr-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                                             <p className="text-xs text-yellow-800">
@@ -1199,7 +1207,7 @@ export default function WithdrawModal() {
                                     </button>
                                     <button
                                         onClick={() => setState({ ...state, withdraw: false })}
-                                        className="px-5 py-2.5 text-sm font-medium rounded-lg border border-[#ff914d]/20 text-gray-300 hover:bg-[#ff914d]/20 focus:ring-2 focus:ring-[#ff914d]/50"
+                                        className="px-5 py-2.5 text-sm font-medium rounded-lg border border-white/30 text-white hover:bg-white/20 focus:ring-2 focus:ring-white/50"
                                     >
                                         Cancel
                                     </button>
@@ -1213,51 +1221,53 @@ export default function WithdrawModal() {
                                         <div className="w-12 h-12 border-4 border-[#ff914d] border-t-transparent rounded-full animate-spin"></div>
                                     </div>
                                 ) : (
-                                    <table className="w-full text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400 min-w-full table-fixed">
-                                        <thead className="text-xs text-gray-700 uppercase dark:text-gray-400">
-                                            <tr>
-                                                <th
-                                                    scope="col"
-                                                    className="px-6 py-3 bg-gray-50 dark:bg-gray-800 w-1/3">
-                                                    <span className="flex justify-center">Wallet</span>
-                                                </th>
-
-                                                <th
-                                                    scope="col"
-                                                    className="px-6 py-3 w-52 flex justify-center">
-                                                    <span className="">OGX</span> / <span>SOL</span>
-                                                </th>
-                                                <th
-                                                    scope="col"
-                                                    className="px-6 py-3 bg-gray-50 dark:bg-gray-800 w-1/3 ">
-                                                    <span className="flex justify-center">Status</span>
-                                                </th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="w-full">
-                                            {data?.length === 0 ? (
+                                    <div className="overflow-y-auto overflow-x-auto max-h-[400px] border border-white/20 rounded-lg">
+                                        <table className="w-full text-sm text-left rtl:text-right text-white min-w-full table-fixed">
+                                            <thead className="text-xs uppercase text-white sticky top-0 bg-transparent z-10">
                                                 <tr>
-                                                    <td colSpan={3} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
-                                                        No withdraw history found
-                                                    </td>
+                                                    <th
+                                                        scope="col"
+                                                        className="px-6 py-3 bg-transparent w-1/3">
+                                                        <span className="flex justify-center text-white">Wallet</span>
+                                                    </th>
+
+                                                    <th
+                                                        scope="col"
+                                                        className="px-6 py-3 bg-transparent w-52 flex justify-center">
+                                                        <span className="text-white">OGX</span> / <span className="text-white">SOL</span>
+                                                    </th>
+                                                    <th
+                                                        scope="col"
+                                                        className="px-6 py-3 bg-transparent w-1/3">
+                                                        <span className="flex justify-center text-white">Status</span>
+                                                    </th>
                                                 </tr>
-                                            ) : (
-                                                data?.map((item) => (
-                                                    <tr
-                                                        key={item?.id}
-                                                        className="border-b border-gray-200 dark:border-gray-700 w-full">
-                                                        <th
-                                                            scope="row"
-                                                            className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap bg-gray-50 dark:text-white dark:bg-gray-800 truncate">
-                                                            {item?.walletAddress}
-                                                        </th>
-                                                        <td className="px-6 py-4">{item?.apes}</td>
-                                                        <td className="px-6 py-4 bg-gray-50 dark:bg-gray-800">{item?.status}</td>
+                                            </thead>
+                                            <tbody className="w-full">
+                                                {data?.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={3} className="px-6 py-8 text-center text-white">
+                                                            No withdraw history found
+                                                        </td>
                                                     </tr>
-                                                ))
-                                            )}
-                                        </tbody>
-                                    </table>
+                                                ) : (
+                                                    data?.map((item) => (
+                                                        <tr
+                                                            key={item?.id}
+                                                            className="border-b border-white/20 w-full hover:bg-white/10 transition-colors">
+                                                            <th
+                                                                scope="row"
+                                                                className="px-6 py-4 font-medium text-white whitespace-nowrap bg-transparent truncate">
+                                                                {item?.walletAddress}
+                                                            </th>
+                                                            <td className="px-6 py-4 text-white">{item?.apes}</td>
+                                                            <td className="px-6 py-4 bg-transparent text-white">{item?.status}</td>
+                                                        </tr>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 )}
                             </div>
                         )}

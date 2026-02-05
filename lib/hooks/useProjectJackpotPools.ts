@@ -100,10 +100,21 @@ export const useProjectJackpotPools = () => {
 
       // Handle image upload if provided
       if (jackpotData.image) {
-        // Check if it's a File object (image upload) or string (NFT mint address)
+        // Check if it's a File object (image upload) or string (image URL or NFT mint address)
         if (typeof jackpotData.image === 'string') {
-          // It's an NFT mint address, use as-is
+          // Check if it's a valid HTTP URL (image URL) or a mint address
+          if (jackpotData.image.startsWith('http://') || jackpotData.image.startsWith('https://')) {
+            // It's an image URL, use as-is
+            imageUrl = jackpotData.image;
+          } else if (jackpotData.image.length >= 32 && jackpotData.image.length <= 44 && 
+                     !jackpotData.image.includes('/') && !jackpotData.image.includes('.')) {
+            // It's an NFT mint address (base58, 32-44 chars, no slashes/dots)
+            // Store the mint address - we'll fetch the image when displaying
+            imageUrl = jackpotData.image;
+          } else {
+            // It's some other string, use as-is (might be a file path)
           imageUrl = jackpotData.image;
+          }
         } else if (jackpotData.image instanceof File) {
           // It's a file upload
           const fileExt = jackpotData.image.name.split('.').pop();

@@ -137,15 +137,42 @@ export const useWalletNFTs = (walletAddress: string | null) => {
           const files = content.files || [];
           
           // Get image from various possible locations
+          // Priority: cdn_uri (best quality) > uri > image property > links > fallbacks
           let image = null;
           if (files && files.length > 0) {
-            image = files[0].uri || files[0].cdn_uri || files[0].image;
+            image = files[0].cdn_uri || files[0].uri || files[0].image;
           }
           if (!image && content.links) {
             image = content.links.image || content.links.thumbnail;
           }
           if (!image) {
             image = nft.image || content.uri || metadata.image;
+          }
+          
+          // Log image extraction for debugging
+          if (image) {
+            console.log('🖼️ Extracted image for NFT', mint.substring(0, 8) + '...', ':', image);
+          }
+          
+          // Convert IPFS URLs to HTTP gateway URLs
+          if (image && typeof image === 'string') {
+            // Handle IPFS URLs (ipfs://... or ipfs/...)
+            if (image.startsWith('ipfs://')) {
+              const cid = image.replace('ipfs://', '').replace(/^\/+/, '');
+              image = `https://gateway.pinata.cloud/ipfs/${cid}`;
+            } else if (image.startsWith('ipfs/')) {
+              const cid = image.replace('ipfs/', '').replace(/^\/+/, '');
+              image = `https://gateway.pinata.cloud/ipfs/${cid}`;
+            } else if (image.startsWith('Qm') && image.length === 46 && !image.includes('/') && !image.includes('http')) {
+              // If it's just a CID (Qm...), prepend gateway URL
+              image = `https://gateway.pinata.cloud/ipfs/${image}`;
+            } else if (!image.startsWith('http')) {
+              // If it's a relative path or just a CID, try to extract it
+              const cidMatch = image.match(/(Qm[a-zA-Z0-9]{44})/);
+              if (cidMatch) {
+                image = `https://gateway.pinata.cloud/ipfs/${cidMatch[1]}`;
+              }
+            }
           }
           
           // Get collection name from grouping

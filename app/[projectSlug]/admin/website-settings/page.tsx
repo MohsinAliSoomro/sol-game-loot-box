@@ -102,6 +102,9 @@ export default function WebsiteSettings() {
   const [showAdminSettings, setShowAdminSettings] = useState(false);
   const [adminPrivateKey, setAdminPrivateKey] = useState('');
   const [savingAdminKey, setSavingAdminKey] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
+  const [passwordVerified, setPasswordVerified] = useState(false);
+  const [verifyingPassword, setVerifyingPassword] = useState(false);
   const { adminWalletAddress, loading: adminWalletLoading, error: adminWalletError, refreshAdminWallet } = useAdminWallet();
   
   // Deposit wallet settings
@@ -810,7 +813,97 @@ export default function WebsiteSettings() {
     }
   };
 
+  const handleConfigureWalletClick = async () => {
+    // Prompt for password first
+    const password = prompt('Enter admin panel password to configure wallet:');
+    
+    if (!password) {
+      return; // User cancelled
+    }
+
+    try {
+      // Verify password against database
+      const { data: passwordData, error: passwordError } = await supabase
+        .from('project_settings')
+        .select('setting_value')
+        .eq('project_id', projectId)
+        .eq('setting_key', 'admin_password')
+        .maybeSingle();
+
+      if (passwordError) {
+        console.error('Error fetching admin password:', passwordError);
+        alert('Error verifying password. Please try again.');
+        return;
+      }
+
+      // If password is set in project_settings, verify it
+      if (passwordData?.setting_value) {
+        if (password !== passwordData.setting_value) {
+          alert('❌ Incorrect admin password. Access denied.');
+          return;
+        }
+      }
+      // Password is correct (or not set), open the modal directly to private key input
+      setShowAdminSettings(true);
+      setAdminPrivateKey('');
+      setPasswordVerified(true);
+    } catch (error) {
+      console.error('Error verifying admin password:', error);
+      alert('Error verifying password. Please try again.');
+    }
+  };
+
+  const verifyAdminPassword = async () => {
+    if (!adminPassword.trim()) {
+      alert('Please enter admin panel password');
+      return;
+    }
+
+    setVerifyingPassword(true);
+    try {
+      // Get admin password from project_settings
+      const { data: passwordData, error: passwordError } = await supabase
+        .from('project_settings')
+        .select('setting_value')
+        .eq('project_id', projectId)
+        .eq('setting_key', 'admin_password')
+        .maybeSingle();
+
+      if (passwordError) {
+        console.error('Error fetching admin password:', passwordError);
+        alert('Error verifying password. Please try again.');
+        setVerifyingPassword(false);
+        return;
+      }
+
+      if (!passwordData?.setting_value) {
+        alert('No admin password set. Please set an admin password first in the admin settings.');
+        setVerifyingPassword(false);
+        return;
+      }
+
+      if (adminPassword.trim() !== passwordData.setting_value) {
+        alert('❌ Incorrect admin password. Access denied.');
+        setAdminPassword('');
+        setVerifyingPassword(false);
+        return;
+      }
+
+      setPasswordVerified(true);
+      setVerifyingPassword(false);
+    } catch (error) {
+      console.error('Error verifying admin password:', error);
+      alert('Error verifying password. Please try again.');
+      setVerifyingPassword(false);
+    }
+  };
+
   const handleSaveAdminKey = async () => {
+    if (!passwordVerified) {
+      alert('Please verify admin password first');
+      return;
+    }
+
     if (!adminPrivateKey || adminPrivateKey.trim() === '' || !projectId) {
       alert('Please enter admin private key');
       return;
@@ -846,6 +939,9 @@ export default function WebsiteSettings() {
       await refreshAdminWallet();
       alert(`✅ Admin private key saved successfully!\n\nWallet Address: ${walletAddress}\n\nAll NFT and SOL withdrawals will now use this wallet.`);
       setShowAdminSettings(false);
+      setAdminPrivateKey('');
+      setAdminPassword('');
+      setPasswordVerified(false);
       setSavingAdminKey(false);
     } catch (error: any) {
       console.error('Error validating private key:', error);
@@ -1696,7 +1792,7 @@ export default function WebsiteSettings() {
               <p className="text-sm text-gray-600 mt-1">Configure the wallet used for NFT and SOL withdrawals</p>
             </div>
             <button
-              onClick={() => setShowAdminSettings(true)}
+              onClick={handleConfigureWalletClick}
               className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors flex items-center space-x-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1831,7 +1927,11 @@ export default function WebsiteSettings() {
               <div className="flex justify-end space-x-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setShowAdminSettings(false)}
+                  onClick={() => {
+                    setShowAdminSettings(false);
+                    setAdminPrivateKey('');
+                    setPasswordVerified(false);
+                  }}
                   className="px-4 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50"
                 >
                   Cancel

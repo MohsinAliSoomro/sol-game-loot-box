@@ -751,13 +751,28 @@ const WheelSpinner = ({ data, item, user, setUser }: any) => {
         ? localStorage.getItem('currentProjectId')
         : null;
       
+      // Check if we're on the main project
+      let isMainProject = false;
+      if (typeof window !== 'undefined') {
+        const pathParts = window.location.pathname.split('/').filter(Boolean);
+        const firstSegment = pathParts[0];
+        isMainProject = !firstSegment || 
+                       firstSegment === 'lootboxes' || 
+                       firstSegment === 'live-draw' || 
+                       firstSegment === 'leaderboard' ||
+                       (!projectId || projectId === 'null' || projectId === '');
+      }
+      
+      // CRITICAL: For main project, always use null for project_id, regardless of localStorage
       // Convert to integer or null for database
-      const projectIdForInsert = projectId && projectId !== 'null' && projectId !== '' 
+      const projectIdForInsert = isMainProject 
+        ? null 
+        : (projectId && projectId !== 'null' && projectId !== '' 
         ? parseInt(projectId) 
-        : null;
+          : null);
       
       console.log("🎯 Adding reward to cart:", winnerItem);
-      console.log("🔍 Project ID for insert:", projectIdForInsert);
+      console.log("🔍 Project context:", { projectId, isMainProject, projectIdForInsert });
       console.log("🔍 FULL winnerItem object:", JSON.stringify(winnerItem, null, 2));
       console.log("🎯 Winner item type check:", {
         isNFT: winnerItem.isNFT,

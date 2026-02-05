@@ -7,6 +7,7 @@ import { useAdminWallet } from '@/lib/hooks/useAdminWallet';
 import { fetchNFTMetadata } from '@/lib/fetchNFTMetadata';
 import { supabase } from '@/service/supabase';
 import { useProject } from '@/lib/project-context';
+import { convertIPFSToHTTP } from '@/lib/utils/ipfs';
 
 export default function JackpotSettings() {
   const { getProjectId, getProjectTokenSymbol } = useProject();
@@ -79,12 +80,18 @@ export default function JackpotSettings() {
           
           if (isNFTMint && !imageCache[jackpot.image]) {
             try {
+              console.log('🖼️ Fetching NFT image for jackpot:', jackpot.image);
               const metadata = await fetchNFTMetadata(jackpot.image);
               if (metadata && metadata.image) {
-                imageCache[jackpot.image] = metadata.image;
+                // Convert IPFS URLs to HTTP gateway URLs
+                const convertedImage = convertIPFSToHTTP(metadata.image) || metadata.image;
+                imageCache[jackpot.image] = convertedImage;
+                console.log('✅ Cached NFT image:', convertedImage);
+              } else {
+                console.warn('⚠️ No image found in metadata for:', jackpot.image);
               }
             } catch (error) {
-              console.error('Error fetching NFT image for', jackpot.image, error);
+              console.error('❌ Error fetching NFT image for', jackpot.image, error);
             }
           }
         }
@@ -101,6 +108,14 @@ export default function JackpotSettings() {
   const getJackpotImageUrl = (jackpot: any) => {
     if (!jackpot.image) return null;
     
+    // Check if it's already a valid HTTP URL (image URL stored directly)
+    if (typeof jackpot.image === 'string' && 
+        (jackpot.image.startsWith('http://') || jackpot.image.startsWith('https://'))) {
+      // It's already an image URL, use it directly
+      return convertIPFSToHTTP(jackpot.image) || jackpot.image;
+    }
+    
+    // Check if it's an NFT mint address
     const isNFTMint = typeof jackpot.image === 'string' && 
                      jackpot.image.length >= 32 && 
                      jackpot.image.length <= 44 && 
@@ -108,10 +123,23 @@ export default function JackpotSettings() {
                      !jackpot.image.includes('.');
     
     if (isNFTMint) {
-      return jackpotNFTImages[jackpot.image] || null;
+      const cachedImage = jackpotNFTImages[jackpot.image];
+      // Convert IPFS URLs if needed (as a safety measure)
+      if (cachedImage) {
+        const finalUrl = convertIPFSToHTTP(cachedImage) || cachedImage;
+        // Validate URL
+        if (finalUrl && (finalUrl.startsWith('http://') || finalUrl.startsWith('https://'))) {
+          return finalUrl;
+        }
+        console.warn('⚠️ Invalid cached image URL for', jackpot.image, ':', finalUrl);
+      }
+      // Return null if not cached yet - will show placeholder
+      return null;
     }
     
-    return `https://zkltmkbmzxvfovsgotpt.supabase.co/storage/v1/object/public/apes-bucket/${jackpot.image}`;
+    // For regular images (Supabase storage paths), construct the full URL
+    const imagePath = `https://zkltmkbmzxvfovsgotpt.supabase.co/storage/v1/object/public/apes-bucket/${jackpot.image}`;
+    return convertIPFSToHTTP(imagePath) || imagePath;
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -249,7 +277,20 @@ export default function JackpotSettings() {
       formData.name = selectedNFT.name;
       formData.title = selectedNFT.name;
       formData.nftMintAddress = selectedNFT.mint;
-      formData.image = selectedNFT.mint;
+      // Store the actual image URL instead of mint address
+      // The image URL is already converted from IPFS by useWalletNFTs
+      if (selectedNFT.image) {
+        let imageUrl = selectedNFT.image;
+        // Ensure it's a valid HTTP URL
+        if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+          imageUrl = convertIPFSToHTTP(imageUrl) || imageUrl;
+        }
+        formData.image = imageUrl.startsWith('http://') || imageUrl.startsWith('https://') 
+          ? imageUrl 
+          : selectedNFT.mint; // Fallback to mint if URL is invalid
+      } else {
+        formData.image = selectedNFT.mint; // Fallback to mint if no image
+      }
     } else {
       if (!formData.name.trim()) {
         alert('Please enter a jackpot name');
@@ -276,6 +317,14 @@ export default function JackpotSettings() {
         endTime: formData.endTime ? convertToISO(formData.endTime) : null
       };
 
+      // Capture NFT image before clearing selectedNFT
+      const nftImageToCache = depositType === 'nft' && formData.image && selectedNFT?.image 
+        ? selectedNFT.image 
+        : null;
+      const nftMintToCache = depositType === 'nft' && formData.image && typeof formData.image === 'string'
+        ? formData.image 
+        : null;
+      
       if (editingJackpot) {
         await updateJackpot(editingJackpot.id, formDataToSave);
       } else {
@@ -293,6 +342,66 @@ export default function JackpotSettings() {
       setUsedNFTMints(usedMints);
       setLootboxNFTMints(lootboxMints);
       await refreshAdminWallet();
+      
+      // If we added an NFT jackpot, use the selected NFT's image immediately
+      if (nftMintToCache && nftImageToCache) {
+        
+        if (nftMintToCache && nftImageToCache) {
+          const isNFTMint = nftMintToCache.length >= 32 && 
+                           nftMintToCache.length <= 44 && 
+                           !nftMintToCache.includes('/') &&
+                           !nftMintToCache.includes('.');
+          
+          if (isNFTMint) {
+            console.log('💾 Caching image for newly added NFT jackpot:', {
+              mint: nftMintToCache,
+              originalImage: nftImageToCache
+            });
+            
+            // Use the image from the selected NFT (already has image from Helius)
+            let finalImage = nftImageToCache;
+            
+            // Only convert if it's an IPFS URL, otherwise use as-is (Helius already provides HTTP URLs)
+            if (finalImage && !finalImage.startsWith('http://') && !finalImage.startsWith('https://')) {
+              finalImage = convertIPFSToHTTP(finalImage) || finalImage;
+            }
+            
+            console.log('🖼️ Final image URL for new jackpot:', finalImage);
+            
+            if (finalImage && (finalImage.startsWith('http://') || finalImage.startsWith('https://'))) {
+              setJackpotNFTImages(prev => {
+                const updated = {
+                  ...prev,
+                  [nftMintToCache]: finalImage
+                };
+                console.log('✅ Updated image cache. New cache keys:', Object.keys(updated));
+                return updated;
+              });
+              console.log('✅ Cached new NFT image from selected NFT:', finalImage);
+            } else {
+              console.warn('⚠️ Invalid image URL for new jackpot:', finalImage);
+              // Fall back to fetching metadata
+              try {
+                console.log('🖼️ Fetching image for newly added NFT jackpot:', nftMintToCache);
+                const metadata = await fetchNFTMetadata(nftMintToCache);
+                
+                if (metadata && metadata.image) {
+                  const fallbackImage = convertIPFSToHTTP(metadata.image) || metadata.image;
+                  if (fallbackImage && (fallbackImage.startsWith('http://') || fallbackImage.startsWith('https://'))) {
+                    setJackpotNFTImages(prev => ({
+                      ...prev,
+                      [nftMintToCache]: fallbackImage
+                    }));
+                    console.log('✅ Cached new NFT image from metadata:', fallbackImage);
+                  }
+                }
+              } catch (error: any) {
+                console.error('❌ Error fetching image for new NFT jackpot:', error);
+              }
+            }
+          }
+        }
+      }
     } catch (error: any) {
       console.error('Error saving jackpot:', error);
       alert(error.message || 'Error saving jackpot. Please try again.');
