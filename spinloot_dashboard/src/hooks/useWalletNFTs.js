@@ -93,12 +93,39 @@ export const useWalletNFTs = (walletAddress) => {
       
       console.log('📊 Processing', nftsArray.length, 'NFTs out of', result.total || nftsArray.length, 'total items...')
 
+      // Log interface types for debugging
+      const interfaceTypes = new Set()
+      nftsArray.forEach((nft) => {
+        if (nft.interface) interfaceTypes.add(nft.interface)
+        if (nft.compression?.compressed) interfaceTypes.add('COMPRESSED')
+      })
+      console.log('🔍 Found interface types:', Array.from(interfaceTypes))
+
       // Transform Helius DAS API NFT data to our format
       const nftMetadata = nftsArray
         .filter((nft) => {
           // Only include NFTs (not fungible tokens)
           // DAS API returns both NFTs and tokens, filter for NFTs only
-          return nft.interface === 'V1_NFT' || nft.interface === 'V1_PRINT' || nft.interface === 'V1_NFT_EDITION'
+          // Include regular NFTs and compressed NFTs (cNFTs)
+          const isRegularNFT = nft.interface === 'V1_NFT' || nft.interface === 'V1_PRINT' || nft.interface === 'V1_NFT_EDITION'
+          const isCompressedNFT = nft.compression?.compressed === true
+          
+          // Also check if it has NFT-like properties (id, content, etc.) even if interface is different
+          const hasNFTProperties = nft.id && (nft.content || nft.metadata)
+          const isFungible = nft.interface?.includes('FUNGIBLE') || nft.interface === 'V1_FUNGIBLE'
+          
+          const shouldInclude = isRegularNFT || isCompressedNFT || (hasNFTProperties && !isFungible)
+          
+          if (!shouldInclude && nft.id) {
+            console.log(`⚠️ Filtered out item:`, {
+              id: nft.id?.substring(0, 8) + '...',
+              interface: nft.interface,
+              compressed: nft.compression?.compressed,
+              name: nft.content?.metadata?.name || nft.name
+            })
+          }
+          
+          return shouldInclude
         })
         .map((nft) => {
           // Helius DAS API format: { id, content: { metadata, files }, grouping, etc. }

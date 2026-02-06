@@ -7,7 +7,7 @@ import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
 const PLATFORM_WALLET = 'CRt41RoAZ4R9M7QHx5vyKB2Jee3NvDSmhoSak8GfMwtY'
 
 // Fee wallet where collected fees are stored
-const FEE_WALLET = '5BbDF3fuNjUvvCvzDz26ULPXUPH6ZwEw6NK9xLjQbgyr'
+const FEE_WALLET = '25KEYUn3eB7cRbNwt5QXe89MTRRvZkdLNbKr9GhygV2u'
 
 // Fee vault addresses (from the vault program)
 const FEE_VAULT_AUTHORITY = 'FeeVaultAuthority' // This would be derived from PDA
