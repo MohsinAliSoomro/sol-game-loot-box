@@ -45,7 +45,7 @@ export const CONFIG = {
   
   // Platform Configuration
   PLATFORM_WALLET: "CRt41RoAZ4R9M7QHx5vyKB2Jee3NvDSmhoSak8GfMwtY", // Platform wallet for SOL deposits
-  FEE_WALLET: "5BbDF3fuNjUvvCvzDz26ULPXUPH6ZwEw6NK9xLjQbgyr", // Fee wallet for collecting SOL fees (same as platform wallet for now)
+  FEE_WALLET: "25KEYUn3eB7cRbNwt5QXe89MTRRvZkdLNbKr9GhygV2u", // Fee wallet for collecting SOL fees (same as platform wallet for now)
   OGX_WITHDRAWAL_WALLET: "5arqJxyZFKf4UCCL9JXa1nf79J4kkxzAXNu2icRfnBB6", // Wallet for SOL transfers when users withdraw OGX
   
   // Transaction Configuration
