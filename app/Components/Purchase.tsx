@@ -358,18 +358,44 @@ export default function PurchaseModal() {
   const [tokenBalance, setTokenBalance] = useState<number>(0);
   const [depositFee, setDepositFee] = useState<number>(0);
   const [dynamicFee, setDynamicFee] = useState<number>(0); // Dynamic fee based on token price
-  const [networkFee] = useState<number>(0.01);
+  const [networkFee] = useState<number>(0.0001); // ~0.00005 SOL actual + small buffer
 
-  // Base SOL fee (fixed) - Default to 0.001 if not set in project
-  // Handle null, undefined, empty string, or 0 values
+  // Base SOL fee - Fetch from blockchain (sol_fee_config PDA) to match master dashboard
+  // Fallback to database value if blockchain fetch fails, then to 0.001 SOL default
+  const [BASE_SOL_FEE, setBASE_SOL_FEE] = useState<number>(0.001); // Default fallback
+  
+  useEffect(() => {
+    const fetchBlockchainFee = async () => {
+      try {
+        // Fetch fee from blockchain (same source as master dashboard)
+        const blockchainFee = await solanaProgramService.getFeeAmount(SOL_MINT);
+        if (blockchainFee > 0) {
+          console.log(`✅ Using blockchain fee: ${blockchainFee} SOL`);
+          setBASE_SOL_FEE(blockchainFee);
+          return;
+        }
+      } catch (error) {
+        console.warn("⚠️ Could not fetch fee from blockchain, using database value:", error);
+      }
+      
+      // Fallback to database value
   const feeAmountValue = currentProject?.fee_amount;
-  const BASE_SOL_FEE = (feeAmountValue && 
+      const dbFee = (feeAmountValue && 
                         feeAmountValue !== '0' && 
                         feeAmountValue !== 'null' && 
                         feeAmountValue !== 'undefined' &&
                         parseInt(feeAmountValue) > 0)
     ? parseInt(feeAmountValue) / LAMPORTS_PER_SOL
     : 0.001; // 0.001 SOL default
+      
+      console.log(`📊 Using database fee: ${dbFee} SOL`);
+      setBASE_SOL_FEE(dbFee);
+    };
+    
+    if (connected) {
+      fetchBlockchainFee();
+    }
+  }, [connected, currentProject?.fee_amount]);
 
   const { run, data, loading } = useRequest(getTransactions, { manual: true });
   const [activeTab, setActiveTab] = useState("deposit");
@@ -417,27 +443,14 @@ export default function PurchaseModal() {
     }
   }, [publicKey, selectedToken, selectedTokenMint, selectedTokenInfo]);
 
-  // Fetch dynamic fee amount for selected token based on market prices
+  // Fee is ALWAYS in SOL regardless of deposit token
+  // This ensures consistent fee collection
   useEffect(() => {
-    const fetchDynamicFee = async () => {
-      try {
-        // Calculate fee based on token price relative to SOL
-        // Formula: Fee in Token = (SOL Fee Amount * SOL Price) / Token Price
-        const tokenFee = await calculateTokenFee(selectedToken, BASE_SOL_FEE);
-        setDynamicFee(tokenFee);
-        console.log(`💰 Dynamic fee for ${selectedToken}: ${tokenFee.toFixed(6)} ${selectedTokenInfo?.symbol}`);
-        console.log(`   (Based on SOL fee: ${BASE_SOL_FEE} SOL)`);
-      } catch (error) {
-        console.error("Error fetching dynamic fee:", error);
-        // Fallback to SOL fee if calculation fails
-        setDynamicFee(selectedToken === "SOL" ? BASE_SOL_FEE : BASE_SOL_FEE);
-      }
-    };
-
-    if (connected && selectedToken) {
-      fetchDynamicFee();
-    }
-  }, [selectedToken, connected, selectedTokenInfo]);
+    // Fee is always the BASE_SOL_FEE in SOL - no conversion needed
+    // The depositToken function now handles fee in SOL
+    setDynamicFee(BASE_SOL_FEE);
+    console.log(`💰 Fee for ${selectedToken} deposit: ${BASE_SOL_FEE.toFixed(6)} SOL (fee is always in SOL)`);
+  }, [selectedToken, connected, BASE_SOL_FEE]);
 
   // Also fetch fee from blockchain (for display, but we'll use dynamic fee for calculations)
   useEffect(() => {
@@ -704,103 +717,90 @@ export default function PurchaseModal() {
         }
       }
 
-      // Calculate total required (deposit amount + dynamic fee)
-      const totalRequired = depositAmount + (dynamicFee || 0);
-
-      // Check if user has enough balance (including fee)
+      // Fee is ALWAYS in SOL regardless of deposit token
+      const solFee = dynamicFee || BASE_SOL_FEE;
       const tokenSymbol = selectedTokenInfo.symbol;
-      if (tokenBalance < totalRequired) {
+
+      // For SOL deposits: check total SOL balance (deposit + fee)
+      // For other tokens: check token balance for deposit AND SOL balance for fee
+      if (selectedToken === "SOL") {
+        // SOL deposit: need enough SOL for deposit + fee + network fee
+        const totalSOLRequired = depositAmount + solFee + networkFee;
+        if (tokenBalance < totalSOLRequired) {
+          alert(
+            `Insufficient SOL balance.\n` +
+            `Required: ${totalSOLRequired.toFixed(6)} SOL (${depositAmount.toFixed(4)} deposit + ${solFee.toFixed(6)} fee + ${networkFee.toFixed(4)} network)\n` +
+            `Available: ${tokenBalance.toFixed(4)} SOL`
+          );
+          setIsProcessing(false);
+          return;
+        }
+      } else {
+        // Token deposit: check token balance for deposit amount
+        if (tokenBalance < depositAmount) {
         alert(
           `Insufficient ${tokenSymbol} balance.\n` +
-          `Required: ${totalRequired.toFixed(6)} ${tokenSymbol} (${depositAmount.toFixed(4)} deposit + ${(dynamicFee || 0).toFixed(6)} fee)\n` +
+            `Required: ${depositAmount.toFixed(4)} ${tokenSymbol} for deposit\n` +
           `Available: ${tokenBalance.toFixed(4)} ${tokenSymbol}`
         );
         setIsProcessing(false);
         return;
+        }
+
+        // Also check SOL balance for fee (fee is always in SOL)
+        const userSOLBalance = await solanaProgramService.getSOLBalance(publicKey);
+        const totalSOLRequired = solFee + networkFee;
+        if (userSOLBalance < totalSOLRequired) {
+          alert(
+            `Insufficient SOL balance for fee.\n` +
+            `Required: ${totalSOLRequired.toFixed(6)} SOL (${solFee.toFixed(6)} fee + ${networkFee.toFixed(4)} network)\n` +
+            `Available: ${userSOLBalance.toFixed(4)} SOL\n\n` +
+            `Note: Fee is always paid in SOL regardless of deposit token.`
+          );
+          setIsProcessing(false);
+          return;
+        }
       }
 
       console.log(`💰 Deposit Calculation:`);
       console.log(`   Deposit Amount: ${depositAmount} ${tokenSymbol}`);
-      console.log(`   Fee: ${(dynamicFee || 0).toFixed(6)} ${tokenSymbol}`);
-      console.log(`   Total Required: ${totalRequired.toFixed(6)} ${tokenSymbol}`);
-      console.log(`   Available Balance: ${tokenBalance.toFixed(4)} ${tokenSymbol}`);
+      console.log(`   Fee: ${solFee.toFixed(6)} SOL (always in SOL)`);
+      console.log(`   Available ${tokenSymbol} Balance: ${tokenBalance.toFixed(4)} ${tokenSymbol}`);
 
       let signature: string;
 
       // Route to appropriate deposit function based on token
       if (selectedToken === "SOL") {
-        // Validate project_pda before using it
-        let isValidProjectPDA = false;
-        let projectPDA: PublicKey | null = null;
+        // Use BASE_SOL_FEE which is fetched from blockchain (matches master dashboard)
+        // Convert to lamports for the deposit function
+        const projectFeeLamports = Math.floor(BASE_SOL_FEE * LAMPORTS_PER_SOL);
         
-        if (currentProject && currentProject.project_pda) {
-          try {
-            // Validate that project_pda is a valid base58 string
-            const pdaString = currentProject.project_pda.trim();
-            if (pdaString && pdaString.length > 0) {
-              projectPDA = new PublicKey(pdaString);
-              isValidProjectPDA = true;
-              console.log(`✅ Valid project PDA: ${projectPDA.toString()}`);
-            } else {
-              console.warn("⚠️ Project PDA is empty string");
-            }
-          } catch (error: any) {
-            console.error(`❌ Invalid project_pda: "${currentProject.project_pda}"`, error);
-            console.warn("⚠️ Falling back to global deposit function due to invalid project_pda");
-            isValidProjectPDA = false;
-          }
-        }
-        
-        // Get project fee amount (use project fee if available, otherwise default to 0.001 SOL)
-        // Handle null, undefined, empty string, or 0 values
-        const projectFeeValue = currentProject?.fee_amount;
-        const projectFeeLamports = (projectFeeValue && 
-                                    projectFeeValue !== '0' && 
-                                    projectFeeValue !== 'null' && 
-                                    projectFeeValue !== 'undefined' &&
-                                    parseInt(projectFeeValue) > 0)
-          ? parseInt(projectFeeValue)
-          : 1000000; // Default: 0.001 SOL (1,000,000 lamports)
-        
-        console.log(`💰 Project Fee Configuration:`);
+        console.log(`💰 Fee Configuration:`);
         console.log(`   Project: ${currentProject?.name || 'None'}`);
-        console.log(`   Project fee_amount from DB: ${currentProject?.fee_amount || 'Not set'}`);
-        console.log(`   Using fee: ${projectFeeLamports} lamports (${projectFeeLamports / LAMPORTS_PER_SOL} SOL)`);
-        console.log(`   Has project_pda: ${isValidProjectPDA ? 'Yes' : 'No'}`);
+        console.log(`   Blockchain fee: ${BASE_SOL_FEE} SOL`);
+        console.log(`   Using fee: ${projectFeeLamports} lamports (${BASE_SOL_FEE} SOL)`);
         
-        if (isValidProjectPDA && projectPDA && currentProject) {
-          // Use new project-specific deposit function with project PDA
-          console.log(`✅ Using depositSOLProject with project PDA and project fee`);
-          signature = await solanaProgramService.depositSOLProject(
-            publicKey,
-            depositAmount,
-            { publicKey, signTransaction },
-            projectPDA,
-            projectFeeLamports,
-            projectId // Pass projectId for project-specific deposit wallet
-          );
-        } else {
-          // No project PDA, but still use project fee from database
-          console.warn("⚠️ No valid project PDA found, using project fee from database with custom fee function");
-          console.log(`✅ Using depositSOLWithCustomFee with project fee: ${projectFeeLamports} lamports (${projectFeeLamports / LAMPORTS_PER_SOL} SOL)`);
-          // Use depositSOL with custom fee override
-          signature = await solanaProgramService.depositSOLWithCustomFee(
+        // Use manual SOL deposit (direct transfers, no program PDAs required)
+        // This avoids issues with uninitialized global_state or sol_fee_config PDAs
+        console.log(`✅ Using depositSOLManual with direct SOL transfers`);
+        signature = await solanaProgramService.depositSOLManual(
             publicKey,
             depositAmount,
             { publicKey, signTransaction },
             projectFeeLamports,
             projectId // Pass projectId for project-specific deposit wallet
           );
-        }
       } else {
         // Use generic deposit function for all SPL tokens (USDC, TOKEN4, and any new tokens)
         // This works for any token mint address
+        // Fee is ALWAYS in SOL regardless of deposit token
         signature = await solanaProgramService.depositToken(
           publicKey,
           selectedTokenMint,
           depositAmount,
           { publicKey, signTransaction, sendTransaction },
-          dynamicFee || 0 // Pass dynamic fee amount
+          solFee, // Pass SOL fee amount (fee is always in SOL)
+          projectId // Pass projectId for project-specific deposit wallet
         );
       }
 
@@ -1351,19 +1351,19 @@ export default function PurchaseModal() {
                           disabled
                         />
                       </div>
-                      {/* <div>
-                        <label className="block text-sm font-medium text-orange-600 mb-2">
-                          Deposit Fee ({selectedTokenInfo?.symbol})
+                      <div>
+                        <label className="block text-sm font-medium text-amber-400 mb-2">
+                          Platform Fee (SOL)
                         </label>
                         <input
                           className="w-full p-2.5 bg-white border border-[#ff914d]/20 rounded-lg text-gray-800"
                           disabled
-                          value={dynamicFee > 0 ? dynamicFee.toFixed(6) : "Calculating..."}
+                          value={`${BASE_SOL_FEE.toFixed(6)} SOL`}
                         />
-                        <p className="text-xs text-gray-600 mt-1">
-                          Based on SOL fee: {BASE_SOL_FEE} SOL (≈ ${(BASE_SOL_FEE * (exchangeRates.SOL_TO_OGX / 1000 * 180)).toFixed(4)})
+                        <p className="text-xs text-gray-400 mt-1">
+                          Fee is always paid in SOL regardless of deposit token
                         </p>
-                      </div> */}
+                      </div>
                       <div>
                         <label className="block text-sm font-medium text-white mb-2">
                           Available {selectedTokenInfo?.symbol} in Wallet
@@ -1388,6 +1388,14 @@ export default function PurchaseModal() {
                         )}
                       </div> */}
                     </div>
+                    {/* Info message about Phantom wallet */}
+                    {selectedToken !== "SOL" && (
+                      <div className="bg-blue-900/30 border border-blue-500/30 rounded-lg p-3 mb-4">
+                        <p className="text-xs text-blue-300">
+                          💡 <strong>Tip:</strong> If your wallet shows a warning, click &quot;Confirm anyway&quot; - the transaction will succeed if you have enough SOL for the fee.
+                        </p>
+                      </div>
+                    )}
                     <div 
                       className="flex items-center justify-end pt-4 space-x-3 border-t"
                       style={{ borderTopColor: `${modalThemeColor}33` }}

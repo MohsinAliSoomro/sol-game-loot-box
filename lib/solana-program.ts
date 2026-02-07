@@ -889,7 +889,7 @@ export class SolanaProgramService {
     try {
       // Get fee amount first to calculate total required
       const depositFee = await this.getFeeAmount(SOL_MINT);
-      const networkFee = 0.01; // Network transaction fee
+      const networkFee = 0.0001; // Network transaction fee (~0.00005 SOL actual + buffer)
       const totalRequired = solAmount + depositFee + networkFee;
 
       // Check user's SOL balance first
@@ -1034,8 +1034,210 @@ export class SolanaProgramService {
   }
 
   /**
+   * Simple SOL deposit using direct transfers (no program PDAs required)
+   * Works like token deposits - transfers SOL directly to wallets
+   * This avoids issues with uninitialized global_state or sol_fee_config PDAs
+   */
+  async depositSOLManual(
+    user: PublicKey,
+    solAmount: number,
+    wallet: any,
+    feeLamports: number,
+    projectId?: number | null
+  ): Promise<string> {
+    const transactionId = this.generateTransactionId(user, solAmount);
+
+    // Check if this transaction is already pending
+    if (this.pendingTransactions.has(transactionId)) {
+      throw new Error("Transaction already in progress. Please wait.");
+    }
+
+    // Add a delay to prevent rapid duplicate transactions
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    this.pendingTransactions.add(transactionId);
+
+    try {
+      const depositFee = feeLamports / LAMPORTS_PER_SOL;
+      const networkFee = 0.0001; // Network transaction fee (~0.00005 SOL actual + buffer)
+      const totalRequired = solAmount + depositFee + networkFee;
+
+      // Check user's SOL balance first
+      const userBalance = await this.connection.getBalance(user);
+      const userSOLBalance = userBalance / LAMPORTS_PER_SOL;
+
+      console.log(`=== MANUAL SOL DEPOSIT BALANCE CHECK ===`);
+      console.log(`User wallet: ${user.toString()}`);
+      console.log(`User SOL balance: ${userSOLBalance.toFixed(4)} SOL`);
+      console.log(`Requested amount: ${solAmount} SOL`);
+      console.log(`Platform Fee: ${depositFee.toFixed(6)} SOL (${feeLamports} lamports)`);
+      console.log(`Network fee: ${networkFee.toFixed(4)} SOL`);
+      console.log(`Total required: ${totalRequired.toFixed(6)} SOL`);
+      console.log(`=========================================`);
+
+      if (userSOLBalance < totalRequired) {
+        throw new Error(`Insufficient SOL balance. You have ${userSOLBalance.toFixed(4)} SOL but need ${totalRequired.toFixed(6)} SOL (including ${depositFee.toFixed(6)} SOL platform fee and ${networkFee.toFixed(4)} SOL network fee).`);
+      }
+
+      // Get the deposit wallet address from project or use default platform wallet PDA
+      let depositWalletAddress: PublicKey;
+
+      try {
+        // Use getDepositWallet() which queries the database directly
+        depositWalletAddress = await this.getDepositWallet(projectId);
+        console.log(`✅ Using deposit wallet: ${depositWalletAddress.toString()}`);
+      } catch (error: any) {
+        // If deposit wallet is not configured, fall back to platform_wallet PDA
+        console.warn(`⚠️ Could not get deposit wallet: ${error.message}`);
+        console.warn(`⚠️ Falling back to platform_wallet PDA`);
+        [depositWalletAddress] = PublicKey.findProgramAddressSync(
+          [Buffer.from("platform_wallet")],
+          PROGRAM_ID
+        );
+        console.log(`Using fallback platform_wallet PDA: ${depositWalletAddress.toString()}`);
+      }
+
+      // Get fee wallet PDA
+      const [feeWalletPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("fee_wallet")],
+        PROGRAM_ID
+      );
+
+      // Check if deposit wallet account exists
+      const depositWalletInfo = await this.connection.getAccountInfo(depositWalletAddress);
+      const depositWalletExists = depositWalletInfo !== null;
+      
+      // Check if fee wallet PDA exists
+      const feeWalletInfo = await this.connection.getAccountInfo(feeWalletPDA);
+      const feeWalletExists = feeWalletInfo !== null;
+
+      // Calculate rent exemption amount (minimum balance for a basic account)
+      // For a basic account, rent exemption is ~0.00089 SOL, but we'll use 0.002 SOL as a safe buffer
+      const RENT_EXEMPT_MINIMUM = 0.002; // ~0.00089 SOL actual + buffer
+      
+      console.log(`=== MANUAL SOL DEPOSIT INFO ===`);
+      console.log(`User: ${user.toString()}`);
+      console.log(`Deposit amount: ${solAmount} SOL`);
+      console.log(`Platform fee: ${depositFee.toFixed(6)} SOL (${feeLamports} lamports)`);
+      console.log(`Deposit wallet: ${depositWalletAddress.toString()} (exists: ${depositWalletExists})`);
+      console.log(`Fee wallet PDA: ${feeWalletPDA.toString()} (exists: ${feeWalletExists})`);
+      
+      // Calculate actual amounts that will be transferred (accounting for rent exemption if accounts don't exist)
+      const depositLamports = Math.floor(solAmount * LAMPORTS_PER_SOL);
+      const rentExemptLamports = Math.ceil(RENT_EXEMPT_MINIMUM * LAMPORTS_PER_SOL);
+      
+      let actualDepositAmount = solAmount;
+      let actualFeeAmount = depositFee;
+      
+      // If deposit wallet doesn't exist and deposit is less than rent exemption, we'll transfer rent-exempt amount
+      if (!depositWalletExists && depositLamports < rentExemptLamports) {
+        actualDepositAmount = RENT_EXEMPT_MINIMUM;
+        console.log(`⚠️ Deposit wallet doesn't exist - will transfer ${RENT_EXEMPT_MINIMUM} SOL (rent-exempt) instead of ${solAmount} SOL`);
+      }
+      
+      // If fee wallet doesn't exist and fee is less than rent exemption, we'll transfer rent-exempt amount
+      if (!feeWalletExists && feeLamports > 0 && feeLamports < rentExemptLamports) {
+        actualFeeAmount = RENT_EXEMPT_MINIMUM;
+        console.log(`⚠️ Fee wallet doesn't exist - will transfer ${RENT_EXEMPT_MINIMUM} SOL (rent-exempt) instead of ${depositFee.toFixed(6)} SOL fee`);
+      }
+      
+      const actualTotalRequired = actualDepositAmount + actualFeeAmount + networkFee;
+      console.log(`Actual total required: ${actualTotalRequired.toFixed(6)} SOL`);
+      console.log(`  - Deposit: ${actualDepositAmount.toFixed(6)} SOL`);
+      console.log(`  - Fee: ${actualFeeAmount.toFixed(6)} SOL`);
+      console.log(`  - Network: ${networkFee.toFixed(4)} SOL`);
+      console.log(`================================`);
+
+      // Check balance against actual amounts that will be transferred
+      if (userSOLBalance < actualTotalRequired) {
+        const missingAmount = actualTotalRequired - userSOLBalance;
+        throw new Error(
+          `Insufficient SOL balance. You have ${userSOLBalance.toFixed(4)} SOL but need ${actualTotalRequired.toFixed(6)} SOL. ` +
+          `Missing: ${missingAmount.toFixed(6)} SOL. ` +
+          (!depositWalletExists || (!feeWalletExists && feeLamports > 0) 
+            ? `Note: The destination wallet${!depositWalletExists && (!feeWalletExists && feeLamports > 0) ? ' and fee wallet' : !depositWalletExists ? '' : ' and fee wallet'} ${!depositWalletExists && (!feeWalletExists && feeLamports > 0) ? 'don\'t' : !depositWalletExists ? 'doesn\'t' : 'doesn\'t'} exist and requires ${RENT_EXEMPT_MINIMUM} SOL for account creation.`
+            : '')
+        );
+      }
+
+      // Create transaction with direct SOL transfers
+      const transaction = new Transaction();
+
+      // Transfer deposit amount to platform/deposit wallet (using actual amount calculated above)
+      const actualDepositLamports = Math.floor(actualDepositAmount * LAMPORTS_PER_SOL);
+      const depositTransferInstruction = SystemProgram.transfer({
+        fromPubkey: user,
+        toPubkey: depositWalletAddress,
+        lamports: actualDepositLamports,
+      });
+      transaction.add(depositTransferInstruction);
+      if (actualDepositAmount > solAmount) {
+        console.log(`⚠️ Transferring ${actualDepositAmount.toFixed(6)} SOL (rent-exempt minimum) instead of requested ${solAmount} SOL because account doesn't exist`);
+      }
+      console.log(`✅ Added deposit transfer: ${actualDepositAmount.toFixed(6)} SOL (${actualDepositLamports} lamports) → deposit wallet`);
+
+      // Transfer fee to fee wallet PDA (using actual amount calculated above)
+      if (feeLamports > 0) {
+        const actualFeeLamports = Math.floor(actualFeeAmount * LAMPORTS_PER_SOL);
+        const feeTransferInstruction = SystemProgram.transfer({
+          fromPubkey: user,
+          toPubkey: feeWalletPDA,
+          lamports: actualFeeLamports,
+        });
+        transaction.add(feeTransferInstruction);
+        if (actualFeeAmount > depositFee) {
+          console.log(`⚠️ Transferring ${actualFeeAmount.toFixed(6)} SOL (rent-exempt minimum) instead of ${depositFee.toFixed(6)} SOL fee because account doesn't exist`);
+        }
+        console.log(`✅ Added fee transfer: ${actualFeeAmount.toFixed(6)} SOL (${actualFeeLamports} lamports) → fee wallet PDA`);
+      }
+
+      // Get fresh blockhash
+      const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash("confirmed");
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = user;
+
+      console.log(`📤 Sending manual SOL deposit transaction (blockhash: ${blockhash.substring(0, 8)}...)`);
+
+      // Sign and send
+      const signedTransaction = await wallet.signTransaction(transaction);
+      const signature = await this.connection.sendRawTransaction(signedTransaction.serialize(), {
+        skipPreflight: false,
+        preflightCommitment: "confirmed",
+        maxRetries: 0,
+      });
+
+      // Confirm transaction
+      const confirmation = await this.connection.confirmTransaction({
+        signature,
+        blockhash,
+        lastValidBlockHeight,
+      }, "confirmed");
+
+      if (confirmation.value.err) {
+        throw new Error(`Transaction failed: ${confirmation.value.err}`);
+      }
+
+      console.log(`✅ Manual SOL deposit successful! Signature: ${signature}`);
+      return signature;
+    } catch (error: any) {
+      console.error("Error in manual SOL deposit:", error);
+
+      if (error.message.includes("already been processed")) {
+        console.log("⚠️ Transaction 'already processed' - likely succeeded");
+        throw new Error("TRANSACTION_ALREADY_PROCESSED");
+      }
+
+      throw error;
+    } finally {
+      this.pendingTransactions.delete(transactionId);
+    }
+  }
+
+  /**
    * Deposit SOL with custom fee amount (for projects without project_pda)
    * Uses the project fee from database instead of global fee config
+   * NOTE: This uses the on-chain program and requires global_state/sol_fee_config PDAs to be initialized
+   * Use depositSOLManual() for simpler direct transfers without program PDAs
    */
   async depositSOLWithCustomFee(
     user: PublicKey,
@@ -1059,7 +1261,7 @@ export class SolanaProgramService {
     try {
       // Use custom fee instead of fetching from blockchain
       const depositFee = customFeeLamports / LAMPORTS_PER_SOL;
-      const networkFee = 0.01; // Network transaction fee
+      const networkFee = 0.0001; // Network transaction fee (~0.00005 SOL actual + buffer)
       const totalRequired = solAmount + depositFee + networkFee;
 
       // Check user's SOL balance first
@@ -1221,7 +1423,7 @@ export class SolanaProgramService {
     try {
       // Calculate fee in SOL
       const depositFee = projectFeeLamports / LAMPORTS_PER_SOL;
-      const networkFee = 0.01; // Network transaction fee
+      const networkFee = 0.0001; // Network transaction fee (~0.00005 SOL actual + buffer)
       const totalRequired = solAmount + depositFee + networkFee;
 
       // Check user's SOL balance first
@@ -2682,9 +2884,9 @@ export class SolanaProgramService {
 
   /**
    * Deposit USDC tokens and get OGX credits (similar to SOL deposit)
-   * @param usdcFeeAmount - Fee amount in USDC (calculated dynamically based on market prices)
+   * @param solFeeAmount - Fee amount in SOL (always paid in SOL regardless of deposit token)
    */
-  async depositUSDC(user: PublicKey, usdcAmount: number, wallet: any, usdcFeeAmount?: number): Promise<string> {
+  async depositUSDC(user: PublicKey, usdcAmount: number, wallet: any, solFeeAmount?: number): Promise<string> {
     const transactionId = this.generateTransactionId(user, usdcAmount);
 
     // Check if this transaction is already pending
@@ -2699,15 +2901,16 @@ export class SolanaProgramService {
       // For USDC deposits, we'll manually transfer USDC tokens to the vault
       // and update the database with OGX equivalent (similar to SOL deposits)
 
-      // Fee is ADDITIONAL to the deposit amount (not deducted from it)
-      // If fee is provided, use it; otherwise, assume no fee for backward compatibility
-      const feeAmount = usdcFeeAmount || 0;
-      // Deposit amount goes fully to vault, fee is additional charge
+      // Fee is ALWAYS paid in SOL (not in the deposit token)
+      // This ensures consistent fee collection regardless of deposit currency
+      const feeAmountSOL = solFeeAmount || 0;
+      const feeAmountLamports = Math.floor(feeAmountSOL * LAMPORTS_PER_SOL);
+      
+      // Deposit amount goes fully to vault
       const depositAmountToVault = usdcAmount;
-      const totalRequired = usdcAmount + feeAmount;
 
-      if (totalRequired <= 0) {
-        throw new Error(`Total amount (deposit + fee) must be greater than 0. Deposit: ${usdcAmount} USDC, Fee: ${feeAmount} USDC`);
+      if (usdcAmount <= 0) {
+        throw new Error(`Deposit amount must be greater than 0. Deposit: ${usdcAmount} USDC`);
       }
 
       // Get PDAs for USDC vault (for receiving USDC)
@@ -2715,11 +2918,8 @@ export class SolanaProgramService {
       const usdcVaultATA = await this.getVaultATA(USDC_MINT);
       const userUSDCATA = this.getUserATA(user, USDC_MINT);
 
-      // Get fee wallet and fee vault ATA for USDC
+      // Get fee wallet for SOL fee transfer
       const feeWallet = new PublicKey(CONFIG.FEE_WALLET);
-      const [feeVaultAuthority] = this.getFeeVaultAuthority(USDC_MINT);
-      const feeVaultATA = await this.getFeeVaultATA(USDC_MINT);
-      const feeWalletUSDCATA = this.getUserATA(feeWallet, USDC_MINT);
 
       // Check if user USDC ATA exists and create if needed
       let needsUserUSDCATA = false;
@@ -2735,40 +2935,35 @@ export class SolanaProgramService {
         needsUserUSDCATA = true; // Assume it needs to be created
       }
 
-      // Check if fee wallet USDC ATA exists and create if needed
-      // We can create an ATA for the fee wallet since the user is paying for it
-      let needsFeeWalletATA = false;
-      try {
-        const feeWalletATAInfo = await this.connection.getAccountInfo(feeWalletUSDCATA);
-        needsFeeWalletATA = !feeWalletATAInfo;
-        console.log(`Fee wallet USDC ATA exists: ${!needsFeeWalletATA}`);
-        if (needsFeeWalletATA) {
-          console.log("📝 Fee wallet USDC ATA does not exist - will create it");
-        }
-      } catch (error) {
-        console.warn("Error checking fee wallet ATA:", error);
-        needsFeeWalletATA = true; // Assume it needs to be created
+      // Check user USDC balance (must have enough for deposit)
+      const userUSDCBalance = await this.getUSDCBalance(user);
+      if (userUSDCBalance < usdcAmount) {
+        throw new Error(`Insufficient USDC balance. You have ${userUSDCBalance.toFixed(4)} USDC but need ${usdcAmount.toFixed(4)} USDC for deposit.`);
       }
 
-      // Check user USDC balance (must have enough for deposit + fee)
-      const userBalance = await this.getUSDCBalance(user);
-      if (userBalance < totalRequired) {
-        throw new Error(`Insufficient USDC balance. You have ${userBalance.toFixed(4)} USDC but need ${totalRequired.toFixed(6)} USDC (${usdcAmount.toFixed(4)} deposit + ${feeAmount.toFixed(6)} fee).`);
+      // Check user SOL balance (must have enough for fee + network fee)
+      const userSOLBalance = await this.connection.getBalance(user);
+      const userSOLBalanceInSOL = userSOLBalance / LAMPORTS_PER_SOL;
+      const networkFee = 0.0001; // Estimate for network transaction fee (~0.00005 SOL actual + buffer)
+      const totalSOLRequired = feeAmountSOL + networkFee;
+      
+      if (userSOLBalanceInSOL < totalSOLRequired) {
+        throw new Error(`Insufficient SOL balance for fee. You have ${userSOLBalanceInSOL.toFixed(4)} SOL but need ${totalSOLRequired.toFixed(4)} SOL (${feeAmountSOL.toFixed(4)} fee + ${networkFee.toFixed(4)} network fee).`);
       }
 
-      console.log(`=== USDC DEPOSIT INFO ===`);
+      console.log(`=== USDC DEPOSIT INFO (SOL FEE) ===`);
       console.log(`👤 User Wallet: ${user.toString()}`);
       console.log(`💵 USDC Deposit Amount: ${usdcAmount} USDC`);
-      console.log(`💰 USDC Fee Amount: ${feeAmount.toFixed(6)} USDC`);
-      console.log(`📊 Total Required: ${totalRequired.toFixed(6)} USDC`);
+      console.log(`💰 SOL Fee Amount: ${feeAmountSOL.toFixed(6)} SOL (${feeAmountLamports} lamports)`);
       console.log(`📥 Deposit to Vault: ${depositAmountToVault.toFixed(6)} USDC`);
-      console.log(`💸 Fee to Fee Wallet: ${feeAmount.toFixed(6)} USDC`);
+      console.log(`💸 SOL Fee to Fee Wallet: ${feeAmountSOL.toFixed(6)} SOL`);
       console.log(`📤 FROM (User's USDC ATA): ${userUSDCATA.toString()}`);
       console.log(`📥 TO (Vault's USDC ATA): ${usdcVaultATA.toString()}`);
-      console.log(`💸 FEE TO (Fee Wallet USDC ATA): ${feeWalletUSDCATA.toString()}`);
+      console.log(`💸 FEE TO (Fee Wallet): ${feeWallet.toString()}`);
       console.log(`🔐 Vault Authority PDA: ${usdcVaultAuthority.toString()}`);
-      console.log(`💰 User Balance: ${userBalance} USDC`);
-      console.log(`📋 Transfer 1: ${feeAmount.toFixed(6)} USDC → Fee Wallet`);
+      console.log(`💰 User USDC Balance: ${userUSDCBalance} USDC`);
+      console.log(`💰 User SOL Balance: ${userSOLBalanceInSOL.toFixed(4)} SOL`);
+      console.log(`📋 Transfer 1: ${feeAmountSOL.toFixed(6)} SOL → Fee Wallet (in SOL)`);
       console.log(`📋 Transfer 2: ${depositAmountToVault.toFixed(6)} USDC → Vault`);
 
       // Check if vault ATA exists
@@ -2797,20 +2992,6 @@ export class SolanaProgramService {
         console.log("✅ Added user USDC ATA creation instruction");
       }
 
-      // If fee wallet USDC ATA needs to be created, add it
-      // User pays for creating the fee wallet's ATA
-      if (needsFeeWalletATA) {
-        console.log("Creating fee wallet USDC ATA...");
-        const createFeeWalletATAInstruction = createAssociatedTokenAccountInstruction(
-          user, // Payer (user pays for account creation)
-          feeWalletUSDCATA, // ATA address (derived from fee wallet + USDC mint)
-          feeWallet, // Owner (fee wallet)
-          USDC_MINT // Mint (USDC)
-        );
-        finalTransaction.add(createFeeWalletATAInstruction);
-        console.log("✅ Added fee wallet USDC ATA creation instruction");
-      }
-
       // If vault ATA doesn't exist, create it
       // We can create an ATA for a PDA - the user pays for account creation
       if (needsVaultATA) {
@@ -2829,37 +3010,32 @@ export class SolanaProgramService {
       const usdcDecimals = await this.getTokenDecimals(USDC_MINT);
       console.log(`📊 USDC actual decimals: ${usdcDecimals}`);
 
-      // Convert amounts to token units using actual decimals
-      const feeAmountInUnits = Math.floor(feeAmount * Math.pow(10, usdcDecimals));
+      // Convert USDC amount to token units using actual decimals
       const depositAmountInUnits = Math.floor(depositAmountToVault * Math.pow(10, usdcDecimals));
 
       console.log(`💵 Amount conversions:`);
-      console.log(`   Fee: ${feeAmount} USDC = ${feeAmountInUnits} units`);
-      console.log(`   Deposit: ${depositAmountToVault} USDC = ${depositAmountInUnits} units`);
-      console.log(`   Total: ${totalRequired} USDC = ${feeAmountInUnits + depositAmountInUnits} units`);
+      console.log(`   SOL Fee: ${feeAmountSOL} SOL = ${feeAmountLamports} lamports`);
+      console.log(`   USDC Deposit: ${depositAmountToVault} USDC = ${depositAmountInUnits} units`);
 
-      // Transfer 1: Fee to fee wallet (if fee > 0)
-      if (feeAmount > 0) {
-        console.log(`🔄 Creating fee transfer instruction:`);
-        console.log(`   FROM: ${userUSDCATA.toString()} (User's USDC wallet)`);
-        console.log(`   TO: ${feeWalletUSDCATA.toString()} (Fee Wallet's USDC wallet)`);
-        console.log(`   AMOUNT: ${feeAmountInUnits} units (${feeAmount.toFixed(6)} USDC)`);
+      // Transfer 1: SOL Fee to fee wallet (if fee > 0)
+      if (feeAmountLamports > 0) {
+        console.log(`🔄 Creating SOL fee transfer instruction:`);
+        console.log(`   FROM: ${user.toString()} (User's SOL wallet)`);
+        console.log(`   TO: ${feeWallet.toString()} (Fee Wallet)`);
+        console.log(`   AMOUNT: ${feeAmountLamports} lamports (${feeAmountSOL.toFixed(6)} SOL)`);
 
-        const feeTransferInstruction = createTransferInstruction(
-          userUSDCATA, // Source: User's USDC token account
-          feeWalletUSDCATA, // Destination: Fee wallet's USDC token account
-          user, // Authority: User's wallet (must sign)
-          feeAmountInUnits, // Fee amount in token units
-          [], // Multi-signers (none needed)
-          TOKEN_PROGRAM_ID // Token program ID
-        );
+        const feeTransferInstruction = SystemProgram.transfer({
+          fromPubkey: user,
+          toPubkey: feeWallet,
+          lamports: feeAmountLamports,
+        });
 
         finalTransaction.add(feeTransferInstruction);
-        console.log("✅ Added fee transfer instruction");
+        console.log("✅ Added SOL fee transfer instruction");
       }
 
-      // Transfer 2: Full deposit amount to vault (fee is additional, not deducted from deposit)
-      console.log(`🔄 Creating deposit transfer instruction:`);
+      // Transfer 2: Full USDC deposit amount to vault
+      console.log(`🔄 Creating USDC deposit transfer instruction:`);
       console.log(`   FROM: ${userUSDCATA.toString()} (User's USDC wallet)`);
       console.log(`   TO: ${usdcVaultATA.toString()} (Vault's USDC wallet)`);
       console.log(`   AMOUNT: ${depositAmountInUnits} units (${depositAmountToVault.toFixed(6)} USDC)`);
@@ -2869,22 +3045,20 @@ export class SolanaProgramService {
         userUSDCATA, // Source: User's USDC token account (tokens will be deducted from here)
         usdcVaultATA, // Destination: Vault's USDC token account (tokens will be deposited here)
         user, // Authority: User's wallet (must sign the transaction)
-        depositAmountInUnits, // Full deposit amount in token units (fee is separate/additional)
+        depositAmountInUnits, // Full deposit amount in token units
         [], // Multi-signers (none needed - only user signs)
         TOKEN_PROGRAM_ID // Token program ID
       );
 
       // Add USDC transfer instruction (this transfers full deposit amount to vault)
-      // Note: Fee is a separate transfer instruction added above
-      // Total deducted from user = feeAmount + depositAmountToVault
+      // Note: Fee is paid in SOL separately (first instruction)
       // The database will be updated with OGX equivalent in Purchase.tsx
       finalTransaction.add(usdcTransferInstruction);
       console.log("✅ Added deposit transfer instruction");
       console.log(`📊 Transaction Summary:`);
-      console.log(`   Total USDC to be deducted from user: ${totalRequired.toFixed(6)} USDC`);
-      console.log(`   - Fee: ${feeAmount.toFixed(6)} USDC → Fee Wallet`);
-      console.log(`   - Deposit: ${depositAmountToVault.toFixed(6)} USDC → Vault`);
-      console.log(`   Note: Phantom wallet may show transfers separately or combined`);
+      console.log(`   SOL Fee: ${feeAmountSOL.toFixed(6)} SOL → Fee Wallet`);
+      console.log(`   USDC Deposit: ${depositAmountToVault.toFixed(6)} USDC → Vault`);
+      console.log(`   Note: Fee is paid in SOL, deposit is in USDC`);
 
       // Simulate transaction first to catch errors early
       try {
@@ -3501,8 +3675,9 @@ export class SolanaProgramService {
    * Deposit Token4 tokens (similar to USDC deposit)
    * IMPORTANT: Uses manual token transfer instead of program's deposit instruction
    * because the program's deposit is hardcoded for OGX tokens only
+   * @param solFeeAmount - Fee amount in SOL (always paid in SOL regardless of deposit token)
    */
-  async depositToken4(user: PublicKey, tokenAmount: number, wallet: any, token4FeeAmount?: number): Promise<string> {
+  async depositToken4(user: PublicKey, tokenAmount: number, wallet: any, solFeeAmount?: number): Promise<string> {
     const transactionId = this.generateTransactionId(user, tokenAmount);
 
     // Check if this transaction is already pending
@@ -3517,15 +3692,16 @@ export class SolanaProgramService {
       // For TOKEN4 deposits, we'll manually transfer TOKEN4 tokens to the vault
       // and update the database with OGX equivalent (similar to SOL and USDC deposits)
 
-      // Fee is ADDITIONAL to the deposit amount (not deducted from it)
-      // If fee is provided, use it; otherwise, assume no fee for backward compatibility
-      const feeAmount = token4FeeAmount || 0;
-      // Deposit amount goes fully to vault, fee is additional charge
+      // Fee is ALWAYS paid in SOL (not in the deposit token)
+      // This ensures consistent fee collection regardless of deposit currency
+      const feeAmountSOL = solFeeAmount || 0;
+      const feeAmountLamports = Math.floor(feeAmountSOL * LAMPORTS_PER_SOL);
+      
+      // Deposit amount goes fully to vault
       const depositAmountToVault = tokenAmount;
-      const totalRequired = tokenAmount + feeAmount;
 
-      if (totalRequired <= 0) {
-        throw new Error(`Total amount (deposit + fee) must be greater than 0. Deposit: ${tokenAmount} TOKEN4, Fee: ${feeAmount} TOKEN4`);
+      if (tokenAmount <= 0) {
+        throw new Error(`Deposit amount must be greater than 0. Deposit: ${tokenAmount} TOKEN4`);
       }
 
       // Get PDAs for TOKEN4 vault (for receiving TOKEN4)
@@ -3533,11 +3709,8 @@ export class SolanaProgramService {
       const token4VaultATA = await this.getVaultATA(TOKEN4_MINT);
       const userToken4ATA = this.getUserATA(user, TOKEN4_MINT);
 
-      // Get fee wallet and fee vault ATA for TOKEN4
+      // Get fee wallet for SOL fee transfer
       const feeWallet = new PublicKey(CONFIG.FEE_WALLET);
-      const [feeVaultAuthority] = this.getFeeVaultAuthority(TOKEN4_MINT);
-      const feeVaultATA = await this.getFeeVaultATA(TOKEN4_MINT);
-      const feeWalletToken4ATA = this.getUserATA(feeWallet, TOKEN4_MINT);
 
       // Check if user TOKEN4 ATA exists and create if needed
       let needsUserToken4ATA = false;
@@ -3553,40 +3726,35 @@ export class SolanaProgramService {
         needsUserToken4ATA = true; // Assume it needs to be created
       }
 
-      // Check if fee wallet TOKEN4 ATA exists and create if needed
-      // We can create an ATA for the fee wallet since the user is paying for it
-      let needsFeeWalletToken4ATA = false;
-      try {
-        const feeWalletATAInfo = await this.connection.getAccountInfo(feeWalletToken4ATA);
-        needsFeeWalletToken4ATA = !feeWalletATAInfo;
-        console.log(`Fee wallet TOKEN4 ATA exists: ${!needsFeeWalletToken4ATA}`);
-        if (needsFeeWalletToken4ATA) {
-          console.log("📝 Fee wallet TOKEN4 ATA does not exist - will create it");
-        }
-      } catch (error) {
-        console.warn("Error checking fee wallet TOKEN4 ATA:", error);
-        needsFeeWalletToken4ATA = true; // Assume it needs to be created
+      // Check user TOKEN4 balance (must have enough for deposit)
+      const userTokenBalance = await this.getTokenBalance(user, TOKEN4_MINT);
+      if (userTokenBalance < tokenAmount) {
+        throw new Error(`Insufficient Token4 balance. You have ${userTokenBalance.toFixed(4)} TOKEN4 but need ${tokenAmount.toFixed(4)} TOKEN4 for deposit.`);
       }
 
-      // Check user TOKEN4 balance (must have enough for deposit + fee)
-      const userBalance = await this.getTokenBalance(user, TOKEN4_MINT);
-      if (userBalance < totalRequired) {
-        throw new Error(`Insufficient Token4 balance. You have ${userBalance.toFixed(4)} but need ${totalRequired.toFixed(6)} TOKEN4 (${tokenAmount.toFixed(4)} deposit + ${feeAmount.toFixed(6)} fee).`);
+      // Check user SOL balance (must have enough for fee + network fee)
+      const userSOLBalance = await this.connection.getBalance(user);
+      const userSOLBalanceInSOL = userSOLBalance / LAMPORTS_PER_SOL;
+      const networkFee = 0.0001; // Estimate for network transaction fee (~0.00005 SOL actual + buffer)
+      const totalSOLRequired = feeAmountSOL + networkFee;
+      
+      if (userSOLBalanceInSOL < totalSOLRequired) {
+        throw new Error(`Insufficient SOL balance for fee. You have ${userSOLBalanceInSOL.toFixed(4)} SOL but need ${totalSOLRequired.toFixed(4)} SOL (${feeAmountSOL.toFixed(4)} fee + ${networkFee.toFixed(4)} network fee).`);
       }
 
-      console.log(`=== TOKEN4 DEPOSIT INFO ===`);
+      console.log(`=== TOKEN4 DEPOSIT INFO (SOL FEE) ===`);
       console.log(`👤 User Wallet: ${user.toString()}`);
       console.log(`💵 TOKEN4 Deposit Amount: ${tokenAmount} TOKEN4`);
-      console.log(`💰 TOKEN4 Fee Amount: ${feeAmount.toFixed(6)} TOKEN4`);
-      console.log(`📊 Total Required: ${totalRequired.toFixed(6)} TOKEN4`);
+      console.log(`💰 SOL Fee Amount: ${feeAmountSOL.toFixed(6)} SOL (${feeAmountLamports} lamports)`);
       console.log(`📥 Deposit to Vault: ${depositAmountToVault.toFixed(6)} TOKEN4`);
-      console.log(`💸 Fee to Fee Wallet: ${feeAmount.toFixed(6)} TOKEN4`);
+      console.log(`💸 SOL Fee to Fee Wallet: ${feeAmountSOL.toFixed(6)} SOL`);
       console.log(`📤 FROM (User's TOKEN4 ATA): ${userToken4ATA.toString()}`);
       console.log(`📥 TO (Vault's TOKEN4 ATA): ${token4VaultATA.toString()}`);
-      console.log(`💸 FEE TO (Fee Wallet TOKEN4 ATA): ${feeWalletToken4ATA.toString()}`);
+      console.log(`💸 FEE TO (Fee Wallet): ${feeWallet.toString()}`);
       console.log(`🔐 Vault Authority PDA: ${token4VaultAuthority.toString()}`);
-      console.log(`💰 User Balance: ${userBalance} TOKEN4`);
-      console.log(`📋 Transfer 1: ${feeAmount.toFixed(6)} TOKEN4 → Fee Wallet`);
+      console.log(`💰 User TOKEN4 Balance: ${userTokenBalance} TOKEN4`);
+      console.log(`💰 User SOL Balance: ${userSOLBalanceInSOL.toFixed(4)} SOL`);
+      console.log(`📋 Transfer 1: ${feeAmountSOL.toFixed(6)} SOL → Fee Wallet (in SOL)`);
       console.log(`📋 Transfer 2: ${depositAmountToVault.toFixed(6)} TOKEN4 → Vault`);
 
       // Check if vault ATA exists
@@ -3615,20 +3783,6 @@ export class SolanaProgramService {
         console.log("✅ Added user TOKEN4 ATA creation instruction");
       }
 
-      // If fee wallet TOKEN4 ATA needs to be created, add it
-      // User pays for creating the fee wallet's ATA
-      if (needsFeeWalletToken4ATA) {
-        console.log("Creating fee wallet TOKEN4 ATA...");
-        const createFeeWalletATAInstruction = createAssociatedTokenAccountInstruction(
-          user, // Payer (user pays for account creation)
-          feeWalletToken4ATA, // ATA address (derived from fee wallet + TOKEN4 mint)
-          feeWallet, // Owner (fee wallet)
-          TOKEN4_MINT // Mint (TOKEN4)
-        );
-        finalTransaction.add(createFeeWalletATAInstruction);
-        console.log("✅ Added fee wallet TOKEN4 ATA creation instruction");
-      }
-
       // If vault ATA doesn't exist, create it
       // We can create an ATA for a PDA - the user pays for account creation
       if (needsVaultATA) {
@@ -3647,37 +3801,32 @@ export class SolanaProgramService {
       const tokenDecimals = await this.getTokenDecimals(TOKEN4_MINT);
       console.log(`📊 TOKEN4 actual decimals: ${tokenDecimals}`);
 
-      // Convert amounts to token units using actual decimals
-      const feeAmountInUnits = Math.floor(feeAmount * Math.pow(10, tokenDecimals));
+      // Convert TOKEN4 amount to token units using actual decimals
       const depositAmountInUnits = Math.floor(depositAmountToVault * Math.pow(10, tokenDecimals));
 
       console.log(`💵 Amount conversions:`);
-      console.log(`   Fee: ${feeAmount} TOKEN4 = ${feeAmountInUnits} units`);
-      console.log(`   Deposit: ${depositAmountToVault} TOKEN4 = ${depositAmountInUnits} units`);
-      console.log(`   Total: ${totalRequired} TOKEN4 = ${feeAmountInUnits + depositAmountInUnits} units`);
+      console.log(`   SOL Fee: ${feeAmountSOL} SOL = ${feeAmountLamports} lamports`);
+      console.log(`   TOKEN4 Deposit: ${depositAmountToVault} TOKEN4 = ${depositAmountInUnits} units`);
 
-      // Transfer 1: Fee to fee wallet (if fee > 0)
-      if (feeAmount > 0) {
-        console.log(`🔄 Creating fee transfer instruction:`);
-        console.log(`   FROM: ${userToken4ATA.toString()} (User's TOKEN4 wallet)`);
-        console.log(`   TO: ${feeWalletToken4ATA.toString()} (Fee Wallet's TOKEN4 wallet)`);
-        console.log(`   AMOUNT: ${feeAmountInUnits} units (${feeAmount.toFixed(6)} TOKEN4)`);
+      // Transfer 1: SOL Fee to fee wallet (if fee > 0)
+      if (feeAmountLamports > 0) {
+        console.log(`🔄 Creating SOL fee transfer instruction:`);
+        console.log(`   FROM: ${user.toString()} (User's SOL wallet)`);
+        console.log(`   TO: ${feeWallet.toString()} (Fee Wallet)`);
+        console.log(`   AMOUNT: ${feeAmountLamports} lamports (${feeAmountSOL.toFixed(6)} SOL)`);
 
-        const feeTransferInstruction = createTransferInstruction(
-          userToken4ATA, // Source: User's TOKEN4 token account
-          feeWalletToken4ATA, // Destination: Fee wallet's TOKEN4 token account
-          user, // Authority: User's wallet (must sign)
-          feeAmountInUnits, // Fee amount in token units
-          [], // Multi-signers (none needed)
-          TOKEN_PROGRAM_ID // Token program ID
-        );
+        const feeTransferInstruction = SystemProgram.transfer({
+          fromPubkey: user,
+          toPubkey: feeWallet,
+          lamports: feeAmountLamports,
+        });
 
         finalTransaction.add(feeTransferInstruction);
-        console.log("✅ Added fee transfer instruction");
+        console.log("✅ Added SOL fee transfer instruction");
       }
 
-      // Transfer 2: Full deposit amount to vault (fee is additional, not deducted from deposit)
-      console.log(`🔄 Creating deposit transfer instruction:`);
+      // Transfer 2: Full TOKEN4 deposit amount to vault
+      console.log(`🔄 Creating TOKEN4 deposit transfer instruction:`);
       console.log(`   FROM: ${userToken4ATA.toString()} (User's TOKEN4 wallet)`);
       console.log(`   TO: ${token4VaultATA.toString()} (Vault's TOKEN4 wallet)`);
       console.log(`   AMOUNT: ${depositAmountInUnits} units (${depositAmountToVault.toFixed(6)} TOKEN4)`);
@@ -3687,22 +3836,20 @@ export class SolanaProgramService {
         userToken4ATA, // Source: User's TOKEN4 token account (tokens will be deducted from here)
         token4VaultATA, // Destination: Vault's TOKEN4 token account (tokens will be deposited here)
         user, // Authority: User's wallet (must sign the transaction)
-        depositAmountInUnits, // Full deposit amount in token units (fee is separate/additional)
+        depositAmountInUnits, // Full deposit amount in token units
         [], // Multi-signers (none needed - only user signs)
         TOKEN_PROGRAM_ID // Token program ID
       );
 
       // Add TOKEN4 transfer instruction (this transfers full deposit amount to vault)
-      // Note: Fee is a separate transfer instruction added above
-      // Total deducted from user = feeAmount + depositAmountToVault
+      // Note: Fee is paid in SOL separately (first instruction)
       // The database will be updated with OGX equivalent in Purchase.tsx
       finalTransaction.add(token4TransferInstruction);
       console.log("✅ Added deposit transfer instruction");
       console.log(`📊 Transaction Summary:`);
-      console.log(`   Total TOKEN4 to be deducted from user: ${totalRequired.toFixed(6)} TOKEN4`);
-      console.log(`   - Fee: ${feeAmount.toFixed(6)} TOKEN4 → Fee Wallet`);
-      console.log(`   - Deposit: ${depositAmountToVault.toFixed(6)} TOKEN4 → Vault`);
-      console.log(`   Note: Phantom wallet may show transfers separately or combined`);
+      console.log(`   SOL Fee: ${feeAmountSOL.toFixed(6)} SOL → Fee Wallet`);
+      console.log(`   TOKEN4 Deposit: ${depositAmountToVault.toFixed(6)} TOKEN4 → Vault`);
+      console.log(`   Note: Fee is paid in SOL, deposit is in TOKEN4`);
 
       // Simulate transaction first to catch errors early
       try {
@@ -3842,8 +3989,12 @@ export class SolanaProgramService {
 
   /**
    * Generic token deposit function for any SPL token
+   * NOTE: This uses the Solana program's deposit instruction which handles fees internally.
+   * For SOL fee collection regardless of token type, use depositToken() instead.
+   * 
+   * @param solFeeAmount - Optional additional SOL fee (added on top of program fee)
    */
-  async depositTokenGeneric(user: PublicKey, mint: PublicKey, amount: number, wallet: any): Promise<string> {
+  async depositTokenGeneric(user: PublicKey, mint: PublicKey, amount: number, wallet: any, solFeeAmount?: number): Promise<string> {
     const transactionId = this.generateTransactionId(user, `${mint.toString()}_${amount}`);
 
     if (this.pendingTransactions.has(transactionId)) {
@@ -3853,6 +4004,10 @@ export class SolanaProgramService {
     this.pendingTransactions.add(transactionId);
 
     try {
+      // SOL fee (if provided) - always paid in SOL regardless of deposit token
+      const feeAmountSOL = solFeeAmount || 0;
+      const feeAmountLamports = Math.floor(feeAmountSOL * LAMPORTS_PER_SOL);
+
       // Get PDAs for token vault
       const [vaultAuthority] = this.getVaultAuthority(mint);
       const vaultATA = await this.getVaultATA(mint);
@@ -3872,10 +4027,22 @@ export class SolanaProgramService {
       const [solFeeConfig] = this.getSolFeeConfig();
       const [exchangeConfig] = this.getExchangeConfig();
 
-      // Check user balance (assuming 6 decimals for tokens)
+      // Check user token balance (assuming 6 decimals for tokens)
       const userBalance = await this.getTokenBalance(user, mint);
       if (userBalance < amount) {
         throw new Error(`Insufficient token balance. You have ${userBalance.toFixed(4)} but need ${amount}.`);
+      }
+
+      // Check user SOL balance if SOL fee is required
+      if (feeAmountLamports > 0) {
+        const userSOLBalance = await this.connection.getBalance(user);
+        const userSOLBalanceInSOL = userSOLBalance / LAMPORTS_PER_SOL;
+        const networkFee = 0.0001; // Estimate for network transaction fee (~0.00005 SOL actual + buffer)
+        const totalSOLRequired = feeAmountSOL + networkFee;
+        
+        if (userSOLBalanceInSOL < totalSOLRequired) {
+          throw new Error(`Insufficient SOL balance for fee. You have ${userSOLBalanceInSOL.toFixed(4)} SOL but need ${totalSOLRequired.toFixed(4)} SOL (${feeAmountSOL.toFixed(4)} fee + ${networkFee.toFixed(4)} network fee).`);
+        }
       }
 
       // Create deposit transaction using the program
@@ -3907,6 +4074,23 @@ export class SolanaProgramService {
       // If ATA needs to be created, add it first
       if (createATATransaction) {
         finalTransaction.add(...createATATransaction.instructions);
+      }
+
+      // Add SOL fee transfer if SOL fee is provided (first, before deposit)
+      if (feeAmountLamports > 0) {
+        console.log(`🔄 Creating SOL fee transfer instruction:`);
+        console.log(`   FROM: ${user.toString()} (User's SOL wallet)`);
+        console.log(`   TO: ${feeWallet.toString()} (Fee Wallet)`);
+        console.log(`   AMOUNT: ${feeAmountLamports} lamports (${feeAmountSOL.toFixed(6)} SOL)`);
+
+        finalTransaction.add(
+          SystemProgram.transfer({
+            fromPubkey: user,
+            toPubkey: feeWallet,
+            lamports: feeAmountLamports,
+          })
+        );
+        console.log("✅ Added SOL fee transfer instruction");
       }
 
       // Add the deposit transaction
@@ -5763,12 +5947,15 @@ export class SolanaProgramService {
   /**
    * Generic deposit function for any SPL token
    * Works for any token mint address
+   * Fee is ALWAYS paid in SOL regardless of the token being deposited
+   * Tokens are sent to the project's deposit wallet (if configured) or vault ATA
    * 
    * @param user - User's public key
    * @param tokenMint - Token mint address (PublicKey)
    * @param tokenAmount - Amount to deposit
    * @param wallet - Wallet adapter
-   * @param feeAmount - Optional fee amount (default: 0)
+   * @param solFeeAmount - Optional fee amount in SOL (default: 0)
+   * @param projectId - Optional project ID for project-specific deposit wallet
    * @returns Transaction signature
    */
   async depositToken(
@@ -5776,7 +5963,8 @@ export class SolanaProgramService {
     tokenMint: PublicKey,
     tokenAmount: number,
     wallet: any,
-    feeAmount?: number
+    solFeeAmount?: number,
+    projectId?: number | null
   ): Promise<string> {
     const transactionId = this.generateTransactionId(user, `${tokenMint.toString()}_${tokenAmount}`);
 
@@ -5788,24 +5976,39 @@ export class SolanaProgramService {
     this.pendingTransactions.add(transactionId);
 
     try {
-      const fee = feeAmount || 0;
+      // Fee is ALWAYS paid in SOL (not in the deposit token)
+      const feeAmountSOL = solFeeAmount || 0;
+      const feeAmountLamports = Math.floor(feeAmountSOL * LAMPORTS_PER_SOL);
       const depositAmountToVault = tokenAmount;
-      const totalRequired = tokenAmount + fee;
 
-      if (totalRequired <= 0) {
-        throw new Error(`Total amount (deposit + fee) must be greater than 0. Deposit: ${tokenAmount}, Fee: ${fee}`);
+      if (tokenAmount <= 0) {
+        throw new Error(`Deposit amount must be greater than 0. Deposit: ${tokenAmount}`);
       }
 
-      // Get PDAs for token vault
+      // Get deposit wallet address (project-specific or default)
+      let depositWalletAddress: PublicKey;
+      try {
+        depositWalletAddress = await this.getDepositWallet(projectId);
+        console.log(`✅ Using deposit wallet: ${depositWalletAddress.toString()}`);
+      } catch (error: any) {
+        // If deposit wallet not configured, fall back to vault ATA
+        console.warn(`⚠️ Deposit wallet not configured: ${error.message}`);
+        console.warn(`⚠️ Falling back to vault ATA`);
       const [vaultAuthority] = this.getVaultAuthority(tokenMint);
-      const vaultATA = await this.getVaultATA(tokenMint);
+        depositWalletAddress = vaultAuthority; // Use vault authority as fallback (will use vault ATA)
+      }
+
+      // Get deposit wallet's ATA for this token (or vault ATA if no deposit wallet)
+      const depositWalletATA = getAssociatedTokenAddressSync(
+        tokenMint,
+        depositWalletAddress,
+        true // allowOwnerOffCurve for PDAs
+      );
+
       const userATA = this.getUserATA(user, tokenMint);
 
-      // Get fee wallet and fee vault ATA
+      // Get fee wallet for SOL fee transfer
       const feeWallet = new PublicKey(CONFIG.FEE_WALLET);
-      const [feeVaultAuthority] = this.getFeeVaultAuthority(tokenMint);
-      const feeVaultATA = await this.getFeeVaultATA(tokenMint);
-      const feeWalletATA = this.getUserATA(feeWallet, tokenMint);
 
       // Check if user ATA exists
       let needsUserATA = false;
@@ -5816,74 +6019,98 @@ export class SolanaProgramService {
         needsUserATA = true;
       }
 
-      // Check if fee wallet ATA exists
-      let needsFeeWalletATA = false;
-      try {
-        const feeWalletATAInfo = await this.connection.getAccountInfo(feeWalletATA);
-        needsFeeWalletATA = !feeWalletATAInfo;
-      } catch (error) {
-        needsFeeWalletATA = true;
+      // Check user token balance
+      const userTokenBalance = await this.getTokenBalance(user, tokenMint);
+      if (userTokenBalance < tokenAmount) {
+        throw new Error(`Insufficient token balance. You have ${userTokenBalance.toFixed(4)} but need ${tokenAmount.toFixed(4)} for deposit.`);
       }
 
-      // Check user balance
-      const userBalance = await this.getTokenBalance(user, tokenMint);
-      if (userBalance < totalRequired) {
-        throw new Error(`Insufficient balance. You have ${userBalance.toFixed(4)} but need ${totalRequired.toFixed(6)} (${tokenAmount.toFixed(4)} deposit + ${fee.toFixed(6)} fee).`);
+      // Check user SOL balance (must have enough for fee + network fee)
+      const userSOLBalance = await this.connection.getBalance(user);
+      const userSOLBalanceInSOL = userSOLBalance / LAMPORTS_PER_SOL;
+      const networkFee = 0.0001; // Estimate for network transaction fee (~0.00005 SOL actual + buffer)
+      const totalSOLRequired = feeAmountSOL + networkFee;
+      
+      if (userSOLBalanceInSOL < totalSOLRequired) {
+        throw new Error(`Insufficient SOL balance for fee. You have ${userSOLBalanceInSOL.toFixed(4)} SOL but need ${totalSOLRequired.toFixed(4)} SOL (${feeAmountSOL.toFixed(4)} fee + ${networkFee.toFixed(4)} network fee).`);
       }
 
-      // Check if vault ATA exists
-      const vaultATAInfo = await this.connection.getAccountInfo(vaultATA);
-      const needsVaultATA = !vaultATAInfo;
+      // Check if deposit wallet ATA exists
+      const depositWalletATAInfo = await this.connection.getAccountInfo(depositWalletATA);
+      const needsDepositWalletATA = !depositWalletATAInfo;
+
+      console.log(`=== GENERIC TOKEN DEPOSIT INFO (SOL FEE) ===`);
+      console.log(`👤 User Wallet: ${user.toString()}`);
+      console.log(`🪙 Token Mint: ${tokenMint.toString()}`);
+      console.log(`💵 Token Deposit Amount: ${tokenAmount}`);
+      console.log(`💰 SOL Fee Amount: ${feeAmountSOL.toFixed(6)} SOL (${feeAmountLamports} lamports)`);
+      console.log(`💰 User Token Balance: ${userTokenBalance.toFixed(4)}`);
+      console.log(`💰 User SOL Balance: ${userSOLBalanceInSOL.toFixed(4)} SOL`);
+      console.log(`📥 Deposit Wallet: ${depositWalletAddress.toString()}`);
+      console.log(`📥 Deposit Wallet ATA: ${depositWalletATA.toString()}`);
 
       // Create transaction
       const finalTransaction = new Transaction();
       finalTransaction.feePayer = user;
 
-      // Create ATAs if needed
+      // Create user ATA if needed
       if (needsUserATA) {
         finalTransaction.add(
           createAssociatedTokenAccountInstruction(user, userATA, user, tokenMint)
         );
       }
 
-      if (needsFeeWalletATA) {
+      // Create deposit wallet ATA if needed
+      if (needsDepositWalletATA) {
         finalTransaction.add(
-          createAssociatedTokenAccountInstruction(user, feeWalletATA, feeWallet, tokenMint)
-        );
-      }
-
-      if (needsVaultATA) {
-        finalTransaction.add(
-          createAssociatedTokenAccountInstruction(user, vaultATA, vaultAuthority, tokenMint)
+          createAssociatedTokenAccountInstruction(user, depositWalletATA, depositWalletAddress, tokenMint)
         );
       }
 
       // Get token decimals
       const tokenDecimals = await this.getTokenDecimals(tokenMint);
-      const feeAmountInUnits = Math.floor(fee * Math.pow(10, tokenDecimals));
       const depositAmountInUnits = Math.floor(depositAmountToVault * Math.pow(10, tokenDecimals));
 
-      // Add fee transfer if fee > 0
-      if (feeAmountInUnits > 0) {
+      console.log(`💵 Amount conversions:`);
+      console.log(`   SOL Fee: ${feeAmountSOL} SOL = ${feeAmountLamports} lamports`);
+      console.log(`   Token Deposit: ${depositAmountToVault} = ${depositAmountInUnits} units`);
+
+      // Add SOL fee transfer if fee > 0
+      if (feeAmountLamports > 0) {
+        console.log(`🔄 Creating SOL fee transfer instruction:`);
+        console.log(`   FROM: ${user.toString()} (User's SOL wallet)`);
+        console.log(`   TO: ${feeWallet.toString()} (Fee Wallet)`);
+        console.log(`   AMOUNT: ${feeAmountLamports} lamports (${feeAmountSOL.toFixed(6)} SOL)`);
+
         finalTransaction.add(
-          createTransferInstruction(
-            userATA,
-            feeWalletATA,
-            user,
-            feeAmountInUnits
-          )
+          SystemProgram.transfer({
+            fromPubkey: user,
+            toPubkey: feeWallet,
+            lamports: feeAmountLamports,
+          })
         );
+        console.log("✅ Added SOL fee transfer instruction");
       }
 
-      // Add deposit transfer
+      // Add token deposit transfer to deposit wallet
+      console.log(`🔄 Creating token deposit transfer instruction:`);
+      console.log(`   FROM: ${userATA.toString()} (User's token account)`);
+      console.log(`   TO: ${depositWalletATA.toString()} (Deposit wallet's token account)`);
+      console.log(`   AMOUNT: ${depositAmountInUnits} units (${depositAmountToVault})`);
       finalTransaction.add(
         createTransferInstruction(
           userATA,
-          vaultATA,
+          depositWalletATA,
           user,
           depositAmountInUnits
         )
       );
+      console.log("✅ Added token deposit transfer instruction");
+
+      console.log(`📊 Transaction Summary:`);
+      console.log(`   SOL Fee: ${feeAmountSOL.toFixed(6)} SOL → Fee Wallet`);
+      console.log(`   Token Deposit: ${depositAmountToVault} → Deposit Wallet ATA`);
+      console.log(`   Note: Fee is paid in SOL, deposit is in token`);
 
       // Get blockhash and send
       const { blockhash } = await this.retryRpcCall(

@@ -47,6 +47,8 @@ function JackpotSettings() {
           getLootboxNFTMints(),
           getCartNFTMints()
         ]);
+        console.log('🔍 Fetched used NFT mints:', usedMints);
+        console.log('🔍 Current jackpots:', jackpots.map(j => ({ id: j.id, name: j.name, image: j.image?.substring(0, 50) })));
         setUsedNFTMints(usedMints);
         setLootboxNFTMints(lootboxMints);
         setCartNFTMints(cartMints);
@@ -700,9 +702,38 @@ function JackpotSettings() {
                                 return !isInCart; // Only show NFTs that are NOT in user carts
                               })
                               .map((nft) => {
-                              const isUsedInJackpot = usedNFTMints.includes(nft.mint);
+                              // Check if NFT is used by mint address
+                              const isUsedInJackpotByMint = usedNFTMints.includes(nft.mint);
+                              
+                              // Also check if NFT is used by matching image URL with jackpot image URLs
+                              // This handles cases where jackpot has image URL but mint address isn't stored yet
+                              const isUsedInJackpotByImage = jackpots.some(jackpot => {
+                                if (!jackpot.image || !nft.image) return false;
+                                
+                                // If jackpot image is a URL, compare with NFT image URL
+                                if (typeof jackpot.image === 'string' && 
+                                    (jackpot.image.includes('http://') || jackpot.image.includes('https://'))) {
+                                  // Normalize URLs for comparison (remove query params, normalize paths)
+                                  const normalizeUrl = (url) => {
+                                    try {
+                                      const urlObj = new URL(url);
+                                      return urlObj.origin + urlObj.pathname;
+                                    } catch {
+                                      return url;
+                                    }
+                                  };
+                                  const jackpotUrl = normalizeUrl(jackpot.image);
+                                  const nftUrl = normalizeUrl(nft.image);
+                                  return jackpotUrl === nftUrl || jackpot.image === nft.image;
+                                }
+                                
+                                return false;
+                              });
+                              
+                              const isUsedInJackpot = isUsedInJackpotByMint || isUsedInJackpotByImage;
                               const isUsedInLootbox = lootboxNFTMints.includes(nft.mint);
-                              const isCurrentJackpotNFT = editingJackpot && editingJackpot.image === nft.mint;
+                              const isCurrentJackpotNFT = editingJackpot && (editingJackpot.image === nft.mint || 
+                                (editingJackpot.image && nft.image && editingJackpot.image === nft.image));
                               const canSelect = (!isUsedInJackpot || isCurrentJackpotNFT) && !isUsedInLootbox;
 
                               return (

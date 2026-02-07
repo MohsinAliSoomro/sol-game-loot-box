@@ -330,7 +330,7 @@ export const useJackpotPools = () => {
     try {
       if (!nftMintAddress) return false
 
-      // Fetch all jackpots and check if any have this NFT mint address in the image field
+      // Method 1: Check if mint address is directly stored in image field (old format)
       let query = supabase
         .from('jackpot_pools')
         .select('id, name, image')
@@ -341,14 +341,46 @@ export const useJackpotPools = () => {
         query = query.neq('id', excludeJackpotId)
       }
 
-      const { data, error } = await query
+      const { data: jackpotData, error: jackpotError } = await query
 
-      if (error) {
-        console.error('Error checking NFT existence:', error)
+      if (jackpotError) {
+        console.error('Error checking NFT existence:', jackpotError)
         return false
       }
 
-      return data && data.length > 0
+      if (jackpotData && jackpotData.length > 0) {
+        return true
+      }
+
+      // Method 2: Check prizeWin table for mint addresses that correspond to jackpots
+      // This handles the case where image URL is stored but mint address is in prizeWin
+      const { data: prizeWinData, error: prizeWinError } = await supabase
+        .from('prizeWin')
+        .select('mint, name, reward_type')
+        .eq('mint', nftMintAddress)
+        .eq('reward_type', 'nft')
+        .limit(1)
+
+      if (!prizeWinError && prizeWinData && prizeWinData.length > 0) {
+        // Check if this prizeWin entry corresponds to a jackpot (by name)
+        const prizeWinName = prizeWinData[0].name
+        let jackpotQuery = supabase
+          .from('jackpot_pools')
+          .select('id, name')
+          .eq('name', prizeWinName)
+        
+        if (excludeJackpotId) {
+          jackpotQuery = jackpotQuery.neq('id', excludeJackpotId)
+        }
+
+        const { data: matchingJackpot, error: matchingError } = await jackpotQuery
+
+        if (!matchingError && matchingJackpot && matchingJackpot.length > 0) {
+          return true
+        }
+      }
+
+      return false
     } catch (error) {
       console.error('Error in checkNFTExists:', error)
       return false
@@ -358,21 +390,22 @@ export const useJackpotPools = () => {
   // Get all NFT mint addresses currently used in jackpots
   const getUsedNFTMints = async () => {
     try {
-      const { data, error } = await supabase
+      const { data: jackpotsData, error: jackpotsError } = await supabase
         .from('jackpot_pools')
-        .select('image')
+        .select('id, name, image')
 
-      if (error) {
-        console.error('Error fetching used NFT mints:', error)
+      if (jackpotsError) {
+        console.error('Error fetching used NFT mints:', jackpotsError)
         return []
       }
 
-      // Filter to only NFT mint addresses (Solana addresses are ~44 chars and don't contain "/")
-      // File paths typically contain "/" like "jackpots/xxx.jpg"
-      const usedMints = (data || [])
+      const usedMints = new Set()
+
+      // Method 1: Get mint addresses directly stored in image field (old format)
+      const directMints = (jackpotsData || [])
         .map(jackpot => jackpot.image)
         .filter(image => {
-          // Check if it's likely an NFT mint address (not a file path)
+          // Check if it's likely an NFT mint address (not a file path or URL)
           return image && 
                  typeof image === 'string' && 
                  image.length >= 32 && 
@@ -380,8 +413,41 @@ export const useJackpotPools = () => {
                  !image.includes('/') &&
                  !image.includes('.') // File paths have extensions like .jpg, .png
         })
+      
+      directMints.forEach(mint => usedMints.add(mint))
 
-      return usedMints
+      // Method 2: For jackpots with image URLs, check prizeWin table for mint addresses
+      // This handles the case where image URL is stored but mint address is in prizeWin
+      const jackpotsWithUrls = (jackpotsData || [])
+        .filter(jackpot => {
+          const image = jackpot.image
+          return image && 
+                 typeof image === 'string' && 
+                 (image.includes('http://') || image.includes('https://') || image.includes('/'))
+        })
+
+      if (jackpotsWithUrls.length > 0) {
+        // Get all prizeWin entries with mint addresses that match these jackpot names
+        const jackpotNames = jackpotsWithUrls.map(j => j.name)
+        const { data: prizeWinData, error: prizeWinError } = await supabase
+          .from('prizeWin')
+          .select('mint, name, reward_type')
+          .in('name', jackpotNames)
+          .eq('reward_type', 'nft')
+          .not('mint', 'is', null)
+
+        if (!prizeWinError && prizeWinData) {
+          prizeWinData.forEach(prize => {
+            if (prize.mint) {
+              usedMints.add(prize.mint)
+            }
+          })
+        }
+      }
+
+      const usedMintsArray = Array.from(usedMints)
+      console.log('📋 Found', usedMintsArray.length, 'used NFT mints in jackpots:', usedMintsArray)
+      return usedMintsArray
     } catch (error) {
       console.error('Error in getUsedNFTMints:', error)
       return []
