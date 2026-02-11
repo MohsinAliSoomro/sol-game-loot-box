@@ -365,9 +365,24 @@ export default function PurchaseModal() {
   const [BASE_SOL_FEE, setBASE_SOL_FEE] = useState<number>(0.001); // Default fallback
   
   useEffect(() => {
-    const fetchBlockchainFee = async () => {
+    const fetchFee = async () => {
+      // Prioritize project-specific fee when available
+      const feeAmountValue = currentProject?.fee_amount;
+      const hasValidProjectFee = feeAmountValue && 
+                                 feeAmountValue !== '0' && 
+                                 feeAmountValue !== 'null' && 
+                                 feeAmountValue !== 'undefined' &&
+                                 parseInt(feeAmountValue) > 0;
+      
+      if (hasValidProjectFee) {
+        const projectFee = parseInt(feeAmountValue) / LAMPORTS_PER_SOL;
+        console.log(`✅ Using project-specific fee: ${projectFee} SOL`);
+        setBASE_SOL_FEE(projectFee);
+        return;
+      }
+      
+      // Fall back to blockchain fee for global/default fees
       try {
-        // Fetch fee from blockchain (same source as master dashboard)
         const blockchainFee = await solanaProgramService.getFeeAmount(SOL_MINT);
         if (blockchainFee > 0) {
           console.log(`✅ Using blockchain fee: ${blockchainFee} SOL`);
@@ -375,25 +390,16 @@ export default function PurchaseModal() {
           return;
         }
       } catch (error) {
-        console.warn("⚠️ Could not fetch fee from blockchain, using database value:", error);
+        console.warn("⚠️ Could not fetch fee from blockchain, using default:", error);
       }
       
-      // Fallback to database value
-  const feeAmountValue = currentProject?.fee_amount;
-      const dbFee = (feeAmountValue && 
-                        feeAmountValue !== '0' && 
-                        feeAmountValue !== 'null' && 
-                        feeAmountValue !== 'undefined' &&
-                        parseInt(feeAmountValue) > 0)
-    ? parseInt(feeAmountValue) / LAMPORTS_PER_SOL
-    : 0.001; // 0.001 SOL default
-      
-      console.log(`📊 Using database fee: ${dbFee} SOL`);
-      setBASE_SOL_FEE(dbFee);
+      // Final fallback to default
+      console.log(`📊 Using default fee: 0.001 SOL`);
+      setBASE_SOL_FEE(0.001);
     };
     
     if (connected) {
-      fetchBlockchainFee();
+      fetchFee();
     }
   }, [connected, currentProject?.fee_amount]);
 

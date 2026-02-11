@@ -1176,19 +1176,20 @@ export class SolanaProgramService {
       }
       console.log(`✅ Added deposit transfer: ${actualDepositAmount.toFixed(6)} SOL (${actualDepositLamports} lamports) → deposit wallet`);
 
-      // Transfer fee to fee wallet PDA (using actual amount calculated above)
+      // Transfer fee to fee wallet (using actual amount calculated above)
       if (feeLamports > 0) {
         const actualFeeLamports = Math.floor(actualFeeAmount * LAMPORTS_PER_SOL);
+        const feeWallet = new PublicKey(CONFIG.FEE_WALLET);
         const feeTransferInstruction = SystemProgram.transfer({
           fromPubkey: user,
-          toPubkey: feeWalletPDA,
+          toPubkey: feeWallet,
           lamports: actualFeeLamports,
         });
         transaction.add(feeTransferInstruction);
         if (actualFeeAmount > depositFee) {
           console.log(`⚠️ Transferring ${actualFeeAmount.toFixed(6)} SOL (rent-exempt minimum) instead of ${depositFee.toFixed(6)} SOL fee because account doesn't exist`);
         }
-        console.log(`✅ Added fee transfer: ${actualFeeAmount.toFixed(6)} SOL (${actualFeeLamports} lamports) → fee wallet PDA`);
+        console.log(`✅ Added fee transfer: ${actualFeeAmount.toFixed(6)} SOL (${actualFeeLamports} lamports) → fee wallet ${CONFIG.FEE_WALLET}`);
       }
 
       // Get fresh blockhash

@@ -1520,7 +1520,7 @@ export default function Page() {
                 <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-[#f74e14]/20 overflow-hidden">
                 <div className="flex flex-col md:flex-row gap-8">
                         {/* Left Section - Image */}
-                    <div className="w-full md:w-4/12">
+                    <div className="w-full md:w-4/12 flex items-center justify-center">
                         <div className="rounded-xl overflow-hidden border-2 border-[#f74e14]/20 shadow-lg">
                             <JackpotImage
                                 image={data?.data[0]?.image || null}
@@ -1536,14 +1536,14 @@ export default function Page() {
                     {/* Right Section - Content */}
                     <div className="w-full md:w-8/12">
                         {/* Wallet Connection Status Alert */}
-                        {(!connected || !publicKey) && (
+                        {/* {(!connected || !publicKey) && (
                             <div className="mb-4 p-4 bg-red-500/10 border-2 border-red-500 rounded-lg flex items-center gap-3">
                                 <svg className="w-6 h-6 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                 </svg>
                                 <p className="text-red-600 font-medium">Please connect your wallet to purchase tickets</p>
                             </div>
-                        )}
+                        )} */}
                         {connected && publicKey && (!user?.id && !user?.walletAddress) && (
                             <div className="mb-4 p-4 bg-yellow-500/10 border-2 border-yellow-500 rounded-lg flex items-center gap-3">
                                 <svg className="w-6 h-6 text-yellow-500 flex-shrink-0 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1690,16 +1690,16 @@ export default function Page() {
                                     <input
                                         type="text"
                                         disabled
-                                        value={`${data?.data[0]?.ticket_price || 0} OGX`}
-                                        className="w-full h-12 bg-white border border-[#f74e14]/20 rounded-lg pl-16 pr-4 text-black text-right"
+                                        placeholder={`${data?.data[0]?.ticket_price || 0} OGX`}
+                                        className="w-full h-14 bg-white border border-[#f74e14]/20 rounded-lg pl-16 pr-4 placeholder:text-black text-black text-right"
                                     />
                                 </div>
                                 <div className="relative">
                                     <input
                                         type="number"
-                                        placeholder="Enter number of tickets"
+                                        placeholder="Enter Number of Tickets"
                                         disabled={isTimeExpired}
-                                        className={`w-full h-12 bg-white border border-[#f74e14]/20 rounded-lg px-4 text-black focus:border-[#f74e14] transition-all duration-200 placeholder:text-black ${
+                                        className={`w-full h-14 bg-white border border-[#f74e14]/20 placeholder:text-black rounded-lg px-4 text-black focus:border-[#f74e14] transition-all duration-200 placeholder:text-gray-500 placeholder:text-sm placeholder:font-normal leading-relaxed ${
                                             isTimeExpired ? 'opacity-50 cursor-not-allowed' : ''
                                         }`}
                                         value={value}

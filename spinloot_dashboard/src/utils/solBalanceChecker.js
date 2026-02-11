@@ -63,7 +63,7 @@ export const getFeeCollection = async () => {
   try {
     console.log('🔍 Checking fee collection from SOL fee wallet...')
     
-    const connection = new Connection('https://api.devnet.solana.com', 'confirmed')
+    const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed')
     
     // Check SOL fee wallet balance (where fees are collected)
     const feeWallet = new PublicKey(FEE_WALLET)
